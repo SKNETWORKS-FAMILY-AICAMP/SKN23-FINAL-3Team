@@ -528,3 +528,8 @@ fabric.properties
 
 # End of https://www.toptal.com/developers/gitignore/api/python,react,flutter,dart,visualstudiocode,windows,linux,android,androidstudio,venv,git
 
+# huggingface / sentence-transformers cache
+.cache/
+
+# local chroma vector database (zip으로만 공유)
+data/chroma_db/
