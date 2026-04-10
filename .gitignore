@@ -532,4 +532,4 @@ fabric.properties
 .cache/
 
 # local chroma vector database (zip으로만 공유)
-chroma_db/
+data/chroma_db/
