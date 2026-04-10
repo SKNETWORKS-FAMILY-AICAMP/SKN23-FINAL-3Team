@@ -1,0 +1,17 @@
+# Vector DB
+chromadb
+
+# 한국어 임베딩 모델
+sentence-transformers
+
+# API 호출 (The Dog API, Dog CEO API, 한국관광공사 OpenAPI)
+httpx
+
+# 공공데이터 CSV 파싱
+pandas
+
+# .env 파일 로드 (API 키 관리)
+python-dotenv
+
+# OPEN AI
+openai
