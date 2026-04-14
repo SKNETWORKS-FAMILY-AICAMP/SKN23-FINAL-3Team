@@ -7,6 +7,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from ai.llm.rag.context_builder import build_places_context
+from ai.llm.rag.places_retriever import format_places_context
 from ai.llm.prompts.places_prompt import PLACES_SYSTEM_PROMPT, build_places_prompt
 from ai.utils.scoring import (
     classify_dog_type,
@@ -26,7 +27,7 @@ def rerank_places(places: list, dog_score_vector: dict) -> list:
     ChromaDB 유사도 점수 + 반려견 성향 벡터 보정으로 재순위
 
     반려견 성향 보정 규칙:
-    - 자극민감도(e) 높음 → 실외 장소 감점, 조용한 곳 가점
+    - 자극민감도(e) 높음 → 실외 장소 감점
     - 활동성(a) 높음 → 공원/놀이터 가점
     - 사회성(b) 높음 → 카페/관광지 가점
 
@@ -37,6 +38,9 @@ def rerank_places(places: list, dog_score_vector: dict) -> list:
     Returns:
         재순위된 장소 목록
     """
+    if not places:
+        return []
+
     a = dog_score_vector.get("a", 0)  # 활동성
     b = dog_score_vector.get("b", 0)  # 사회성
     e = dog_score_vector.get("e", 0)  # 자극민감도
@@ -60,7 +64,6 @@ def rerank_places(places: list, dog_score_vector: dict) -> list:
 
         place["final_score"] = round(place.get("similarity", 0) + bonus, 4)
 
-    # final_score 기준 내림차순 정렬
     return sorted(places, key=lambda x: x.get("final_score", 0), reverse=True)
 
 
@@ -78,8 +81,8 @@ def run_places_chain(
 
     Parameters:
         pet_name: 강아지 이름
-        dog_tags: 반려견 성격 태그 목록
-        owner_tags: 보호자 라이프스타일 태그 목록
+        dog_tags: 반려견 성격 태그 목록 (없으면 빈 리스트)
+        owner_tags: 보호자 라이프스타일 태그 목록 (없으면 빈 리스트)
         user_query: 사용자 추가 질문 (선택)
         category: 카테고리 필터 (선택)
         city: 도시 필터 (선택)
@@ -88,34 +91,32 @@ def run_places_chain(
     Returns:
         {
             "message": "GPT 자연어 추천 메시지",
-            "places": [
-                {
-                    "name": "평화의 공원",
-                    "reason": "추천 이유",
-                    "address": "서울특별시...",
-                    "lat": 37.5765,
-                    "lng": 126.9186,
-                    ...
-                }
-            ],
-            "dog_type": "d_c",
-            "dog_type_name": "🌙 조심스러운 아이",
-            "owner_type": "o_a",
-            "owner_type_name": "🌿 자연 애호가",
+            "places": [...],
+            "dog_type": "d_c" or None,
+            "dog_type_name": "🌙 조심스러운 아이" or "",
+            "owner_type": "o_a" or None,
+            "owner_type_name": "🌿 자연 애호가" or "",
         }
     """
-    # 1. 타입 분류
-    dog_type = classify_dog_type(dog_tags)
-    owner_type = classify_owner_type(owner_tags)
-    dog_type_name = get_type_name(dog_type)
-    owner_type_name = get_type_name(owner_type)
+    # 1. 타입 분류 (태그 있을 때만)
+    dog_type = classify_dog_type(dog_tags) if dog_tags else None
+    owner_type = classify_owner_type(owner_tags) if owner_tags else None
+    dog_type_name = get_type_name(dog_type) if dog_type else ""
+    owner_type_name = get_type_name(owner_type) if owner_type else ""
 
-    print(f"반려견 타입: {dog_type_name}")
-    print(f"보호자 타입: {owner_type_name}")
+    if dog_type_name:
+        print(f"반려견 타입: {dog_type_name}")
+    if owner_type_name:
+        print(f"보호자 타입: {owner_type_name}")
 
-    # 2. 보호자 성향 기반 쿼리 생성
-    # 보호자 태그를 자연어 쿼리로 변환해서 ChromaDB 검색
-    owner_query = user_query if user_query else " ".join(owner_tags)
+    # 2. 검색 쿼리 생성
+    # 태그 없으면 일반 쿼리로 전체 장소 검색
+    if user_query:
+        owner_query = user_query
+    elif owner_tags:
+        owner_query = " ".join(owner_tags)
+    else:
+        owner_query = "반려견 동반 가능한 장소"
 
     # 3. RAG 장소 검색
     context = build_places_context(
@@ -125,9 +126,11 @@ def run_places_chain(
         n_results=n_results,
     )
 
+    # ── 예외 처리: 결과 없을 때 빈 리스트 반환 ──
     if not context["has_places"]:
+        print("장소 검색 결과 없음")
         return {
-            "message": f"{pet_name}와 함께 갈 수 있는 장소를 찾지 못했어요. 다른 조건으로 검색해보세요 🐾",
+            "message": "",
             "places": [],
             "dog_type": dog_type,
             "dog_type_name": dog_type_name,
@@ -135,13 +138,14 @@ def run_places_chain(
             "owner_type_name": owner_type_name,
         }
 
-    # 4. 반려견 성향 벡터 보정 (재순위)
-    dog_score_vector = calculate_dog_score_vector(dog_tags)
-    reranked_places = rerank_places(context["places"], dog_score_vector)
+    # 4. 반려견 성향 벡터 보정 (재순위) — 태그 있을 때만
+    if dog_tags:
+        dog_score_vector = calculate_dog_score_vector(dog_tags)
+        reranked_places = rerank_places(context["places"], dog_score_vector)
+    else:
+        reranked_places = context["places"]
 
     # 5. 프롬프트 구성
-    # 재순위된 장소로 텍스트 재구성
-    from ai.llm.rag.places_retriever import format_places_context
     places_text = format_places_context(reranked_places)
 
     user_prompt = build_places_prompt(
@@ -156,25 +160,45 @@ def run_places_chain(
 
     # 6. GPT 호출
     print("GPT 장소 추천 생성 중...")
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": PLACES_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=1000,
-        temperature=0.7,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": PLACES_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=1000,
+            temperature=0.7,
+        )
+        raw = response.choices[0].message.content.strip()
 
-    raw = response.choices[0].message.content.strip()
+    except Exception as e:
+        # ── 예외 처리: GPT 호출 실패 시 장소 목록만 반환 ──
+        print(f"GPT 호출 오류: {e}")
+        return {
+            "message": f"{pet_name}에게 맞는 장소를 찾았어요! 아래 목록을 확인해보세요 🐾",
+            "places": reranked_places,
+            "dog_type": dog_type,
+            "dog_type_name": dog_type_name,
+            "owner_type": owner_type,
+            "owner_type_name": owner_type_name,
+        }
 
     # 7. JSON 파싱
     try:
         clean = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(clean)
     except Exception as e:
+        # ── 예외 처리: JSON 파싱 실패 시 raw 텍스트 + 장소 목록 반환 ──
         print(f"JSON 파싱 오류: {e}")
-        result = {"message": raw, "places": []}
+        return {
+            "message": raw,
+            "places": reranked_places,
+            "dog_type": dog_type,
+            "dog_type_name": dog_type_name,
+            "owner_type": owner_type,
+            "owner_type_name": owner_type_name,
+        }
 
     # 8. 장소 메타데이터 병합 (지도 마커용)
     result_places = []

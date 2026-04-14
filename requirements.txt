@@ -13,8 +13,15 @@ pandas
 # .env 파일 로드 (API 키 관리)
 python-dotenv
 
-# OPEN AI
+# OpenAI
 openai
+
+# Jupyter
+ipykernel
+
+# FastAPI 백엔드
+fastapi
+uvicorn[standard]
 
 # DB 연결 (AWS RDS MySQL)
 pymysql

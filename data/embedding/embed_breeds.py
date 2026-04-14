@@ -72,16 +72,18 @@ def generate_personality_document(breed_name_ko: str, temperament_ko: str, activ
     return response.choices[0].message.content.strip()
 
 
-def get_activity_level(energy_level) -> str:
-    """에너지 레벨 → 활동 특성 변환"""
-    if energy_level is None:
+def get_activity_level(temperament: str) -> str:
+    if not temperament:
         return "medium"
-    if energy_level >= 4:
+    t = temperament.lower()
+    high = ["energetic", "active", "playful", "spirited", "lively", "high-energy", "athletic"]
+    low = ["calm", "gentle", "quiet", "lazy", "docile", "easygoing", "laid-back"]
+    if any(k in t for k in high):
         return "high"
-    elif energy_level >= 3:
-        return "medium"
-    else:
+    elif any(k in t for k in low):
         return "low"
+    else:
+        return "medium"
 
 
 def load_and_process(breeds: list) -> list:
@@ -93,7 +95,7 @@ def load_and_process(breeds: list) -> list:
         breed_id = breed.get("id")
         breed_name = breed.get("name", "")
         temperament = breed.get("temperament", "")
-        activity_level = get_activity_level(breed.get("energy_level"))
+        activity_level = get_activity_level(temperament)
 
         print(f"  [{i+1}/{len(breeds)}] {breed_name} 처리 중...")
 

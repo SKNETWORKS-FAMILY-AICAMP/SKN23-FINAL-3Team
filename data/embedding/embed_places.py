@@ -129,6 +129,10 @@ def build_document(row) -> str:
     space = ", ".join(filter(None, [indoor, outdoor]))
     pet_only = row["반려동물 전용 정보"]
     extra_fee = row["애견 동반 추가 요금"]
+    parking = str(row["주차 가능여부"]) if row["주차 가능여부"] else ""
+    entrance_fee = str(row["입장(이용료)가격 정보"]) if row["입장(이용료)가격 정보"] else ""
+    open_hours = str(row["운영시간"]) if row["운영시간"] else ""
+    closed_days = str(row["휴무일"]) if row["휴무일"] else ""
 
     doc = f"{name}은 {city}에 위치한 {category} 장소로 반려견 동반이 가능하다."
 
@@ -146,6 +150,18 @@ def build_document(row) -> str:
 
     if extra_fee and extra_fee not in ["없음", "해당없음", ""]:
         doc += f" 애견 동반 추가 요금: {extra_fee}."
+
+    if parking and parking not in ["해당없음", "불가", ""]:
+        doc += f" 주차 {parking}."
+
+    if entrance_fee and entrance_fee not in ["해당없음", ""]:
+        doc += f" 입장료: {entrance_fee}."
+
+    if open_hours:
+        doc += f" 운영시간: {open_hours}."
+
+    if closed_days and closed_days not in ["해당없음", ""]:
+        doc += f" 휴무일: {closed_days}."
 
     return doc
 
