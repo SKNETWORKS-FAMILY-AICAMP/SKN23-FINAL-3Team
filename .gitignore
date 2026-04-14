@@ -533,3 +533,8 @@ fabric.properties
 
 # local chroma vector database (zip으로만 공유)
 data/chroma_db/
+# 프론트엔드 빌드 결과물
+front/dist/
+
+# SQLite DB
+back/db/*.db

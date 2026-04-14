@@ -1,0 +1,272 @@
+import { useReducer, useEffect, useCallback } from 'react'
+import type { Pet } from '../types'
+import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
+import { EMOTIONS } from '../constants/emotions'
+import { generateDiary, type GeneratedDiary } from '../services/diaryService'
+
+// ── 메시지 타입 ──────────────────────────────────────
+export interface Message {
+  id: string
+  role: 'bot' | 'user'
+  content: string
+}
+
+// ── 챗봇 단계 ────────────────────────────────────────
+export type Step =
+  | 'type_select'
+  | 'main_questions'
+  | 'additional_prompt'
+  | 'additional_questions'
+  | 'emotion_select'
+  | 'diary_generating'
+  | 'diary_result'
+
+// ── 상태 ─────────────────────────────────────────────
+export interface ChatbotState {
+  step: Step
+  pet: Pet
+  selectedDiaryType: DiaryTypeId | null
+  currentQuestionIndex: number
+  messages: Message[]
+  mainAnswers: string[]
+  additionalPerspectiveAccepted: boolean | null
+  additionalAnswers: string[]
+  additionalQuestionIndex: number
+  selectedEmotionEmoji: string | null
+  selectedEmotionLabel: string | null
+  generatedDiary: GeneratedDiary | null
+  isGenerating: boolean
+}
+
+// ── 액션 ─────────────────────────────────────────────
+export type ChatbotAction =
+  | { type: 'SELECT_DIARY_TYPE'; id: DiaryTypeId }
+  | { type: 'SUBMIT_MAIN_ANSWER'; answer: string }
+  | { type: 'RESPOND_TO_PERSPECTIVE'; accepted: boolean }
+  | { type: 'SUBMIT_ADDITIONAL_ANSWER'; answer: string }
+  | { type: 'SELECT_EMOTION'; emoji: string; label: string }
+  | { type: 'SET_DIARY'; diary: GeneratedDiary }
+  | { type: 'REGENERATE' }
+  | { type: 'RESET' }
+
+// ── 헬퍼 ─────────────────────────────────────────────
+let _counter = 0
+const nextId = () => `msg-${++_counter}`
+const botMsg = (content: string): Message => ({ id: nextId(), role: 'bot', content })
+const userMsg = (content: string): Message => ({ id: nextId(), role: 'user', content })
+const fmt = (tpl: string, name: string) => tpl.replace(/\{petName\}/g, name)
+const ACKS = ['그렇군요 😊', '아, 그랬군요!', '좋아요 🐾', '잘 알겠어요!', '기억해둘게요 🤍', '소중한 순간이네요.']
+const randomAck = () => ACKS[Math.floor(Math.random() * ACKS.length)]
+
+// ── 초기 상태 ────────────────────────────────────────
+function makeInitialState(pet: Pet): ChatbotState {
+  return {
+    step: 'type_select',
+    pet,
+    selectedDiaryType: null,
+    currentQuestionIndex: 0,
+    messages: [
+      botMsg(`안녕하세요! 저는 ${pet.name}의 하루를 일기로 남겨드리는 AI예요 🐾\n\n오늘 어떤 일기로 기록해볼까요?`),
+    ],
+    mainAnswers: [],
+    additionalPerspectiveAccepted: null,
+    additionalAnswers: [],
+    additionalQuestionIndex: 0,
+    selectedEmotionEmoji: null,
+    selectedEmotionLabel: null,
+    generatedDiary: null,
+    isGenerating: false,
+  }
+}
+
+// ── Reducer ──────────────────────────────────────────
+function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
+  const petName = state.pet.name
+
+  switch (action.type) {
+    case 'SELECT_DIARY_TYPE': {
+      const dt = DIARY_TYPES.find((t) => t.id === action.id)!
+      return {
+        ...state,
+        step: 'main_questions',
+        selectedDiaryType: action.id,
+        currentQuestionIndex: 0,
+        messages: [
+          ...state.messages,
+          userMsg(`${dt.icon} ${dt.label}`),
+          botMsg(`좋아요! ${dt.description}으로 기록해볼게요 😊\n\n${fmt(dt.questions[0], petName)}`),
+        ],
+      }
+    }
+
+    case 'SUBMIT_MAIN_ANSWER': {
+      const dt = DIARY_TYPES.find((t) => t.id === state.selectedDiaryType)!
+      const newAnswers = [...state.mainAnswers, action.answer]
+      const nextIdx = state.currentQuestionIndex + 1
+
+      if (nextIdx < dt.questions.length) {
+        return {
+          ...state,
+          mainAnswers: newAnswers,
+          currentQuestionIndex: nextIdx,
+          messages: [
+            ...state.messages,
+            userMsg(action.answer),
+            botMsg(`${randomAck()}\n\n${fmt(dt.questions[nextIdx], petName)}`),
+          ],
+        }
+      }
+
+      return {
+        ...state,
+        step: 'additional_prompt',
+        mainAnswers: newAnswers,
+        messages: [
+          ...state.messages,
+          userMsg(action.answer),
+          botMsg(`잘 기록됐어요! 🐾\n\n${fmt(dt.perspectiveSuggestion, petName)}`),
+        ],
+      }
+    }
+
+    case 'RESPOND_TO_PERSPECTIVE': {
+      if (action.accepted) {
+        const dt = DIARY_TYPES.find((t) => t.id === state.selectedDiaryType)!
+        return {
+          ...state,
+          step: 'additional_questions',
+          additionalPerspectiveAccepted: true,
+          additionalQuestionIndex: 0,
+          messages: [
+            ...state.messages,
+            userMsg('네, 좋아요!'),
+            botMsg(fmt(dt.additionalQuestions[0], petName)),
+          ],
+        }
+      }
+      return {
+        ...state,
+        step: 'emotion_select',
+        additionalPerspectiveAccepted: false,
+        messages: [
+          ...state.messages,
+          userMsg('괜찮아요'),
+          botMsg(`이해해요! 그럼 마지막 단계예요 😊\n\n오늘 ${petName}의 하루는 어떤 감정으로 기억하고 싶으세요?`),
+        ],
+      }
+    }
+
+    case 'SUBMIT_ADDITIONAL_ANSWER': {
+      const dt = DIARY_TYPES.find((t) => t.id === state.selectedDiaryType)!
+      const newAnswers = [...state.additionalAnswers, action.answer]
+      const nextIdx = state.additionalQuestionIndex + 1
+
+      if (nextIdx < dt.additionalQuestions.length) {
+        return {
+          ...state,
+          additionalAnswers: newAnswers,
+          additionalQuestionIndex: nextIdx,
+          messages: [
+            ...state.messages,
+            userMsg(action.answer),
+            botMsg(`${randomAck()}\n\n${fmt(dt.additionalQuestions[nextIdx], petName)}`),
+          ],
+        }
+      }
+
+      return {
+        ...state,
+        step: 'emotion_select',
+        additionalAnswers: newAnswers,
+        messages: [
+          ...state.messages,
+          userMsg(action.answer),
+          botMsg(`완벽해요! ✨\n\n오늘 ${petName}의 하루는 어떤 감정으로 기억하고 싶으세요?`),
+        ],
+      }
+    }
+
+    case 'SELECT_EMOTION': {
+      return {
+        ...state,
+        step: 'diary_generating',
+        selectedEmotionEmoji: action.emoji,
+        selectedEmotionLabel: action.label,
+        isGenerating: true,
+        messages: [
+          ...state.messages,
+          userMsg(`${action.emoji} ${action.label}`),
+          botMsg(`${action.emoji} 느낌으로 ${petName}의 일기를 쓰고 있어요... ✍️\n잠깐만 기다려주세요!`),
+        ],
+      }
+    }
+
+    case 'SET_DIARY': {
+      return {
+        ...state,
+        step: 'diary_result',
+        isGenerating: false,
+        generatedDiary: action.diary,
+        messages: [
+          ...state.messages,
+          botMsg(`${petName}의 일기가 완성됐어요 🐾`),
+        ],
+      }
+    }
+
+    case 'REGENERATE': {
+      return { ...state, step: 'diary_generating', isGenerating: true, generatedDiary: null }
+    }
+
+    case 'RESET':
+      return makeInitialState(state.pet)
+
+    default:
+      return state
+  }
+}
+
+// ── Hook ─────────────────────────────────────────────
+export function useChatbot(pet: Pet) {
+  const [state, dispatch] = useReducer(reducer, pet, makeInitialState)
+
+  useEffect(() => {
+    if (!state.isGenerating || !state.selectedDiaryType || !state.selectedEmotionEmoji) return
+
+    const dt = DIARY_TYPES.find((t) => t.id === state.selectedDiaryType)!
+    const em = EMOTIONS.find((e) => e.emoji === state.selectedEmotionEmoji)!
+
+    generateDiary({
+      petName: state.pet.name,
+      breed: state.pet.breed,
+      birthDate: state.pet.birthDate,
+      personalities: state.pet.personality,
+      diaryType: state.selectedDiaryType,
+      typeFocus: dt.typeFocus,
+      mainAnswers: state.mainAnswers,
+      additionalAnswers: state.additionalAnswers,
+      emotionEmoji: state.selectedEmotionEmoji,
+      emotionTone: em.tone,
+    })
+      .then((diary) => dispatch({ type: 'SET_DIARY', diary }))
+      .catch(() =>
+        dispatch({
+          type: 'SET_DIARY',
+          diary: { title: '생성 실패', content: '일기 생성 중 오류가 발생했어요. 다시 시도해주세요.', summary: '' },
+        })
+      )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.isGenerating])
+
+  const actions = {
+    selectDiaryType: useCallback((id: DiaryTypeId) => dispatch({ type: 'SELECT_DIARY_TYPE', id }), []),
+    submitMainAnswer: useCallback((answer: string) => dispatch({ type: 'SUBMIT_MAIN_ANSWER', answer }), []),
+    respondToPerspective: useCallback((accepted: boolean) => dispatch({ type: 'RESPOND_TO_PERSPECTIVE', accepted }), []),
+    submitAdditionalAnswer: useCallback((answer: string) => dispatch({ type: 'SUBMIT_ADDITIONAL_ANSWER', answer }), []),
+    selectEmotion: useCallback((emoji: string, label: string) => dispatch({ type: 'SELECT_EMOTION', emoji, label }), []),
+    regenerate: useCallback(() => dispatch({ type: 'REGENERATE' }), []),
+    reset: useCallback(() => dispatch({ type: 'RESET' }), []),
+  }
+
+  return { state, actions }
+}
