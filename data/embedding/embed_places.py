@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── 설정 ──────────────────────────────────────────────────────
-CSV_PATH = os.path.join(os.path.dirname(__file__), "../data/한국문화정보원_전국_반려동물_동반_가능_문화시설_위치_데이터_20250324.csv")
+CSV_PATH = os.path.join(os.path.dirname(__file__), "../data/raw/한국문화정보원_전국_반려동물_동반_가능_문화시설_위치_데이터_20250324.csv")
 CHROMA_PATH = os.path.join(os.path.dirname(__file__), "../chroma_db")
 COLLECTION_NAME = "dog_places"
 MODEL_NAME = "jhgan/ko-sroberta-multitask"
@@ -22,8 +22,8 @@ CATEGORY_MAP = {
     "박물관": "관광지",
     "미술관": "관광지",
     "문예회관": "관광지",
-    "동물병원": "기타",
-    "동물약국": "기타",
+    "동물병원": "의료",
+    "동물약국": "의료",
     "반려동물용품": "기타",
     "미용": "기타",
     "위탁관리": "기타",
@@ -82,6 +82,21 @@ def load_and_filter(csv_path: str) -> pd.DataFrame:
 
     # 운영시간 null → 빈 문자열
     df["운영시간"] = df["운영시간"].fillna("").str.strip()
+
+    # 휴무일 null → 빈 문자열
+    df["휴무일"] = df["휴무일"].fillna("").str.strip()
+
+    # 주차 가능여부 null → 빈 문자열
+    df["주차 가능여부"] = df["주차 가능여부"].fillna("").str.strip()
+
+    # 입장(이용료)가격 정보 null → 빈 문자열
+    df["입장(이용료)가격 정보"] = df["입장(이용료)가격 정보"].fillna("").str.strip()
+
+    # 전화번호 null → 빈 문자열
+    df["전화번호"] = df["전화번호"].fillna("").str.strip()
+
+    # 홈페이지 null → 빈 문자열
+    df["홈페이지"] = df["홈페이지"].fillna("").str.strip()
 
     # 반려동물 제한사항 null → 빈 문자열
     df["반려동물 제한사항"] = df["반려동물 제한사항"].fillna("").str.strip()
@@ -189,6 +204,11 @@ def embed_and_store(df: pd.DataFrame):
                 "lat": float(row["위도"]),
                 "lng": float(row["경도"]),
                 "open_hours": str(row["운영시간"]) if row["운영시간"] else "운영 시간 미제공 · 방문 전 문의 권장",
+                "closed_days": str(row["휴무일"]) if row["휴무일"] else "",
+                "parking": str(row["주차 가능여부"]) if row["주차 가능여부"] else "",
+                "entrance_fee": str(row["입장(이용료)가격 정보"]) if row["입장(이용료)가격 정보"] else "",
+                "tel": str(row["전화번호"]) if row["전화번호"] else "",
+                "homepage": str(row["홈페이지"]) if row["홈페이지"] else "",
                 "conditions": conditions if conditions not in ["해당없음", "제한사항 없음", ""] else "",
                 "size_limit": size if size not in ["해당없음", "모두 가능", ""] else "모두 가능",
                 "indoor": str(row["장소(실내) 여부"]),
