@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── 설정 ──────────────────────────────────────────────────────
-CSV_PATH = os.path.join(os.path.dirname(__file__), "../data/경기도_반려동물_동반_관광정보_위경도추가.csv")
+CSV_PATH = os.path.join(os.path.dirname(__file__), "../data/processed/경기도_반려동물_동반_관광정보_위경도추가.csv")
 CHROMA_PATH = os.path.join(os.path.dirname(__file__), "../chroma_db")
 COLLECTION_NAME = "dog_places"
 MODEL_NAME = "jhgan/ko-sroberta-multitask"
