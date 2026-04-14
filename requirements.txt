@@ -15,3 +15,9 @@ python-dotenv
 
 # OPEN AI
 openai
+
+# DB 연결 (AWS RDS MySQL)
+pymysql
+sqlalchemy
+sshtunnel
+cryptography       # SSH PEM 키 파싱에 필요
