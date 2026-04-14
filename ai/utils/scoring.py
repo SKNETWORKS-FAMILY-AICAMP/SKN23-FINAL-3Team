@@ -90,18 +90,19 @@ def classify_dog_type(tags: list) -> str:
 
     for tag in tags:
         if tag not in DOG_TAG_SCORES:
-            print(f"알 수 없는 반려견 태그: {tag}")
-            continue
+            raise ValueError(f"존재하지 않는 반려견 태그: {tag}")
         for axis, value in DOG_TAG_SCORES[tag].items():
             scores[axis] += value
 
-    # 타입 결정
-    if scores["a"] >= scores["b"] and scores["d"] >= scores["b"]:
-        return "d_a"  # 🐾 산책 탐험대
-    elif scores["b"] == max(scores.values()):
-        return "d_b"  # 🌼 모두의 단짝
-    elif scores["e"] == max(scores.values()):
+    max_score = max(scores.values())
+
+    # 동점 시 d_c 우선 → 가장 먼저 체크
+    if scores["e"] == max_score:
         return "d_c"  # 🌙 조심스러운 아이
+    elif scores["a"] >= scores["b"] and scores["d"] >= scores["b"]:
+        return "d_a"  # 🐾 산책 탐험대
+    elif scores["b"] == max_score:
+        return "d_b"  # 🌼 모두의 단짝
     else:
         return "d_d"  # 🍂 자유로운 영혼
 
@@ -125,20 +126,21 @@ def classify_owner_type(tags: list) -> str:
 
     for tag in tags:
         if tag not in OWNER_TAG_SCORES:
-            print(f"알 수 없는 보호자 태그: {tag}")
-            continue
+            raise ValueError(f"존재하지 않는 보호자 태그: {tag}")
         for axis, value in OWNER_TAG_SCORES[tag].items():
             scores[axis] += value
 
-    # 타입 결정
-    if scores["a"] == max(scores.values()):
+    max_score = max(scores.values())
+
+    # 동점 시 o_d 우선 → 가장 먼저 체크
+    if scores["d"] == max_score:
+        return "o_d"  # 🛋️ 느긋한 휴식러
+    elif scores["a"] == max_score:
         return "o_a"  # 🌿 자연 애호가
     elif scores["d"] >= scores["b"] and scores["c"] >= scores["b"]:
         return "o_b"  # ✨ 도시 감성러
-    elif scores["b"] == max(scores.values()):
-        return "o_c"  # 🏃 활발한 활동가
     else:
-        return "o_d"  # 🛋️ 느긋한 휴식러
+        return "o_c"  # 🏃 활발한 활동가
 
 
 def calculate_dog_score_vector(tags: list) -> dict:
@@ -191,4 +193,7 @@ def get_type_name(type_id: str) -> str:
     Returns:
         "🐾 산책 탐험대"
     """
-    return DOG_TYPES.get(type_id) or OWNER_TYPES.get(type_id, "알 수 없는 타입")
+    result = DOG_TYPES.get(type_id) or OWNER_TYPES.get(type_id)
+    if result is None:
+        raise ValueError(f"존재하지 않는 타입 ID: {type_id}")
+    return result

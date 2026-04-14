@@ -99,6 +99,11 @@ def format_places_context(places: list) -> str:
         entrance_fee = place.get("entrance_fee", "")
         tel = place.get("tel", "")
         conditions = place.get("conditions", "")
+        size_limit = place.get("size_limit", "")
+        indoor = place.get("indoor", "")
+        outdoor = place.get("outdoor", "")
+        extra_fee = place.get("extra_fee", "")
+        homepage = place.get("homepage", "")
 
         lines = [f"[{name} / {category} / {city}]"]
         lines.append(f"주소: {address}")
@@ -114,7 +119,15 @@ def format_places_context(places: list) -> str:
             lines.append(f"전화번호: {tel}")
         if conditions:
             lines.append(f"이용조건: {conditions}")
-
+        if size_limit and size_limit != "모두 가능":
+            lines.append(f"입장 가능 크기: {size_limit}")
+        if indoor == "Y" or outdoor == "Y":
+            lines.append(f"실내: {indoor} / 실외: {outdoor}")
+        if extra_fee and extra_fee != "없음":
+            lines.append(f"추가요금: {extra_fee}")
+        if homepage:
+            lines.append(f"홈페이지: {homepage}")
+        
         formatted.append("\n".join(lines))
 
     return "\n\n".join(formatted)

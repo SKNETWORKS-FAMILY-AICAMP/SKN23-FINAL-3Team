@@ -41,14 +41,16 @@ def load_and_filter(csv_path: str) -> pd.DataFrame:
     df["위도"] = df["위도"].round(4)
     df["경도"] = df["경도"].round(4)
 
-    # city 필드 — 지역명에서 추출
+    # city 필드
     df["city"] = "경기도"
 
     # category 매핑
     df["category"] = df["업체명"].apply(map_category)
 
-    # 운영시간 null → 빈 문자열
+    # null 처리
     df["이용시간"] = df["이용시간"].fillna("").str.strip()
+    df["전화번호"] = df["전화번호"].fillna("").str.strip()
+    df["홈페이지"] = df["홈페이지"].fillna("").str.strip()
 
     return df
 
@@ -67,12 +69,10 @@ def build_document(row) -> str:
 def embed_and_store(df: pd.DataFrame):
     """임베딩 생성 및 ChromaDB 기존 컬렉션에 추가 저장"""
 
-    # 모델 로드
     print(f"\n임베딩 모델 로드 중: {MODEL_NAME}")
     model = SentenceTransformer(MODEL_NAME)
     print("모델 로드 완료!")
 
-    # ChromaDB 초기화 — 기존 컬렉션 가져오기 (삭제 안 함)
     print(f"\nChromaDB 초기화: {CHROMA_PATH}")
     client = chromadb.PersistentClient(path=CHROMA_PATH)
 
@@ -86,19 +86,16 @@ def embed_and_store(df: pd.DataFrame):
         )
         print(f"'{COLLECTION_NAME}' 컬렉션 새로 생성")
 
-    # 적재 시작 ID offset (기존 데이터와 충돌 방지)
     offset = collection.count()
-
     total = len(df)
     print(f"\n총 {total}개 데이터 적재 시작 (ID offset: {offset})...")
 
     documents = [build_document(row) for _, row in df.iterrows()]
     ids = [f"place_gyeonggi_{offset + j}" for j in range(total)]
 
-    # 임베딩 생성
     embeddings = model.encode(documents, show_progress_bar=True).tolist()
 
-    # metadata 구성
+    # metadata 구성 — 알 수 없는 값은 빈 문자열로 통일
     metadatas = []
     for _, row in df.iterrows():
         metadatas.append({
@@ -109,11 +106,16 @@ def embed_and_store(df: pd.DataFrame):
             "lat": float(row["위도"]),
             "lng": float(row["경도"]),
             "open_hours": str(row["이용시간"]) if row["이용시간"] else "운영 시간 미제공 · 방문 전 문의 권장",
-            "conditions": "",
-            "size_limit": "모두 가능",
-            "indoor": "N",
-            "outdoor": "Y",
-            "extra_fee": "없음",
+            "closed_days": "",   # 정보 없음
+            "parking": "",       # 정보 없음
+            "entrance_fee": "",  # 정보 없음
+            "tel": str(row["전화번호"]) if row["전화번호"] else "",
+            "homepage": str(row["홈페이지"]) if row["홈페이지"] else "",
+            "conditions": "",    # 정보 없음
+            "size_limit": "",    # 정보 없음
+            "indoor": "",        # 정보 없음
+            "outdoor": "",       # 정보 없음
+            "extra_fee": "",     # 정보 없음
             "source": "경기관광공사",
         })
 
