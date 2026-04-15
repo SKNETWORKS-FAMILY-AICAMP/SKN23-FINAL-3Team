@@ -11,10 +11,11 @@ schemas/user.py
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+from services.common_service import calculate_age
 
 
 class GenderEnum(str, enum.Enum):
@@ -32,13 +33,18 @@ class UserResponse(BaseModel):
     email: str = Field(..., description="이메일 주소")
     nickname: str = Field(..., description="닉네임")
     gender: GenderEnum | None = Field(None, description="성별")
-    age: int | None = Field(None, description="나이")
+    birth_date: date | None = Field(None, description="생년월일")
     profile_id: int | None = Field(None, description="프로필 이미지 ID (온보딩 전 NULL)")
     provider: str = Field(..., description="소셜 로그인 제공자 (kakao/google/naver)")
     type_id: int | None = Field(None, description="대표 성향 키워드 ID (온보딩 전 NULL)")
     selected_tags: list[Any] | None = Field(None, description="선택한 여행 성향 태그 목록")
     created_at: datetime = Field(..., description="가입 일시")
     updated_at: datetime = Field(..., description="최종 수정 일시")
+
+    @computed_field
+    @property
+    def age(self) -> int | None:
+        return calculate_age(self.birth_date)
 
 
 class UserUpdate(BaseModel):
@@ -56,11 +62,9 @@ class UserUpdate(BaseModel):
         description="닉네임 (1~50자)",
     )
     gender: GenderEnum | None = Field(None, description="성별")
-    age: int | None = Field(
+    birth_date: date | None = Field(
         None,
-        ge=0,
-        le=150,
-        description="나이 (0~150)",
+        description="생년월일",
     )
     profile_id: int | None = Field(
         None,

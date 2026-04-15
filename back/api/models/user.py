@@ -13,13 +13,14 @@ users 테이블 ORM 모델.
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from core.utils import kst_now
 from typing import Any
 
 from sqlalchemy import (
     BigInteger,
     DateTime,
+    Date,
     Enum as SAEnum,
     ForeignKey,
     Index,
@@ -61,7 +62,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, comment="이메일 주소")
     nickname: Mapped[str] = mapped_column(String(50), nullable=False, comment="닉네임")
     gender: Mapped[GenderEnum | None] = mapped_column(SAEnum(GenderEnum), nullable=True, comment="성별")
-    age: Mapped[int | None] = mapped_column(TINYINT(unsigned=True), nullable=True, comment="나이")
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="생년월일")
 
     # FK → images
     profile_id: Mapped[int | None] = mapped_column(
