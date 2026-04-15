@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   publicDir: 'assets',
+  envDir: '../',  // 루트 .env 파일 사용
   server: {
     port: 3000,
   },
