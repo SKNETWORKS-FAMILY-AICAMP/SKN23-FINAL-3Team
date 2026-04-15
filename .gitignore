@@ -538,3 +538,6 @@ front/dist/
 
 # SQLite DB
 back/db/*.db
+
+# Python 가상환경
+withdog_venv/
