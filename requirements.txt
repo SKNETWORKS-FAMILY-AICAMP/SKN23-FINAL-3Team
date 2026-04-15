@@ -22,3 +22,30 @@ ipykernel
 # FastAPI 백엔드
 fastapi
 uvicorn[standard]
+
+# DB 연결 (AWS RDS MySQL)
+pymysql
+sqlalchemy[asyncio]
+aiomysql
+sshtunnel
+cryptography       # SSH PEM 키 파싱에 필요
+
+# FastAPI 웹 프레임워크
+fastapi
+uvicorn[standard]
+
+# Pydantic v2 (환경변수 관리 + 유효성 검사)
+pydantic-settings
+pydantic[email]
+
+# 인증 (JWT)
+python-jose[cryptography]
+
+# AWS S3 비동기 업로드
+aioboto3
+
+# APScheduler (탈퇴 Hard Delete 배치)
+apscheduler
+
+# multipart/form-data 파일 업로드
+python-multipart
