@@ -1,15 +1,22 @@
 import { useNavigate } from 'react-router';
 import { Dog } from 'lucide-react';
 
+const REDIRECT_URI = `${window.location.origin}/oauth/callback`;
+
+const OAUTH_URLS: Record<string, string> = {
+  kakao: `https://kauth.kakao.com/oauth/authorize?client_id=${import.meta.env.VITE_KAKAO_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code`,
+  google: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${import.meta.env.VITE_GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=email%20profile`,
+  naver: `https://nid.naver.com/oauth2.0/authorize?client_id=${import.meta.env.VITE_NAVER_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&state=${Math.random().toString(36).substring(2)}`,
+};
+
 export function LoginPage() {
   const navigate = useNavigate();
 
   const handleSocialLogin = (provider: string) => {
-    console.log(`Login with ${provider}`);
-    // Mock login - in real app this would redirect to OAuth provider
-    setTimeout(() => {
-      navigate('/step');
-    }, 500);
+    const url = OAUTH_URLS[provider];
+    if (!url) return;
+    sessionStorage.setItem('oauth_provider', provider); // 콜백에서 provider 식별용
+    window.location.href = url;
   };
 
   return (
