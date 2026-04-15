@@ -11,6 +11,7 @@ breeds 테이블 ORM 모델.
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 
 from sqlalchemy import BigInteger, Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -55,7 +56,7 @@ class Breed(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=datetime.utcnow,
+        default=kst_now,
         server_default=func.now(),
         comment="등록 일시",
     )

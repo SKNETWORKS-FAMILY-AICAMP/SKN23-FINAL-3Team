@@ -21,6 +21,7 @@ services/chat_message.py
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 from typing import Sequence
 
 from sqlalchemy import select
@@ -78,7 +79,7 @@ async def create_message(
     db.add(message)
 
     # 채팅방 updated_at 갱신 (최근 메시지 순 정렬 기준)
-    room.updated_at = datetime.utcnow()
+    room.updated_at = kst_now()
 
     await db.flush()
     await db.refresh(message)

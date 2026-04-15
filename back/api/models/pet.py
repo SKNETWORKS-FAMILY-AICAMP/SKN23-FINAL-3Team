@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
+from core.utils import kst_now
 from typing import Any
 
 from sqlalchemy import (
@@ -89,12 +90,12 @@ class Pet(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
-        default=datetime.utcnow, server_default=func.now(),
+        default=kst_now, server_default=func.now(),
         comment="등록 일시",
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
-        default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now(),
+        default=kst_now, onupdate=kst_now, server_default=func.now(),
         comment="수정 일시",
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="삭제 일시")

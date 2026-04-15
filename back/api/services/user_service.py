@@ -19,6 +19,7 @@ services/user.py
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -158,7 +159,7 @@ async def update_user(
     for field, value in update_data.items():
         setattr(user, field, value)
 
-    # updated_at은 onupdate=datetime.utcnow 로 자동 반영
+    # updated_at은 onupdate=kst_now 로 자동 반영
     await db.flush()
     await db.refresh(user)
 
@@ -188,5 +189,5 @@ async def delete_user(
     user = await get_user(user_id, db)
     _assert_owner(user, current_user_id)
 
-    user.deleted_at = datetime.utcnow()
+    user.deleted_at = kst_now()
     await db.flush()

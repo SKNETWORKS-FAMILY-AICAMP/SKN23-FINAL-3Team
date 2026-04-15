@@ -12,6 +12,7 @@ chat_messages 테이블 ORM 모델.
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,7 +53,7 @@ class ChatMessage(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
-        default=datetime.utcnow, server_default=func.now(),
+        default=kst_now, server_default=func.now(),
         comment="발송 일시",
     )
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from core.utils import kst_now
 from pathlib import Path
 
 import aioboto3
@@ -201,5 +202,5 @@ async def delete_image(image_id: int, db: AsyncSession) -> None:
         )
 
     # Soft Delete
-    image.deleted_at = datetime.utcnow()
+    image.deleted_at = kst_now()
     await db.flush()

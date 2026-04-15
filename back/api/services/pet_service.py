@@ -18,6 +18,7 @@ services/pet.py
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 from typing import Sequence
 
 from fastapi import HTTPException, status
@@ -202,5 +203,5 @@ async def delete_pet(
     pet = await get_pet(pet_id, db)
     _assert_owner(pet, current_user_id)
 
-    pet.deleted_at = datetime.utcnow()
+    pet.deleted_at = kst_now()
     await db.flush()

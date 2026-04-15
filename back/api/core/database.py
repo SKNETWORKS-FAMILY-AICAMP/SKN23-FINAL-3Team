@@ -68,6 +68,7 @@ def init_engine(host: str | None = None, port: int | None = None) -> AsyncEngine
 
     _engine = create_async_engine(
         _build_url(_host, _port),
+        connect_args={"init_command": "SET time_zone='+09:00'"},  # MySQL 세션 timezone → KST
         pool_pre_ping=True,      # 끊긴 커넥션 자동 재확인
         pool_recycle=1800,       # 30분마다 커넥션 재생성
         pool_size=10,            # 커넥션 풀 크기
