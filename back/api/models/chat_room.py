@@ -12,6 +12,7 @@ AI 챗봇 대화 세션.
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -51,12 +52,12 @@ class ChatRoom(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
-        default=datetime.utcnow, server_default=func.now(),
+        default=kst_now, server_default=func.now(),
         comment="생성 일시",
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
-        default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now(),
+        default=kst_now, onupdate=kst_now, server_default=func.now(),
         comment="마지막 메시지 발송 일시",
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="삭제 일시")

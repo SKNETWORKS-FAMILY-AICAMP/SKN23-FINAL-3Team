@@ -22,6 +22,7 @@ services/chat_room.py
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 from typing import Sequence
 
 from fastapi import HTTPException, status
@@ -161,5 +162,5 @@ async def delete_room(
     room = await get_room(room_id, db)
     _assert_owner(room, current_user_id)
 
-    room.deleted_at = datetime.utcnow()
+    room.deleted_at = kst_now()
     await db.flush()

@@ -11,6 +11,7 @@ users(type_id), pets(type_id) 에서 FK로 참조됩니다.
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 
 from sqlalchemy import BigInteger, DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -53,7 +54,7 @@ class Keyword(Base):
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
-        default=datetime.utcnow,
+        default=kst_now,
         server_default=func.now(),
         comment="등록 일시",
     )

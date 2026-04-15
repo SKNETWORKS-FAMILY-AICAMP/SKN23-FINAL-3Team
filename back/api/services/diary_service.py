@@ -22,6 +22,7 @@ services/diary.py
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 from typing import Sequence
 
 from fastapi import HTTPException, status
@@ -253,5 +254,5 @@ async def delete_diary(
     diary = await get_diary(diary_id, db)
     _assert_owner(diary, current_user_id)
 
-    diary.deleted_at = datetime.utcnow()
+    diary.deleted_at = kst_now()
     await db.flush()

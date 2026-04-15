@@ -11,6 +11,7 @@ users(profile_id), diaries(image_id) 에서 FK로 참조됩니다.
 from __future__ import annotations
 
 from datetime import datetime
+from core.utils import kst_now
 
 from sqlalchemy import BigInteger, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -48,7 +49,7 @@ class Image(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=datetime.utcnow,
+        default=kst_now,
         server_default=func.now(),
         comment="생성 일시",
     )
