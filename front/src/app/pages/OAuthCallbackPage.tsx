@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -7,8 +7,12 @@ const REDIRECT_URI = `${window.location.origin}/oauth/callback`;
 export function OAuthCallbackPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const calledRef = useRef(false); // React StrictMode 이중 호출 방지
 
   useEffect(() => {
+    if (calledRef.current) return; // 이미 실행됐으면 skip
+    calledRef.current = true;
+
     const code = searchParams.get('code');
     const state = searchParams.get('state') ?? '';
     const error = searchParams.get('error');
