@@ -405,14 +405,7 @@ export default function HomePage({
   const [diaryResult, setDiaryResult] = useState<{ diary: GeneratedDiary; imageUrl: string } | null>(null);
   const [diaryTrigger, setDiaryTrigger] = useState(0);
   const [showAlbum, setShowAlbum] = useState(false);
-  const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>(() => {
-    try {
-      const saved = localStorage.getItem('mungDiaryAlbum');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [testConfig, setTestConfig] = useState<{ petName: string; breed: string; ownerName: string; birthDate: string }>(() => {
     try {
@@ -485,11 +478,7 @@ export default function HomePage({
     if (onSaveDiary) {
       onSaveDiary(entry);
     }
-    setAlbumDiaries((prev) => {
-      const updated = [...prev, entry];
-      localStorage.setItem('mungDiaryAlbum', JSON.stringify(updated));
-      return updated;
-    });
+    setAlbumDiaries((prev) => [...prev, entry]);
   };
 
   const handleDiaryReady = (diary: GeneratedDiary, imageUrl: string) => {
