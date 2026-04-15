@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { Settings, PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map } from 'lucide-react';
 import type { Pet, DiaryEntry, User } from '../types';
 import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
 import ChatBot from '../components/ChatBot';
+import type { GeneratedDiary } from '../services/diaryService';
 
 type Tab = 'diary' | 'map' | null;
 
@@ -52,7 +54,7 @@ function HomeIntro({
         </div>
 
         {/* 왼쪽 오버레이 카드 */}
-        <div className="absolute left-8 top-1/2 z-10 w-[46%] min-w-[420px] max-w-[560px] -translate-y-1/2 rounded-[40px] border border-white/35 bg-white/25 px-10 py-12 shadow-[0_24px_80px_rgba(61,43,31,0.12)] backdrop-blur-[16px]">
+        <div className="absolute left-8 top-1/2 z-10 w-[46%] min-w-[420px] max-w-[600px] -translate-y-1/2 rounded-[40px] border border-white/40 bg-white/65 px-10 py-12 shadow-[0_24px_80px_rgba(61,43,31,0.12)] backdrop-blur-[16px]">
           <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full bg-[#ffffff] px-4 py-1.5 text-sm font-semibold text-[#B86A2E]">
             <span className="text-[#f54900]">AI 맞춤 반려견 도우미</span>
           </div>
@@ -81,29 +83,31 @@ function HomeIntro({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+          <div className="grid grid-cols-3 gap-3">
             <button
               type="button"
               onClick={onOpenMap}
-              className="rounded-2xl border border-[#EEDFD3] bg-white/92 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group flex flex-col rounded-2xl border border-[#EEDFD3] bg-white px-4 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#F4845F] hover:bg-[#FFF0E6] hover:shadow-md"
             >
-              <p className="mb-1 text-sm font-bold text-[#3D2B1F]">
-                📍 장소 추천 받기
-              </p>
-              <p className="text-xs leading-5 text-[#8B6355]">
-                산책로, 카페, 실내 장소를 AI에게 추천받아보세요.
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFF0E6] transition group-hover:bg-[#F4845F]">
+                <MapPinned className="h-6 w-6 text-[#F4845F] transition group-hover:text-white" />
+              </div>
+              <p className="mb-1 text-[13px] font-bold text-[#3D2B1F]">AI 장소 추천</p>
+              <p className="text-[11px] leading-[18px] text-[#8B6355]">
+                산책로, 카페, 실내 장소를 AI가 추천해줘요.
               </p>
             </button>
 
             <button
               type="button"
               onClick={onOpenDiary}
-              className="rounded-2xl border border-[#EEDFD3] bg-white/92 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group flex flex-col rounded-2xl border border-[#EEDFD3] bg-white px-4 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#F4845F] hover:bg-[#FFF0E6] hover:shadow-md"
             >
-              <p className="mb-1 text-sm font-bold text-[#3D2B1F]">
-                📝 오늘 일기 쓰기
-              </p>
-              <p className="text-xs leading-5 text-[#8B6355]">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFF0E6] transition group-hover:bg-[#F4845F]">
+                <SquarePen className="h-6 w-6 text-[#F4845F] transition group-hover:text-white" />
+              </div>
+              <p className="mb-1 text-[13px] font-bold text-[#3D2B1F]">오늘 일기 쓰기</p>
+              <p className="text-[11px] leading-[18px] text-[#8B6355]">
                 오늘 있었던 일을 기록하고 우리 아이의 하루를 남겨보세요.
               </p>
             </button>
@@ -111,12 +115,13 @@ function HomeIntro({
             <button
               type="button"
               onClick={onGoMypage}
-              className="rounded-2xl border border-[#EEDFD3] bg-white/92 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group flex flex-col rounded-2xl border border-[#EEDFD3] bg-white px-4 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#F4845F] hover:bg-[#FFF0E6] hover:shadow-md"
             >
-              <p className="mb-1 text-sm font-bold text-[#3D2B1F]">
-                🐶 마이페이지 보기
-              </p>
-              <p className="text-xs leading-5 text-[#8B6355]">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFF0E6] transition group-hover:bg-[#F4845F]">
+                <UserRound className="h-6 w-6 text-[#F4845F] transition group-hover:text-white" />
+              </div>
+              <p className="mb-1 text-[13px] font-bold text-[#3D2B1F]">마이페이지 보기</p>
+              <p className="text-[11px] leading-[18px] text-[#8B6355]">
                 반려견 정보와 기록을 한눈에 확인해보세요.
               </p>
             </button>
@@ -184,10 +189,13 @@ function MapIntro({ onStartMap }: { onStartMap: () => void }) {
           <button
             type="button"
             onClick={onStartMap}
-            className="w-full rounded-2xl bg-orange-500 px-6 py-4 text-left shadow-md transition hover:-translate-y-0.5 hover:bg-orange-600 hover:shadow-lg"
+            className="group w-full rounded-2xl border-2 border-transparent bg-[#0F6E56] px-6 py-4 text-left shadow-md transition hover:-translate-y-0.5 hover:border-[#0F6E56] hover:bg-white hover:shadow-lg"
           >
-            <p className="text-lg font-black text-white">🗺 지도 검색하기</p>
-            <p className="mt-0.5 text-sm text-orange-100">
+            <p className="flex items-center gap-2 text-lg font-black text-white transition group-hover:text-[#0F6E56]">
+              <MapPinned className="h-5 w-5" />
+              지도 검색하기
+            </p>
+            <p className="mt-0.5 text-sm text-[#D7F1EA] transition group-hover:text-[#0F6E56]/70">
               우리 아이에게 맞는 반려견 동반 장소를 지금 바로 찾아보세요
             </p>
           </button>
@@ -197,12 +205,83 @@ function MapIntro({ onStartMap }: { onStartMap: () => void }) {
   );
 }
 
+function DiaryAlbum({
+  diaries,
+  onBack,
+}: {
+  diaries: DiaryEntry[];
+  onBack: () => void;
+}) {
+  if (diaries.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#F6F1EA] p-8 text-center">
+        <span className="text-6xl">🖼️</span>
+        <p className="text-lg font-bold text-[#3D2B1F]">아직 저장된 그림일기가 없어요</p>
+        <p className="text-sm text-[#8B6355]">챗봇과 함께 오늘의 하루를 기록하고 저장해보세요!</p>
+        <button
+          onClick={onBack}
+          className="mt-2 rounded-full border border-[#F5D6C8] bg-white px-5 py-2 text-sm font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+        >
+          ← 돌아가기
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+      <div className="mx-auto w-full max-w-[720px]">
+        <div className="mb-5 flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+          >
+            ← 뒤로
+          </button>
+          <h2 className="text-lg font-bold text-[#3D2B1F]">🖼️ 일기 모아보기</h2>
+          <span className="ml-auto text-xs text-[#B08B7A]">{diaries.length}개의 일기</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          {[...diaries].reverse().map((entry) => (
+            <div
+              key={entry.id}
+              className="overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              {entry.imageUrl ? (
+                <img
+                  src={entry.imageUrl}
+                  alt={entry.title}
+                  className="h-36 w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-36 w-full items-center justify-center bg-[#FFF0E6] text-4xl">
+                  🐾
+                </div>
+              )}
+              <div className="p-3">
+                <p className="truncate text-sm font-bold text-[#3D2B1F]">{entry.title}</p>
+                <p className="mt-0.5 truncate text-[11px] text-[#B08B7A]">{entry.date}</p>
+                {entry.summary && (
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#8B6355]">{entry.summary}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiaryIntro({
   onStartDiary,
-  onGoMypage,
+  onOpenAlbum,
+  onGoCalendar,
 }: {
   onStartDiary: () => void;
-  onGoMypage: () => void;
+  onOpenAlbum: () => void;
+  onGoCalendar: () => void;
 }) {
   return (
     <div className="h-full w-full overflow-hidden" style={{ background: '#F0F3F2' }}>
@@ -229,7 +308,7 @@ function DiaryIntro({
         </div>
 
         {/* 왼쪽 안내 카드 */}
-        <div className="absolute left-8 top-1/2 z-10 w-[46%] min-w-[420px] max-w-[560px] -translate-y-1/2 rounded-[40px] border border-white/40 bg-white/65 px-10 py-12 shadow-[0_24px_80px_rgba(61,43,31,0.12)] backdrop-blur-[16px]">
+        <div className="absolute left-8 top-1/2 z-10 w-[46%] min-w-[420px] max-w-[590px] -translate-y-1/2 rounded-[40px] border border-white/40 bg-white/65 px-10 py-12 shadow-[0_24px_80px_rgba(61,43,31,0.12)] backdrop-blur-[16px]">
           <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-1.5 text-sm font-semibold text-[#B86A2E]">
             <span className="text-[#F57C3D]">강아지 일기장</span>
           </div>
@@ -258,42 +337,46 @@ function DiaryIntro({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+          <div className="grid grid-cols-3 gap-3">
             <button
               type="button"
               onClick={onStartDiary}
-              className="rounded-2xl border border-[#EEDFD3] bg-white/92 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group flex flex-col rounded-2xl border border-[#F4845F] bg-[#F4845F] px-4 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-[#FFF0E6] hover:shadow-md"
             >
-              <p className="mb-1 text-sm font-bold text-[#3D2B1F]">
-                ✍️ 일기 쓰기
-              </p>
-              <p className="text-xs leading-5 text-[#8B6355]">
-                오늘의 하루를 바로 기록해보세요.
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white/25 transition group-hover:bg-[#F4845F]">
+                <PenSquare className="h-6 w-6 text-white" />
+              </div>
+              <p className="mb-1 text-[13px] font-bold text-white transition group-hover:text-[#3D2B1F]">새 그림일기 쓰기</p>
+              <p className="text-[11px] leading-[18px] text-orange-100 transition group-hover:text-[#8B6355]">
+                챗봇과 함께 오늘의 하루를 바로 기록해보세요.
               </p>
             </button>
 
             <button
               type="button"
-              className="rounded-2xl border border-[#EEDFD3] bg-white/92 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              onClick={onOpenAlbum}
+              className="group flex flex-col rounded-2xl border border-[#EEDFD3] bg-white px-4 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#F4845F] hover:bg-[#FFF0E6] hover:shadow-md"
             >
-              <p className="mb-1 text-sm font-bold text-[#3D2B1F]">
-                🖼️ 그림일기 안내
-              </p>
-              <p className="text-xs leading-5 text-[#8B6355]">
-                기록한 내용을 AI 그림일기로 남길 수 있어요.
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFF0E6] transition group-hover:bg-[#F4845F]">
+                <FolderOpen className="h-6 w-6 text-[#F4845F] transition group-hover:text-white" />
+              </div>
+              <p className="mb-1 text-[13px] font-bold text-[#3D2B1F]">일기 모아보기</p>
+              <p className="text-[11px] leading-[18px] text-[#8B6355]">
+                차곡차곡 쌓인 그림일기를 다시 꺼내보세요.
               </p>
             </button>
 
             <button
               type="button"
-              onClick={onGoMypage}
-              className="rounded-2xl border border-[#EEDFD3] bg-white/92 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              onClick={onGoCalendar}
+              className="group flex flex-col rounded-2xl border border-[#EEDFD3] bg-white px-4 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#F4845F] hover:bg-[#FFF0E6] hover:shadow-md"
             >
-              <p className="mb-1 text-sm font-bold text-[#3D2B1F]">
-                🐶 마이페이지
-              </p>
-              <p className="text-xs leading-5 text-[#8B6355]">
-                반려견 정보와 기존 기록을 확인해보세요.
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#FFF0E6] transition group-hover:bg-[#F4845F]">
+                <CalendarDays className="h-6 w-6 text-[#F4845F] transition group-hover:text-white" />
+              </div>
+              <p className="mb-1 text-[13px] font-bold text-[#3D2B1F]">멍캘린더</p>
+              <p className="text-[11px] leading-[18px] text-[#8B6355]">
+                캘린더로 한 달의 기록과 특별한 순간을 돌아보세요.
               </p>
             </button>
           </div>
@@ -319,28 +402,63 @@ export default function HomePage({
   const [autoPlace, setAutoPlace] = useState('');
   const [showDiaryEditor, setShowDiaryEditor] = useState(false);
   const [showMapSearch, setShowMapSearch] = useState(false);
+  const [diaryResult, setDiaryResult] = useState<{ diary: GeneratedDiary; imageUrl: string } | null>(null);
+  const [diaryTrigger, setDiaryTrigger] = useState(0);
+  const [showAlbum, setShowAlbum] = useState(false);
+  const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('mungDiaryAlbum');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [testConfig, setTestConfig] = useState<{ petName: string; breed: string; ownerName: string; birthDate: string }>(() => {
+    try {
+      const saved = localStorage.getItem('mungDiaryTestConfig');
+      const parsed = saved ? JSON.parse(saved) : {};
+      return {
+        petName: parsed.petName ?? '콩이',
+        breed: parsed.breed ?? '말티즈',
+        ownerName: parsed.ownerName ?? '테스트유저',
+        birthDate: parsed.birthDate ?? '',
+      };
+    } catch {
+      return { petName: '콩이', breed: '말티즈', ownerName: '테스트유저', birthDate: '' };
+    }
+  });
+  const [draftConfig, setDraftConfig] = useState(testConfig);
 
   // 로고·홈 버튼 클릭 시 항상 인트로로 리셋
   useEffect(() => {
     setTab(null);
     setShowDiaryEditor(false);
     setShowMapSearch(false);
+    setShowAlbum(false);
     setAutoPlace('');
   }, [location.key]);
 
   const safePets = useMemo(() => {
     if (Array.isArray(pets) && pets.length > 0) return pets;
     if (pet) return [pet];
-    return [{ name: '콩이', breed: '말티즈' } as Pet];
-  }, [pets, pet]);
+    return [{ name: testConfig.petName, breed: testConfig.breed, ownerName: testConfig.ownerName, birthDate: testConfig.birthDate || undefined } as Pet];
+  }, [pets, pet, testConfig.petName, testConfig.breed, testConfig.ownerName, testConfig.birthDate]);
 
-  const safeUser = user ?? ({ name: '테스트유저' } as User);
+  const safeUser = user ?? ({ name: testConfig.ownerName } as User);
   const safeDiaries = diaries ?? [];
   const currentPet = selectedPet ?? safePets[0] ?? pet;
+
+  const handleSaveTestConfig = () => {
+    setTestConfig(draftConfig);
+    localStorage.setItem('mungDiaryTestConfig', JSON.stringify(draftConfig));
+    setShowSettings(false);
+  };
 
   const handleOpenDiaryTab = () => {
     setTab('diary');
     setShowDiaryEditor(false);
+    setShowAlbum(false);
   };
 
   const handleOpenMapTab = () => {
@@ -351,7 +469,8 @@ export default function HomePage({
   const handleUsePlace = (place: string) => {
     setAutoPlace(place);
     setTab('diary');
-    setShowDiaryEditor(true);
+    setDiaryResult(null);
+    setDiaryTrigger((prev) => prev + 1);
   };
 
   const handleGoMypage = () => {
@@ -366,6 +485,16 @@ export default function HomePage({
     if (onSaveDiary) {
       onSaveDiary(entry);
     }
+    setAlbumDiaries((prev) => {
+      const updated = [...prev, entry];
+      localStorage.setItem('mungDiaryAlbum', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDiaryReady = (diary: GeneratedDiary, imageUrl: string) => {
+    setDiaryResult({ diary, imageUrl });
+    setTab('diary');
   };
 
   return (
@@ -374,27 +503,29 @@ export default function HomePage({
         <div className="flex flex-1 overflow-hidden">
           {/* 왼쪽 메인 영역 */}
           <div className="flex min-w-0 flex-[2] flex-col border-r border-gray-200 bg-white">
-            <div className="flex border-b border-gray-200">
+            <div className="flex border-b border-gray-100 bg-white">
               <button
-                className={`flex-1 px-6 py-3 font-medium transition-colors ${
+                className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${
                   tab === 'diary'
-                    ? 'border-b-2 border-amber-600 bg-white text-amber-600'
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
+                    : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
                 }`}
                 onClick={handleOpenDiaryTab}
               >
-                📝 강아지 일기장
+                <NotebookPen className="h-4 w-4" />
+                강아지 일기장
               </button>
 
               <button
-                className={`flex-1 px-6 py-3 font-medium transition-colors ${
+                className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${
                   tab === 'map'
-                    ? 'border-b-2 border-amber-600 bg-white text-amber-600'
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
+                    : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
                 }`}
                 onClick={handleOpenMapTab}
               >
-                🗺 지도
+                <Map className="h-4 w-4" />
+                지도
               </button>
             </div>
 
@@ -407,14 +538,24 @@ export default function HomePage({
                 />
               )}
 
-              {tab === 'diary' && !showDiaryEditor && (
+              {tab === 'diary' && !showDiaryEditor && !diaryResult && !showAlbum && (
                 <DiaryIntro
-                  onStartDiary={() => setShowDiaryEditor(true)}
-                  onGoMypage={handleGoMypage}
+                  onStartDiary={() => {
+                    setDiaryTrigger((prev) => prev + 1);
+                  }}
+                  onOpenAlbum={() => setShowAlbum(true)}
+                  onGoCalendar={() => navigate('/calendar')}
                 />
               )}
 
-              {tab === 'diary' && showDiaryEditor && currentPet && (
+              {tab === 'diary' && showAlbum && !diaryResult && (
+                <DiaryAlbum
+                  diaries={albumDiaries}
+                  onBack={() => setShowAlbum(false)}
+                />
+              )}
+
+              {tab === 'diary' && showDiaryEditor && !diaryResult && currentPet && (
                 <DiaryView
                   pet={currentPet}
                   user={safeUser}
@@ -424,6 +565,87 @@ export default function HomePage({
                   onSave={handleSaveDiary}
                 />
               )}
+
+{tab === 'diary' && diaryResult && (
+  <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+    <div className="mx-auto w-full max-w-[720px]">
+      {/* 상단 헤더 */}
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          onClick={() => {
+            setDiaryResult(null);
+            setShowDiaryEditor(false);
+          }}
+          className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+        >
+          ← 뒤로
+        </button>
+        <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+      </div>
+
+      {/* 스케치북/일기장 본문 */}
+      <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
+        {/* 마스킹 테이프 느낌 */}
+        <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
+        <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
+
+        {/* 제목/요약 */}
+        <div className="mb-6 text-center">
+          <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
+          <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
+            {diaryResult.diary.title}
+          </h3>
+          {diaryResult.diary.summary && (
+            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+              ✨ {diaryResult.diary.summary}
+            </div>
+          )}
+        </div>
+
+        {/* 이미지 */}
+        <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
+          <img
+            src={diaryResult.imageUrl}
+            alt="그림일기"
+            className="w-full h-auto rounded-[16px] object-contain"
+          />
+        </div>
+
+        {/* 일기 본문 - 줄 있는 노트 느낌 */}
+        <div
+          className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)',
+          }}
+        >
+          <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+            {diaryResult.diary.content}
+          </p>
+        </div>
+
+        {/* 저장 버튼 */}
+        <button
+          onClick={() => {
+            handleSaveDiary({
+              id: Date.now().toString(),
+              title: diaryResult.diary.title,
+              body: diaryResult.diary.content,
+              summary: diaryResult.diary.summary ?? '',
+              date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
+              place: autoPlace || '',
+              imageUrl: diaryResult.imageUrl,
+            });
+            alert('그림일기가 저장되었어요 🐾');
+          }}
+          className="mt-6 w-full rounded-2xl bg-[#F4845F] py-4 text-sm font-bold text-white transition hover:bg-[#e8764f]"
+        >
+          💾 저장하기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
               {tab === 'map' && !showMapSearch && (
                 <MapIntro onStartMap={() => setShowMapSearch(true)} />
@@ -436,7 +658,7 @@ export default function HomePage({
           </div>
 
           {/* 오른쪽 챗봇 영역 */}
-          <div className="flex-1 bg-[#FFF8F3] p-4">
+          <div className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
             <div
               className="flex h-full flex-col overflow-hidden rounded-[28px] border shadow-[0_0_40px_rgba(0,0,0,0.08)]"
               style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
@@ -458,9 +680,17 @@ export default function HomePage({
                       AI 멍봇
                     </p>
                     <p className="text-xs" style={{ color: '#8B6355' }}>
-                      일기, 산책 장소, 여행지를 도와줄게!
+                      {testConfig.petName} · {testConfig.breed}
                     </p>
                   </div>
+
+                  <button
+                    onClick={() => setShowSettings((v) => !v)}
+                    className="rounded-full p-1.5 transition hover:bg-[#FFF0E6]"
+                    title="테스트 설정"
+                  >
+                    <Settings className="h-4 w-4 text-[#B08B7A]" />
+                  </button>
 
                   <div
                     className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
@@ -469,11 +699,65 @@ export default function HomePage({
                     AI
                   </div>
                 </div>
+
+                {showSettings && (
+                  <div className="mt-3 space-y-2 rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] p-3">
+                    <p className="mb-1 text-[11px] font-bold text-[#B08B7A]">테스트 설정</p>
+                    {[
+                      { label: '반려견 이름', field: 'petName' as const },
+                      { label: '견종', field: 'breed' as const },
+                      { label: '보호자 이름', field: 'ownerName' as const },
+                    ].map(({ label, field }) => (
+                      <div key={field} className="flex items-center gap-2">
+                        <label className="w-[72px] shrink-0 text-[11px] text-[#8B6355]">{label}</label>
+                        <input
+                          value={draftConfig[field]}
+                          onChange={(e) => setDraftConfig((prev) => ({ ...prev, [field]: e.target.value }))}
+                          className="flex-1 rounded-lg border border-[#F5D6C8] bg-white px-2 py-1 text-xs outline-none focus:border-[#F4845F]"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <label className="w-[72px] shrink-0 text-[11px] text-[#8B6355]">생년월일</label>
+                      <input
+                        type="date"
+                        value={draftConfig.birthDate}
+                        onChange={(e) => setDraftConfig((prev) => ({ ...prev, birthDate: e.target.value }))}
+                        className="flex-1 rounded-lg border border-[#F5D6C8] bg-white px-2 py-1 text-xs outline-none focus:border-[#F4845F]"
+                      />
+                    </div>
+                    {draftConfig.birthDate && (
+                      <p className="text-[10px] text-[#B08B7A]">
+                        → {(() => {
+                          const birth = new Date(draftConfig.birthDate)
+                          const now = new Date()
+                          const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth())
+                          const years = Math.floor(months / 12)
+                          const rem = months % 12
+                          return years > 0 ? `${years}살 ${rem > 0 ? `${rem}개월` : ''}` : `${months}개월`
+                        })()}
+                      </p>
+                    )}
+                    <button
+                      onClick={handleSaveTestConfig}
+                      className="mt-1 w-full rounded-lg bg-[#F4845F] py-1.5 text-xs font-bold text-white transition hover:bg-[#e8764f]"
+                    >
+                      저장
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
                 <div className="h-full p-3">
-                  <ChatBot pet={currentPet} onSelectPlace={handleUsePlace} />
+                  <ChatBot
+                    pet={currentPet}
+                    onSelectPlace={handleUsePlace}
+                    onNavigateToDiary={handleOpenDiaryTab}
+                    onNavigateToMap={handleOpenMapTab}
+                    onDiaryReady={handleDiaryReady}
+                    diaryTrigger={diaryTrigger}
+                  />
                 </div>
               </div>
             </div>

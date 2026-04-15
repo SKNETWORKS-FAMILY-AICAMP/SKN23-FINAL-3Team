@@ -7,6 +7,7 @@ export interface Pet {
   weight?: string;
   birthDate?: string;
   personality?: string[];
+  ownerName?: string;
 }
 
 export interface User {

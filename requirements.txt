@@ -22,3 +22,10 @@ ipykernel
 # FastAPI 백엔드
 fastapi
 uvicorn[standard]
+
+# 이미지 평가
+ultralytics
+pillow
+
+# 비동기 SQLite (cost_tracker)
+aiosqlite
