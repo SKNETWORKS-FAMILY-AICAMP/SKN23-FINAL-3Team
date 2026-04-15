@@ -9,7 +9,7 @@ database.py
 - SERVER=ec2    : EC2 내부에서 RDS 직접 연결
 
 [의존 패키지]
-    pip install python-dotenv pymysql sqlalchemy sshtunnel cryptography
+        pip install python-dotenv pymysql sqlalchemy sshtunnel cryptography
 """
 
 import sys
@@ -81,8 +81,8 @@ Base = declarative_base()
 
 def get_engine():
     """
-    싱글턴 SQLAlchemy 엔진을 반환합니다.
-    최초 호출 시 SSH 터널(local 모드) 또는 직접(ec2 모드) 연결을 생성합니다.
+        싱글턴 SQLAlchemy 엔진을 반환합니다.
+        최초 호출 시 SSH 터널(local 모드) 또는 직접(ec2 모드) 연결을 생성합니다.
     """
     global _engine
     if _engine is not None:
@@ -123,16 +123,16 @@ def get_session_factory():
 # ── FastAPI 의존성 주입용 함수 ────────────────────────────────────────────
 def get_db():
     """
-    FastAPI 라우터에서 Depends(get_db)로 사용하는 DB 세션 제공자.
+        FastAPI 라우터에서 Depends(get_db)로 사용하는 DB 세션 제공자.
 
-    Example::
+        Example::
 
-        from fastapi import Depends
-        from sqlalchemy.orm import Session
-        from back.db.database import get_db
+                from fastapi import Depends
+                from sqlalchemy.orm import Session
+                from back.db.database import get_db
 
-        @app.get("/dogs")
-        def read_dogs(db: Session = Depends(get_db)):
+                @app.get("/dogs")
+                def read_dogs(db: Session = Depends(get_db)):
             ...
     """
     SessionLocal = get_session_factory()
