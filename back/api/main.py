@@ -203,6 +203,7 @@ from routers import (
     keywords_router,
     pets_router,
     users_router,
+    places_router,
 )
 
 # 인증 (소셜 로그인)
@@ -230,6 +231,8 @@ app.include_router(breeds_router.router,        prefix="/breeds",     tags=["Bre
 # 키워드 (온보딩 태그)
 app.include_router(keywords_router.router,      prefix="/keywords",   tags=["Keywords"])
 
+# 장소 검색 (Places)
+app.include_router(places_router.router,       prefix="/places",       tags=["Places"])
 
 # =============================================================================
 # 헬스체크 엔드포인트
