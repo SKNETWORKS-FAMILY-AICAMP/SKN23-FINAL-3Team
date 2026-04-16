@@ -542,3 +542,7 @@ back/db/*.db
 
 # Python 가상환경
 withdog_venv/
+
+
+# ========== 개인 ==============
+.claude/
