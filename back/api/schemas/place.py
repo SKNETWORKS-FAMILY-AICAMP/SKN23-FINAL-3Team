@@ -10,8 +10,14 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class YNEnum(str, Enum):
+    Y = "Y"
+    N = "N"
 
 
 class PlaceResponse(BaseModel):
@@ -33,7 +39,7 @@ class PlaceResponse(BaseModel):
     acmpy_type_cd: Optional[str] = Field(None, description="동반유형")
     acmpy_psbl_cpam: Optional[str] = Field(None, description="동반가능동물 설명")
     acmpy_need_mtr: Optional[str] = Field(None, description="동반 시 필요사항")
-    rela_poses_fclty: Optional[str] = Field(None, description="반려동물 관련 구비 시설")
+    rela_poses_fclty: Optional[YNEnum] = Field(None, description="반려동물 관련 구비 시설 여부")
     etc_acmpy_info: Optional[str] = Field(None, description="기타 동반 정보")
     description: Optional[str] = Field(None, description="장소 통합 설명 텍스트")
     modified_time: Optional[datetime] = Field(None, description="한국관광공사 원본 데이터 최종 수정일")
