@@ -23,16 +23,19 @@ ipykernel
 fastapi
 uvicorn[standard]
 
+# 이미지 평가
+ultralytics
+pillow
+
+# 비동기 SQLite (cost_tracker)
+aiosqlite
+
 # DB 연결 (AWS RDS MySQL)
 pymysql
 sqlalchemy[asyncio]
 aiomysql
 sshtunnel
 cryptography       # SSH PEM 키 파싱에 필요
-
-# FastAPI 웹 프레임워크
-fastapi
-uvicorn[standard]
 
 # Pydantic v2 (환경변수 관리 + 유효성 검사)
 pydantic-settings
