@@ -12,6 +12,7 @@ export interface Pet {
 
 export interface User {
   name: string;
+  birthDate?: string;
   age?: number;
   gender?: string;
 }

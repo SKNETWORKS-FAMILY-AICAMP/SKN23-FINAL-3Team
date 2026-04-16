@@ -15,7 +15,8 @@ import enum
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+from services.common_service import calculate_age
 
 
 class PetGenderEnum(str, enum.Enum):
@@ -68,3 +69,8 @@ class PetResponse(BaseModel):
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
     created_at: datetime = Field(..., description="등록 일시")
     updated_at: datetime = Field(..., description="수정 일시")
+
+    @computed_field
+    @property
+    def age(self) -> int | None:
+        return calculate_age(self.birth_date)
