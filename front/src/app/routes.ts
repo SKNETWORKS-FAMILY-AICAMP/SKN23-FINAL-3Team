@@ -12,7 +12,7 @@ export const router = createBrowserRouter([
     path: "/",
     Component: RootLayout,
     children: [
-      { index: true, Component: LoginPage },
+      { index: true, Component: HomePage },
       { path: "home", Component: HomePage },
       { path: "login", Component: LoginPage },
       { path: "oauth/callback", Component: OAuthCallbackPage },

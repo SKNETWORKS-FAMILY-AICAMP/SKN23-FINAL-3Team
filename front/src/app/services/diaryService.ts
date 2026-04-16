@@ -5,6 +5,7 @@ export interface DiaryGenerationInput {
   breed?: string
   birthDate?: string
   personalities?: string[]
+  ownerName?: string
   diaryType: DiaryTypeId
   typeFocus: string
   mainAnswers: string[]
@@ -18,6 +19,7 @@ export interface GeneratedDiary {
   content: string
   summary: string
   image_prompt?: string
+  session_id?: string
 }
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -32,6 +34,7 @@ export async function generateDiary(input: DiaryGenerationInput): Promise<Genera
         breed: input.breed ?? '강아지',
         birth_date: input.birthDate ?? null,
         personalities: input.personalities ?? [],
+        owner_name: input.ownerName ?? '',
         main_answers: input.mainAnswers,
         additional_answers: input.additionalAnswers,
         diary_type: input.diaryType,
@@ -50,6 +53,7 @@ export async function generateDiary(input: DiaryGenerationInput): Promise<Genera
       content: data.content,
       summary: data.summary,
       image_prompt: data.image_prompt,
+      session_id: data.session_id,
     }
   } catch (e) {
     console.warn('[diaryService] API 호출 실패, mock으로 대체합니다.', e)
@@ -58,11 +62,11 @@ export async function generateDiary(input: DiaryGenerationInput): Promise<Genera
   }
 }
 
-export async function generateDiaryImage(imagePrompt: string): Promise<string> {
+export async function generateDiaryImage(imagePrompt: string, sessionId?: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/diary/generate-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_prompt: imagePrompt }),
+    body: JSON.stringify({ image_prompt: imagePrompt, session_id: sessionId ?? '' }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { detail?: string }
