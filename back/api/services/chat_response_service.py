@@ -22,33 +22,29 @@ import asyncio
 import base64
 import json
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date
 from typing import Sequence
 
-from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import settings
 from services.intent_service import IntentResult
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 
 # ── OpenAI 클라이언트 (lazy singleton) ───────────────────────────────────────
 _openai_client: AsyncOpenAI | None = None
-_CHAT_MODEL = os.getenv("GPT_MODEL", "gpt-4.1-mini")
-_DIARY_MODEL = os.getenv("DIARY_GPT_MODEL", "gpt-4o")
-_IMAGE_MODEL = os.getenv("DIARY_IMAGE_MODEL", "gpt-image-1")
+_GPT_MODEL = settings.GPT_MODEL
+_IMAGE_MODEL = settings.DIARY_IMAGE_MODEL
 
 
 def _get_openai_client() -> AsyncOpenAI:
     global _openai_client
     if _openai_client is None:
-        _openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     return _openai_client
 
 
@@ -123,7 +119,7 @@ async def _chat_completion(
     try:
         client = _get_openai_client()
         resp = await client.chat.completions.create(
-            model=model or _CHAT_MODEL,
+            model=model or _GPT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -245,7 +241,7 @@ async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     try:
         client = _get_openai_client()
         resp = await client.chat.completions.create(
-            model=_DIARY_MODEL,
+            model=_GPT_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
@@ -333,7 +329,7 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
 
         흐름:
             1. ctx.user_id 로 반려동물 컨텍스트 확보 (없으면 기본값)
-            2. build_diary_prompt → GPT (_DIARY_MODEL) → 일기 JSON
+            2. build_diary_prompt → GPT (_GPT_MODEL) → 일기 JSON
             3. build_final_image_prompt → OpenAI Images → base64
             4. base64 → S3 업로드 → images 테이블 저장
             5. 일기 텍스트 + 이미지 URL(마크다운)을 assistant 응답으로 반환

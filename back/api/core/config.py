@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     SSH_USER: str = Field(default="ubuntu")
     SSH_PKEY: str = Field(default="")
 
+    # ── OpenAI ───────────────────────────────────────────────────────────────
+    OPENAI_API_KEY: str = Field(default="")
+    GPT_MODEL: str = Field(default="gpt-4.1-mini")
+    DIARY_IMAGE_MODEL: str = Field(default="gpt-image-1")
+
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]
     @property

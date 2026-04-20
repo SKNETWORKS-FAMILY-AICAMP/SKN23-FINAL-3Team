@@ -15,13 +15,14 @@ breeds 테이블에 견종 마스터 데이터를 적재하는 시드 스크립�
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
-
 import httpx
-from dotenv import load_dotenv
+import asyncio
+
 from openai import OpenAI
+from dotenv import load_dotenv
+from core.config import settings
 
 load_dotenv()
 
@@ -31,9 +32,10 @@ _BACK_API = os.path.normpath(os.path.join(_HERE, "../../api"))  # back/api/
 sys.path.insert(0, _BACK_API)
 
 # ── 설정 ──────────────────────────────────────────────────────────────────
+
 DOG_API_URL = "https://api.thedogapi.com/v1/breeds"
 DOG_API_KEY = os.getenv("DOG_API_KEY", "")
-_CHAT_MODEL = os.getenv("GPT_MODEL", "gpt-4.1-mini")
+_GPT_MODEL = settings.GPT_MODEL
 
 # 국내 인기 견종 TOP10 (The Dog API 영문명 소문자 기준)
 TOP10_NAMES: set[str] = {
@@ -76,7 +78,7 @@ def translate_breed_name(breed_name: str) -> str:
     """영문 견종명 → 한국어 번역 (GPT-4.1-mini)."""
     try:
         response = openai_client.chat.completions.create(
-            model=_CHAT_MODEL,
+            model=_GPT_MODEL,
             messages=[
                 {
                     "role": "system",
