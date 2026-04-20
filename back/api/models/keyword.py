@@ -12,11 +12,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from core.utils import kst_now
-
-from sqlalchemy import BigInteger, DateTime, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
-
 from core.database import Base
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, DateTime, String, Text, func
+
 
 
 class Keyword(Base):

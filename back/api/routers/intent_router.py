@@ -3,11 +3,12 @@
 import os
 import json
 import torch
+
+from dotenv import load_dotenv
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
-from dotenv import load_dotenv
 
 load_dotenv()
 

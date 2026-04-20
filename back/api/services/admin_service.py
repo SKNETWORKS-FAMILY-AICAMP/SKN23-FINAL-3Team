@@ -10,12 +10,10 @@ services/admin_service.py
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
-
 from jose import jwt
-
+from typing import Any
 from core.config import settings
+from datetime import datetime, timezone
 
 
 def create_permanent_jwt(user_id: int, provider: str = "admin") -> str:

@@ -1,9 +1,9 @@
 import os
 import requests
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from services.place_service import search_places_from_db
 
 router = APIRouter(tags=["places"])

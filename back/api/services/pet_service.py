@@ -17,17 +17,15 @@ services/pet.py
 
 from __future__ import annotations
 
-from datetime import datetime
-from core.utils import kst_now
-from typing import Sequence
-
-from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from models.pet import Pet
+from typing import Sequence
+from sqlalchemy import select
+from core.utils import kst_now
+from models.breed import Breed
+from models.keyword import Keyword
+from fastapi import HTTPException, status
 from schemas.pet import PetCreate, PetUpdate
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
@@ -42,7 +40,6 @@ def _assert_owner(pet: Pet, current_user_id: int) -> None:
 
 async def _verify_breed(breed_id: int, db: AsyncSession) -> None:
     """breed_id FK: 견종이 존재하는지 검증합니다."""
-    from models.breed import Breed
 
     result = await db.execute(select(Breed).where(Breed.id == breed_id))
     if result.scalar_one_or_none() is None:
@@ -54,7 +51,6 @@ async def _verify_breed(breed_id: int, db: AsyncSession) -> None:
 
 async def _verify_keyword(keyword_id: int, db: AsyncSession) -> None:
     """type_id FK: 키워드가 존재하는지 검증합니다."""
-    from models.keyword import Keyword
 
     result = await db.execute(select(Keyword).where(Keyword.id == keyword_id))
     if result.scalar_one_or_none() is None:

@@ -18,13 +18,11 @@ routers/auth.py
 from __future__ import annotations
 
 from typing import Literal
-
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from core.deps import get_db
 from schemas.auth import TokenResponse
+from fastapi import APIRouter, Depends, Query
 from services.auth_service import social_login
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Auth"])
 

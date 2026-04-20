@@ -21,15 +21,14 @@ services/diary.py
 
 from __future__ import annotations
 
-from datetime import datetime
-from core.utils import kst_now
+from models.pet import Pet
 from typing import Sequence
-
-from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from core.utils import kst_now
 from models.diary import Diary
+from models.image import Image
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.diary import DiaryCreate, DiaryUpdate
 
 
@@ -46,7 +45,6 @@ def _assert_owner(diary: Diary, current_user_id: int) -> None:
 
 async def _verify_pet(pet_id: int, user_id: int, db: AsyncSession) -> None:
     """pet_id FK: 반려동물이 존재하며 해당 사용자의 것인지 검증합니다."""
-    from models.pet import Pet
 
     result = await db.execute(
         select(Pet).where(Pet.id == pet_id, Pet.deleted_at.is_(None))
@@ -67,7 +65,6 @@ async def _verify_pet(pet_id: int, user_id: int, db: AsyncSession) -> None:
 
 async def _verify_image(image_id: int, db: AsyncSession) -> None:
     """image_id FK: 이미지가 존재하는지 검증합니다."""
-    from models.image import Image
 
     result = await db.execute(
         select(Image).where(

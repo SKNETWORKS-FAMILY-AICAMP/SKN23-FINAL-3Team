@@ -1,7 +1,8 @@
 import os
 import chromadb
-from sentence_transformers import SentenceTransformer
+
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 

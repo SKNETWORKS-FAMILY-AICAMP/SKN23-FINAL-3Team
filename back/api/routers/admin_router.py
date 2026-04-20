@@ -15,15 +15,14 @@ routers/admin_router.py
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
-
-from core.config import settings
 from core.deps import get_db
+from sqlalchemy import select
+from core.config import settings
 from schemas.auth import TokenResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from services.admin_service import create_permanent_jwt
+from fastapi import APIRouter, Header, HTTPException, Query, status
 
 router = APIRouter(tags=["Admin"])
 

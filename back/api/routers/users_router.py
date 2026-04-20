@@ -20,13 +20,12 @@ routers/users.py
 
 from __future__ import annotations
 
+from models.user import User
+from services import user_service as user_svc
+from core.deps import get_current_user, get_db
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.deps import get_current_user, get_db
-from models.user import User
 from schemas.user import UserResponse, UserUpdate
-from services import user_service as user_svc
 
 router = APIRouter(tags=["Users"])
 

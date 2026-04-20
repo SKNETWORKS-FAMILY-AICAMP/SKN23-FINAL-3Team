@@ -21,15 +21,12 @@ services/chat_room.py
 
 from __future__ import annotations
 
-from datetime import datetime
-from core.utils import kst_now
 from typing import Sequence
-
-from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from core.utils import kst_now
 from models.chat_room import ChatRoom
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.chat_room import ChatRoomCreate, ChatRoomUpdateTitle
 
 

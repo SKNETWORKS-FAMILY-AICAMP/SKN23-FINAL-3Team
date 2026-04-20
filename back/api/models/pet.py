@@ -13,26 +13,13 @@ pets 테이블 ORM 모델.
 
 from __future__ import annotations
 
+from typing import Any
 from datetime import datetime
 from core.utils import kst_now
-from typing import Any
-
-from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    Date,
-    DateTime,
-    Enum as SAEnum,
-    ForeignKey,
-    Index,
-    JSON,
-    String,
-    func,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from core.database import Base
 from core.type.gender import PetGenderEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (BigInteger, Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, JSON, String, func)
 
 
 class Pet(Base):

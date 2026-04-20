@@ -7,9 +7,8 @@ services/common_service.py
 
 from __future__ import annotations
 
-from datetime import date, datetime
-
 from core.utils import kst_now
+from datetime import date, datetime
 
 
 def calculate_age(birth_date: date | datetime | str | None, is_traditional: bool = False) -> int | None:

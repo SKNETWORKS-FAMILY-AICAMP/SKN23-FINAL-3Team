@@ -22,17 +22,16 @@ services/chat_message.py
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from core.utils import kst_now
+
 from typing import Sequence
-
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from core.utils import kst_now
 from models.chat_message import ChatMessage
 from schemas.chat_message import MessageCreate
-from services import chat_response_service, intent_service
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.chat_room_service import get_room
 from services.intent_service import IntentResult
+from services import chat_response_service, intent_service
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +218,6 @@ async def list_messages(
         Raises:
                 HTTPException 404: 채팅방 없음
     """
-    from services.chat_room_service import get_room
 
     # 채팅방 존재 확인
     await get_room(room_id, db)

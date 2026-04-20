@@ -18,19 +18,27 @@ dispatch() 는 DispatchContext(user_id, db) 를 선택 인자로 받아
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
+import base64
 import logging
-from dataclasses import dataclass
+import asyncio
+
 from datetime import date
+from models.pet import Pet
 from typing import Sequence
-
+from sqlalchemy import select
 from openai import AsyncOpenAI
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from models.image import Image
 from core.config import settings
+from dataclasses import dataclass
+from core.location.place import Place
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.image_service import upload_to_s3
 from services.intent_service import IntentResult
+from services.place_service import search_places_from_db
+from ai.llm.prompts.diary_prompt import build_diary_prompt
+from ai.llm.prompts.diary_prompt import build_final_image_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +178,6 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
         return dict(_DEFAULT_DIARY_PET)
 
     try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        from models.pet import Pet
-
         result = await ctx.db.execute(
             select(Pet)
             .where(Pet.user_id == ctx.user_id)
@@ -207,12 +211,6 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
 
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     """build_diary_prompt → GPT 호출 → JSON 파싱."""
-    try:
-        from ai.llm.prompts.diary_prompt import build_diary_prompt
-    except Exception as e:
-        logger.error(f"[Diary] diary_prompt 임포트 실패: {e}")
-        return None
-
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
     conversation_summary = f"보호자: {query.strip()}"
@@ -257,11 +255,6 @@ async def _generate_and_store_image(
         build_final_image_prompt → OpenAI 이미지 생성 → S3 업로드 → images 테이블 저장.
         실패 시 None 을 반환하고 호출 측에서 이미지 없이 응답합니다.
     """
-    try:
-        from ai.llm.prompts.diary_prompt import build_final_image_prompt
-    except Exception as e:
-        logger.error(f"[Diary] diary_prompt.build_final_image_prompt 임포트 실패: {e}")
-        return None
 
     image_prompt = build_final_image_prompt(
         image_prompt_base=diary_data.get("image_prompt_base", ""),
@@ -293,7 +286,6 @@ async def _generate_and_store_image(
 
     # 2) S3 업로드 + DB 저장 (ctx.db 있을 때만)
     try:
-        from services.image_service import _upload_to_s3
         image_bytes = base64.b64decode(b64)
         file_url = await _upload_to_s3(image_bytes, "diary.png", "image/png")
     except Exception as e:
@@ -302,7 +294,6 @@ async def _generate_and_store_image(
 
     if ctx.db is not None:
         try:
-            from models.image import Image
             image_row = Image(file_url=file_url, file_name="diary.png")
             ctx.db.add(image_row)
             await ctx.db.flush()
@@ -356,10 +347,8 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
 
 async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5) -> str:
     if settings.USE_DUMMY_PLACES:
-        from core.location.place import Place
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
-        from services.place_service import search_places_from_db
         places = await search_places_from_db(query, ctx.db, n_results=top_k)
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
@@ -372,10 +361,8 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5) -> st
 
 async def _handle_facility(query: str, ctx: DispatchContext) -> str:
     if settings.USE_DUMMY_PLACES:
-        from core.location.place import Place
         places = await Place().find_place(top_k=1)
     elif ctx.db is not None:
-        from services.place_service import search_places_from_db
         places = await search_places_from_db(query, ctx.db, n_results=1)
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 시설 검색 불가")

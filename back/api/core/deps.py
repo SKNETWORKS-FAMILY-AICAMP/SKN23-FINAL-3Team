@@ -21,15 +21,13 @@ FastAPI 의존성 주입(Dependency Injection) 모듈.
 
 from __future__ import annotations
 
+from sqlalchemy import select
+from core.config import settings
 from typing import AsyncGenerator
-
+from core.database import AsyncSessionLocal
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.database import AsyncSessionLocal
-from core.config import settings
 
 # Bearer 토큰 스킴 (Authorization: Bearer <token>)
 _bearer = HTTPBearer(auto_error=False)

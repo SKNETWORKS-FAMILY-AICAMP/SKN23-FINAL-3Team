@@ -12,9 +12,9 @@ Settings 클래스가 프로젝트 루트의 .env 파일을 자동으로 읽어
 from __future__ import annotations
 
 import os
-from functools import lru_cache
-from typing import Literal
 
+from typing import Literal
+from functools import lru_cache
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

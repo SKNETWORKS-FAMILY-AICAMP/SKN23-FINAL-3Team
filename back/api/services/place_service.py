@@ -1,9 +1,8 @@
 import logging
 
 from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from models.place import Place as PlaceModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
