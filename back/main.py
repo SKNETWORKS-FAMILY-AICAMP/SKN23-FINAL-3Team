@@ -9,13 +9,18 @@ uvicorn 실행 진입점 (back/ 디렉토리에서 실행 시 사용).
     # back/ 디렉토리에서
     uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-api/ 디렉토리를 Python path에 추가한 뒤
+api/ 디렉토리와 프로젝트 루트를 Python path에 추가한 뒤
 실제 FastAPI 앱(back/api/main.py)을 임포트합니다.
 """
 
 import sys
 import os
 import importlib.util
+
+# 프로젝트 루트를 Python path에 추가 (ai.* 임포트용)
+_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _root_dir not in sys.path:
+    sys.path.insert(0, _root_dir)
 
 # back/api/main.py 를 직접 로드 (이름 충돌 방지)
 _api_dir = os.path.join(os.path.dirname(__file__), "api")

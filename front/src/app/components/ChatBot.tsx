@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
-import { Send } from 'lucide-react'
+import { Send, LogIn } from 'lucide-react'
+import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
 import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
@@ -25,6 +26,9 @@ export default function ChatBot({
   onDiaryReady,
   diaryTrigger,
 }: Props) {
+  const navigate = useNavigate()
+  const isLoggedIn = !!localStorage.getItem('access_token')
+
   const { state, actions } = useChatbot(pet)
   const { step, messages, isGenerating, generatedDiary } = state
   const [inputValue, setInputValue] = useState('')
@@ -74,7 +78,7 @@ export default function ChatBot({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col rounded-[20px] overflow-hidden bg-[#FFF8F3]">
       {/* 메시지 목록 */}
       <div className="flex-1 overflow-y-auto space-y-3 p-3">
         {messages.map((msg) => (
@@ -90,8 +94,24 @@ export default function ChatBot({
           </div>
         ))}
 
+        {/* 비로그인 안내 말풍선 */}
+        {!isLoggedIn && (
+          <div className="space-y-2">
+            <div className="max-w-[88%] rounded-2xl bg-white px-4 py-2.5 text-sm leading-6 text-[#3D2B1F] shadow-sm">
+              🔒 로그인 후 이용 가능한 서비스예요.{'\n'}로그인하고 우리 아이의 일기와 장소 추천을 함께 만들어봐요!
+            </div>
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-2 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              로그인 하러 가기
+            </button>
+          </div>
+        )}
+
         {/* 웰컴 버튼: 말풍선 바로 아래 인라인 */}
-        {step === 'welcome' && (
+        {step === 'welcome' && isLoggedIn && (
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               onClick={handleStartDiary}
@@ -141,8 +161,8 @@ export default function ChatBot({
         <div ref={bottomRef} />
       </div>
 
-      {/* 하단 패널 */}
-      <div className="border-t border-[#F5D6C8] bg-white">
+      {/* 하단 패널 — 로그인한 경우에만 표시 */}
+      {isLoggedIn && <div className="border-t border-[#F5D6C8] bg-[#FFF8F3]">
 
         {/* 일기 유형 선택 */}
         {step === 'type_select' && (
@@ -208,7 +228,7 @@ export default function ChatBot({
                 }
               }}
               placeholder="편하게 말씀해주세요..."
-              className="flex-1 rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
+              className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
             />
             <button
               onClick={handleSubmitText}
@@ -219,7 +239,7 @@ export default function ChatBot({
             </button>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   )
 }

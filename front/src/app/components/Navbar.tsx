@@ -1,5 +1,5 @@
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from "motion/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router";
 import {
   Home,
@@ -8,6 +8,8 @@ import {
   X,
   ChevronDown,
   Calendar,
+  NotebookPen,
+  Map,
 } from "lucide-react";
 
 interface SubItem {
@@ -26,19 +28,46 @@ interface NavItem {
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('access_token'));
   const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
+  const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
 
   const { scrollY } = useScroll();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // 로그인 상태를 항상 최신으로 동기화
+  useEffect(() => {
+    const syncAuth = () => setIsLoggedIn(!!localStorage.getItem('access_token'));
+    // 같은 탭에서 발생하는 커스텀 이벤트 (로그인/로그아웃)
+    window.addEventListener('auth-change', syncAuth);
+    // 다른 탭에서 발생하는 storage 이벤트
+    window.addEventListener('storage', syncAuth);
+    return () => {
+      window.removeEventListener('auth-change', syncAuth);
+      window.removeEventListener('storage', syncAuth);
+    };
+  }, []);
+
+  // 라우트 이동마다 토큰 재확인
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem('access_token'));
+  }, [location.pathname]);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     setScrolled(latest > 20);
   });
 
   const navItems: NavItem[] = [
-    { icon: Home, label: "홈", path: "/home" },
+    {
+      icon: Home,
+      label: "홈",
+      path: "/home",
+      subItems: [
+        { label: "강아지 일기장", path: "/home?tab=diary", icon: NotebookPen },
+        { label: "지도", path: "/home?tab=map", icon: Map },
+      ],
+    },
     { icon: Calendar, label: "멍캘린더", path: "/calendar" },
     { icon: User, label: "마이페이지", path: "/mypage" },
   ];
@@ -79,26 +108,76 @@ export function Navbar() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = item.path && location.pathname === item.path;
+            const isHovered = hoveredMenu === item.label;
+
             return (
-              <button
+              <div
                 key={item.label}
-                onClick={() => handleNavClick(item)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  isActive
-                    ? "text-orange-600 bg-orange-50"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
+                className="relative"
+                onMouseEnter={() => item.subItems && setHoveredMenu(item.label)}
+                onMouseLeave={() => setHoveredMenu(null)}
               >
-                <Icon className="w-4 h-4" />
-                <span>{item.label}</span>
-              </button>
+                <button
+                  onClick={() => handleNavClick(item)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    isActive
+                      ? "text-orange-600 bg-orange-50"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                  {item.subItems && (
+                    <motion.div
+                      animate={{ rotate: isHovered ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </motion.div>
+                  )}
+                </button>
+
+                {/* 데스크탑 드롭다운 */}
+                <AnimatePresence>
+                  {item.subItems && isHovered && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute left-0 top-full pt-2 z-50"
+                    >
+                      <div className="min-w-[160px] rounded-2xl border border-gray-100 bg-white py-2 shadow-lg">
+                        {item.subItems.map((sub) => {
+                          const SubIcon = sub.icon;
+                          return (
+                            <button
+                              key={sub.label}
+                              onClick={() => {
+                                navigate(sub.path);
+                                setHoveredMenu(null);
+                              }}
+                              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                            >
+                              <SubIcon className="w-4 h-4" />
+                              {sub.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             );
           })}
         </nav>
         <button
           onClick={() => {
             if (isLoggedIn) {
-              setIsLoggedIn(false);
+              localStorage.removeItem('access_token');
+              window.dispatchEvent(new Event('auth-change'));
+              navigate("/login");
             } else {
               navigate("/login");
             }
@@ -199,7 +278,9 @@ export function Navbar() {
             <button
               onClick={() => {
                 if (isLoggedIn) {
+                  localStorage.removeItem('access_token');
                   setIsLoggedIn(false);
+                  navigate("/login");
                 } else {
                   navigate("/login");
                 }

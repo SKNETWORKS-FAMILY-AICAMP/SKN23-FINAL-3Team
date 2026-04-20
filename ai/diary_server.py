@@ -1,21 +1,50 @@
+# -*- coding: utf-8 -*-
+"""
+ai/diary_server.py
+------------------
+DB/SSH 없이 AI 일기·이미지 생성 엔드포인트만 띄우는 경량 테스트 서버.
+
+실행:
+    # 프로젝트 루트에서
+    uvicorn ai.diary_server:app --port 8001 --reload
+
+    # 또는 ai/ 디렉토리에서
+    uvicorn diary_server:app --port 8001 --reload
+
+※ 포트 정책
+    - 8000: 메인 백엔드 (back/main.py) — DB/SSH 포함
+    - 8001: AI 테스트 서버 (ai/diary_server.py) — DB/SSH 없음
+"""
+
 import json
 import os
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))  # 프로젝트 루트
+# 프로젝트 루트를 path에 추가
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-from contextlib import asynccontextmanager
-from openai import AsyncOpenAI
+# .env 로드 (OPENAI_API_KEY 등)
+from dotenv import load_dotenv
+load_dotenv(os.path.join(_root, ".env"))
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from openai import AsyncOpenAI
 from pydantic import BaseModel
-from dotenv import load_dotenv
 
 from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
 from ai.eval.evaluator import create_diary_session, complete_image_eval, print_eval_summary
 
-load_dotenv()
+app = FastAPI(title="AI Diary Test Server", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _client: AsyncOpenAI | None = None
 
@@ -26,22 +55,6 @@ def get_client() -> AsyncOpenAI:
     return _client
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
-
-
-app = FastAPI(title="멍일기 API", version="0.1.0", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ── 요청/응답 스키마 ──────────────────────────────────────
 class DiaryRequest(BaseModel):
     pet_id: str = "default"
     pet_name: str
@@ -62,25 +75,27 @@ class DiaryResponse(BaseModel):
     summary: str
     image_prompt_base: str
     image_prompt: str
-    session_id: str  # 평가 추적용 — generate-image 호출 시 함께 전달
+    session_id: str
 
 
 class ImageRequest(BaseModel):
     image_prompt: str
-    session_id: str = ""  # DiaryResponse에서 받은 값 전달 (없으면 단독 평가)
+    session_id: str = ""
 
 
 class ImageResponse(BaseModel):
     image_base64: str
 
 
-# ── 일기 생성 ─────────────────────────────────────────────
+@app.get("/health")
+async def health():
+    return {"status": "ok", "server": "ai-diary-test"}
+
+
 @app.post("/api/diary/generate", response_model=DiaryResponse)
 async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     all_answers = req.main_answers + req.additional_answers
-    conversation_summary = "\n".join(
-        f"보호자: {a}" for a in all_answers if a.strip()
-    )
+    conversation_summary = "\n".join(f"보호자: {a}" for a in all_answers if a.strip())
     if not conversation_summary:
         raise HTTPException(status_code=400, detail="답변 내용이 없습니다.")
 
@@ -98,7 +113,10 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     response = await get_client().chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
+        temperature=0.4,   # 낮출수록 일관성↑ 창의성↓ (0.7→0.4)
+        top_p=0.9,         # P값: 확률 상위 90% 토큰만 선택
+        seed=42,           # 시드값: 동일 입력 시 재현 가능한 결과
+        frequency_penalty=0.1,  # 반복 표현 억제
     )
 
     raw = response.choices[0].message.content or ""
@@ -119,7 +137,6 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
         emotion=req.emotion_emoji,
     )
 
-    # ── 평가 세션 생성 (두 프롬프트 저장) ───────────────────────────
     session_id = create_diary_session(
         diary_llm_prompt=prompt,
         image_prompt_base=data.get("image_prompt_base", ""),
@@ -145,7 +162,6 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     )
 
 
-# ── 이미지 생성 ───────────────────────────────────────────
 @app.post("/api/diary/generate-image", response_model=ImageResponse)
 async def generate_image(req: ImageRequest) -> ImageResponse:
     if not req.image_prompt.strip():
@@ -155,14 +171,13 @@ async def generate_image(req: ImageRequest) -> ImageResponse:
         model="gpt-image-1",
         prompt=req.image_prompt,
         size="1024x1024",
-        quality="low",
+        quality="medium",  # 옵션값: low→medium (얼굴·디테일 품질 향상)
         n=1,
     )
     b64 = response.data[0].b64_json
     if not b64:
         raise HTTPException(status_code=500, detail="이미지 생성 실패")
 
-    # ── 평가 실행 + 저장 (비동기 블로킹 없이 별도 처리) ──────────────
     import asyncio
     loop = asyncio.get_event_loop()
     eval_record = await loop.run_in_executor(
@@ -176,8 +191,3 @@ async def generate_image(req: ImageRequest) -> ImageResponse:
     print_eval_summary(eval_record)
 
     return ImageResponse(image_base64=b64)
-
-
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}

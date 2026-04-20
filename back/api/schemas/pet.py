@@ -31,9 +31,9 @@ class PetCreate(BaseModel):
     breed_id: int = Field(..., gt=0, description="견종 ID (breeds 테이블 참조)")
     name: str = Field(..., min_length=1, max_length=50, description="반려동물 이름")
     birth_date: date | None = Field(None, description="생년월일 (YYYY-MM-DD)")
-    gender: PetGenderEnum = Field(..., description="성별")
+    gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부 (미입력 가능)")
-    type_id: int = Field(..., gt=0, description="대표 성격 키워드 ID (keywords 테이블 참조)")
+    type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID (keywords 테이블 참조)")
     selected_tags: list[Any] | None = Field(None, description="선택한 성격 태그 목록 (JSON)")
 
 
@@ -63,9 +63,9 @@ class PetResponse(BaseModel):
     breed_id: int = Field(..., description="견종 ID")
     name: str = Field(..., description="반려동물 이름")
     birth_date: date | None = Field(None, description="생년월일")
-    gender: PetGenderEnum = Field(..., description="성별")
+    gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부")
-    type_id: int = Field(..., description="대표 성격 키워드 ID")
+    type_id: int | None = Field(None, description="대표 성격 키워드 ID")
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
     created_at: datetime = Field(..., description="등록 일시")
     updated_at: datetime = Field(..., description="수정 일시")

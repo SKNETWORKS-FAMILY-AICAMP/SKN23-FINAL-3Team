@@ -66,6 +66,25 @@ async def _verify_keyword(keyword_id: int, db: AsyncSession) -> None:
 
 # ── 공개 서비스 함수 ─────────────────────────────────────────────────────────
 
+async def _get_default_keyword_id(db: AsyncSession) -> int:
+    """type_id 미전송 시 PET 카테고리 첫 번째 키워드 ID를 반환합니다."""
+    from models.keyword import Keyword
+    result = await db.execute(
+        select(Keyword).where(Keyword.category == "PET").limit(1)
+    )
+    keyword = result.scalar_one_or_none()
+    if keyword is None:
+        # PET 카테고리 없으면 전체에서 첫 번째
+        result = await db.execute(select(Keyword).limit(1))
+        keyword = result.scalar_one_or_none()
+    if keyword is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="등록된 키워드가 없습니다. 관리자에게 문의하세요.",
+        )
+    return keyword.id
+
+
 async def create_pet(
     data: PetCreate,
     db: AsyncSession,
@@ -75,6 +94,7 @@ async def create_pet(
         반려동물을 등록합니다.
 
         user_id는 current_user_id로 자동 설정됩니다 (요청 바디에서 받지 않음).
+        type_id 미전송 시 PET 카테고리 첫 번째 키워드를 자동 사용합니다.
 
         Args:
                 data           : PetCreate 요청 데이터
@@ -87,9 +107,22 @@ async def create_pet(
         Raises:
                 HTTPException 404: breed_id 또는 type_id 참조 불일치
     """
+    # gender 필수 검증
+    if data.gender is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="반려견 성별(gender)은 필수 항목입니다.",
+        )
+
     # FK 무결성 검증
     await _verify_breed(data.breed_id, db)
-    await _verify_keyword(data.type_id, db)
+
+    # type_id: 미전송 시 첫 번째 PET 키워드 자동 사용
+    type_id = data.type_id
+    if type_id is None:
+        type_id = await _get_default_keyword_id(db)
+    else:
+        await _verify_keyword(type_id, db)
 
     pet = Pet(
         user_id=current_user_id,
@@ -98,7 +131,7 @@ async def create_pet(
         birth_date=data.birth_date,
         gender=data.gender,
         is_neutered=data.is_neutered,
-        type_id=data.type_id,
+        type_id=type_id,
         selected_tags=data.selected_tags,
     )
     db.add(pet)

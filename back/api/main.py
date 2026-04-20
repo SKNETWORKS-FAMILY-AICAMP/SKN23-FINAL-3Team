@@ -22,16 +22,30 @@ FastAPI 애플리케이션 진입점.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from openai import AsyncOpenAI
+from pydantic import BaseModel
 
 from core.config import settings
 from core.database import close_db, init_db, init_engine
+
+# AI 일기/이미지 생성 모듈 (프로젝트 루트의 ai/ 패키지)
+try:
+    from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
+    from ai.eval.evaluator import create_diary_session, complete_image_eval, print_eval_summary
+    _AI_AVAILABLE = True
+except ImportError:
+    _AI_AVAILABLE = False
+    logger_tmp = logging.getLogger(__name__)
+    logger_tmp.warning("[AI] ai 패키지 임포트 실패 — /api/diary/* 엔드포인트 비활성화")
 
 logger = logging.getLogger(__name__)
 
@@ -257,3 +271,156 @@ async def health_check() -> dict:
         "server": settings.SERVER,
         "db": db_status,
     }
+
+
+# =============================================================================
+# AI 일기 / 이미지 생성 엔드포인트 (구 루트 main.py)
+# =============================================================================
+
+_openai_client: AsyncOpenAI | None = None
+
+
+def _get_openai_client() -> AsyncOpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return _openai_client
+
+
+class DiaryRequest(BaseModel):
+    pet_id: str = "default"
+    pet_name: str
+    breed: str = "강아지"
+    breed_en: str | None = None
+    birth_date: str | None = None
+    personalities: list[str] = []
+    owner_name: str = ""
+    main_answers: list[str]
+    additional_answers: list[str] = []
+    diary_type: str
+    emotion_emoji: str
+
+
+class DiaryResponse(BaseModel):
+    title: str
+    content: str
+    summary: str
+    image_prompt_base: str
+    image_prompt: str
+    session_id: str
+
+
+class ImageRequest(BaseModel):
+    image_prompt: str
+    session_id: str = ""
+
+
+class ImageResponse(BaseModel):
+    image_base64: str
+
+
+@app.post("/api/diary/generate", response_model=DiaryResponse, tags=["AI Diary"])
+async def generate_diary(req: DiaryRequest) -> DiaryResponse:
+    if not _AI_AVAILABLE:
+        raise HTTPException(status_code=503, detail="AI 모듈을 사용할 수 없습니다.")
+
+    all_answers = req.main_answers + req.additional_answers
+    conversation_summary = "\n".join(f"보호자: {a}" for a in all_answers if a.strip())
+    if not conversation_summary:
+        raise HTTPException(status_code=400, detail="답변 내용이 없습니다.")
+
+    prompt = build_diary_prompt(
+        pet_name=req.pet_name,
+        breed=req.breed,
+        birth_date=req.birth_date,
+        personalities=req.personalities,
+        owner_name=req.owner_name,
+        diary_type=req.diary_type,
+        emotion=req.emotion_emoji,
+        conversation_summary=conversation_summary,
+    )
+
+    response = await _get_openai_client().chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.4,   # 낮출수록 일관성↑ 창의성↓
+        top_p=0.9,         # P값: 확률 상위 90% 토큰만 선택
+        seed=42,           # 시드값: 동일 입력 시 재현 가능
+        frequency_penalty=0.1,
+    )
+
+    raw = response.choices[0].message.content or ""
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail=f"LLM 응답 파싱 실패: {raw[:200]}")
+
+    image_prompt = build_final_image_prompt(
+        image_prompt_base=data.get("image_prompt_base", ""),
+        breed=req.breed,
+        breed_en=req.breed_en,
+        birth_date=req.birth_date,
+        personalities=req.personalities,
+        all_answers=all_answers,
+        emotion=req.emotion_emoji,
+    )
+
+    session_id = create_diary_session(
+        diary_llm_prompt=prompt,
+        image_prompt_base=data.get("image_prompt_base", ""),
+        image_prompt_final=image_prompt,
+        diary_title=data.get("title", ""),
+        diary_content=data.get("content", ""),
+        diary_summary=data.get("summary", ""),
+        pet_name=req.pet_name,
+        breed=req.breed,
+        breed_en=req.breed_en or "",
+        emotion=req.emotion_emoji,
+        diary_type=req.diary_type,
+        personalities=req.personalities,
+    )
+
+    return DiaryResponse(
+        title=data.get("title", "오늘의 일기"),
+        content=data.get("content", ""),
+        summary=data.get("summary", ""),
+        image_prompt_base=data.get("image_prompt_base", ""),
+        image_prompt=image_prompt,
+        session_id=session_id,
+    )
+
+
+@app.post("/api/diary/generate-image", response_model=ImageResponse, tags=["AI Diary"])
+async def generate_image(req: ImageRequest) -> ImageResponse:
+    if not _AI_AVAILABLE:
+        raise HTTPException(status_code=503, detail="AI 모듈을 사용할 수 없습니다.")
+
+    if not req.image_prompt.strip():
+        raise HTTPException(status_code=400, detail="image_prompt가 비어 있습니다.")
+
+    response = await _get_openai_client().images.generate(
+        model="gpt-image-1",
+        prompt=req.image_prompt,
+        size="1024x1024",
+        quality="medium",  # 옵션값: low→medium
+        n=1,
+    )
+    b64 = response.data[0].b64_json
+    if not b64:
+        raise HTTPException(status_code=500, detail="이미지 생성 실패")
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    eval_record = await loop.run_in_executor(
+        None,
+        lambda: complete_image_eval(
+            session_id=req.session_id,
+            image_b64=b64,
+            image_prompt_final=req.image_prompt,
+        ),
+    )
+    print_eval_summary(eval_record)
+
+    return ImageResponse(image_base64=b64)

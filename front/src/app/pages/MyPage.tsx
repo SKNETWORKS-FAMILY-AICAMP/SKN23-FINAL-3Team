@@ -1,169 +1,49 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
-  User,
+  Settings,
   Plus,
   HeartPulse,
-  MapPin,
-  Sparkles,
-  BookOpenText,
   Pencil,
   Eye,
-  ChevronRight,
   Dog,
   CalendarDays,
   BadgeCheck,
+  Lock,
+  LogIn,
 } from "lucide-react";
+import { getMe, type UserProfile } from "../services/userService";
+import { getPets, type Pet } from "../services/petService";
+import { getAllBreeds, type Breed } from "../services/breedService";
+import { useNavigate } from "react-router";
 
-type PetProfile = {
+// ── 마이페이지 전용 타입 ──────────────────────────────────────────────────────
+
+type PetCard = {
   id: number;
   name: string;
-  breed: string;
-  age: string;
-  weight: string;
-  gender?: "male" | "female";
-  neutered?: "yes" | "no";
-  personality?: string[];
-  birthDate?: string;
-  image?: string;
-  nickname?: string;
+  breedName: string;
+  ageLabel: string;
+  gender: "MALE" | "FEMALE" | null;
+  isNeutered: boolean | null;
+  selectedTags: string[];
+  birthDate: string | null;
 };
 
-const initialPets: PetProfile[] = [
-  {
-    id: 1,
-    name: "콩이",
-    breed: "말티즈",
-    age: "5세",
-    weight: "8.2kg",
-    gender: "female",
-    neutered: "yes",
-    birthDate: "2020-05-12",
-    nickname: "우리집 공주",
-    personality: ["활발함", "산책 좋아함", "야외 선호"],
-  },
-  {
-    id: 2,
-    name: "보리",
-    breed: "푸들",
-    age: "3세",
-    weight: "4.1kg",
-    gender: "male",
-    neutered: "no",
-    birthDate: "2022-03-17",
-    nickname: "말썽꾸러기",
-    personality: ["호기심 많음", "사람 좋아함", "놀이 좋아함"],
-  },
-];
+// ── 헬퍼 ─────────────────────────────────────────────────────────────────────
 
-function getPersonalitySummary(personality?: string[]): string {
-  if (!personality || personality.length === 0) {
-    return "아직 성격 정보가 등록되지 않았어요. 성격 정보를 추가하면 더 정확한 추천을 받을 수 있어요.";
-  }
-
-  const traits = personality.join(", ");
-  return `${traits} 등의 성향을 가지고 있어서, 그에 맞는 여행지와 활동을 추천해드릴게요.`;
+function toAgeLabel(age: number | null | undefined): string {
+  if (age == null) return "나이 미입력";
+  if (age === 0) return "1살 미만";
+  return `${age}세`;
 }
 
-function getPersonalityBadges(personality?: string[]): string[] {
-  if (!personality || personality.length === 0) {
-    return ["성격 정보 없음"];
-  }
 
-  const badges: string[] = [];
 
-  const activeTraits = ["활발함", "에너지 넘침", "놀이 좋아함"];
-  const outdoorTraits = ["산책 좋아함", "야외 선호", "자연 좋아함"];
-  const socialTraits = ["사람 좋아함", "친화적", "사교적"];
-  const curiousTraits = ["호기심 많음", "탐험 좋아함"];
+// ── 상세보기 모달 ─────────────────────────────────────────────────────────────
 
-  if (personality.some((p) => activeTraits.includes(p))) {
-    badges.push("활동적");
-  }
-  if (personality.some((p) => outdoorTraits.includes(p))) {
-    badges.push("야외형");
-  }
-  if (personality.some((p) => socialTraits.includes(p))) {
-    badges.push("친화형");
-  }
-  if (personality.some((p) => curiousTraits.includes(p))) {
-    badges.push("탐험형");
-  }
-
-  return badges.length > 0 ? badges : ["일반형"];
-}
-
-function PetFormModal({
-  isOpen,
-  onClose,
-  onSubmit,
-  initialPet,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (pet: PetProfile) => void;
-  initialPet?: PetProfile | null;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 p-6">
-      <div className="mx-auto mt-10 max-w-xl rounded-[28px] bg-white p-8 shadow-2xl">
-        <h2 className="text-2xl font-bold text-slate-900">
-          {initialPet ? "반려동물 수정" : "반려동물 추가"}
-        </h2>
-        <p className="mt-2 text-sm text-slate-500">
-          기존 모달 컴포넌트로 교체해서 사용하면 돼.
-        </p>
-
-        <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            className="rounded-2xl border border-slate-200 px-5 py-3"
-            onClick={onClose}
-          >
-            닫기
-          </button>
-
-          <button
-            type="button"
-            className="rounded-2xl bg-orange-500 px-5 py-3 text-white"
-            onClick={() => {
-              onSubmit(
-                initialPet ?? {
-                  id: Date.now(),
-                  name: "새 반려견",
-                  breed: "견종 미입력",
-                  age: "추가 정보 필요",
-                  weight: "미입력",
-                  gender: undefined,
-                  neutered: undefined,
-                  birthDate: "",
-                  image: undefined,
-                  nickname: "",
-                  personality: [],
-                }
-              );
-              onClose();
-            }}
-          >
-            저장
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PetDetailModal({
-  pet,
-  onClose,
-}: {
-  pet: PetProfile | null;
-  onClose: () => void;
-}) {
+function PetDetailModal({ pet, onClose }: { pet: PetCard | null; onClose: () => void }) {
   if (!pet) return null;
-
   return (
     <div className="fixed inset-0 z-50 bg-black/40 p-6" onClick={onClose}>
       <div
@@ -172,63 +52,42 @@ function PetDetailModal({
       >
         <div className="flex items-start gap-5">
           <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
-            {pet.image ? (
-              <img
-                src={pet.image}
-                alt={pet.name}
-                className="h-full w-full object-cover"
-              />
+            {localStorage.getItem(`pet_photo_${pet.id}`) ? (
+              <img src={localStorage.getItem(`pet_photo_${pet.id}`)!} alt={pet.name} className="h-full w-full object-cover" />
             ) : (
               <Dog className="h-10 w-10 text-orange-500" />
             )}
           </div>
-
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-3xl font-bold text-slate-900">{pet.name}</h2>
               <span className="rounded-full bg-orange-50 px-3 py-1 text-sm font-semibold text-orange-600">
-                {pet.gender === "male"
-                  ? "수컷"
-                  : pet.gender === "female"
-                  ? "암컷"
-                  : "성별 미입력"}
+                {pet.gender === "MALE" ? "수컷" : pet.gender === "FEMALE" ? "암컷" : "성별 미입력"}
               </span>
             </div>
-
-            <p className="mt-2 text-slate-500">
-              {pet.nickname || "닉네임 미입력"} · {pet.breed}
-            </p>
+            <p className="mt-2 text-slate-500">{pet.breedName}</p>
           </div>
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <div className="rounded-3xl bg-slate-50 p-5">
             <p className="text-sm text-slate-500">나이</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{pet.age}</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{pet.ageLabel}</p>
           </div>
-
           <div className="rounded-3xl bg-slate-50 p-5">
-            <p className="text-sm text-slate-500">몸무게</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">
-              {pet.weight}
-            </p>
+            <p className="text-sm text-slate-500">생년월일</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{pet.birthDate ?? "미입력"}</p>
           </div>
-
           <div className="rounded-3xl bg-slate-50 p-5">
             <p className="text-sm text-slate-500">중성화 여부</p>
             <p className="mt-1 text-lg font-semibold text-slate-900">
-              {pet.neutered === "yes"
-                ? "했어요"
-                : pet.neutered === "no"
-                ? "안 했어요"
-                : "미입력"}
+              {pet.isNeutered === true ? "했어요" : pet.isNeutered === false ? "안 했어요" : "미입력"}
             </p>
           </div>
-
           <div className="rounded-3xl bg-slate-50 p-5">
             <p className="text-sm text-slate-500">성격</p>
             <p className="mt-1 text-lg font-semibold text-slate-900">
-              {pet.personality?.length ? pet.personality.join(" / ") : "미입력"}
+              {pet.selectedTags.length ? pet.selectedTags.join(" / ") : "미입력"}
             </p>
           </div>
         </div>
@@ -247,124 +106,263 @@ function PetDetailModal({
   );
 }
 
+// ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
+
 export default function MyPage() {
-  const [pets, setPets] = useState<PetProfile[]>(initialPets);
-  const [selectedPetId, setSelectedPetId] = useState<number>(
-    initialPets[0]?.id ?? 0
-  );
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editPet, setEditPet] = useState<PetProfile | null>(null);
-  const [detailPet, setDetailPet] = useState<PetProfile | null>(null);
+  const navigate = useNavigate();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [pets, setPets] = useState<PetCard[]>([]);
+  const [rawPets, setRawPets] = useState<Pet[]>([]);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
+  const [detailPet, setDetailPet] = useState<PetCard | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [me, breeds] = await Promise.all([getMe(), getAllBreeds()]);
+        setUser(me);
+        const savedPhoto = localStorage.getItem(`profile_photo_${me.id}`);
+        if (savedPhoto) setProfilePhoto(savedPhoto);
+
+        const breedMap = new Map<number, string>(breeds.map((b: Breed) => [b.id, b.name_ko]));
+
+        const fetchedPets: Pet[] = await getPets(me.id);
+        setRawPets(fetchedPets);
+        const cards: PetCard[] = fetchedPets.map((p) => ({
+          id: p.id,
+          name: p.name,
+          breedName: breedMap.get(p.breed_id) ?? `견종 ID ${p.breed_id}`,
+          ageLabel: toAgeLabel(p.age),
+          gender: p.gender ?? null,
+          isNeutered: p.is_neutered ?? null,
+          selectedTags: Array.isArray(p.selected_tags) ? p.selected_tags : [],
+          birthDate: p.birth_date ?? null,
+        }));
+        setPets(cards);
+        if (cards.length) setSelectedPetId(cards[0].id);
+      } catch (err) {
+        console.error("마이페이지 로드 실패", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const selectedPet = useMemo(
-    () => pets.find((pet) => pet.id === selectedPetId) ?? pets[0] ?? null,
+    () => pets.find((p) => p.id === selectedPetId) ?? pets[0] ?? null,
     [pets, selectedPetId]
   );
 
-  const handleAddPet = (newPet: PetProfile) => {
-    setPets((prev) => [...prev, newPet]);
-    setSelectedPetId(newPet.id);
-  };
+  // ── 비로그인 상태 ────────────────────────────────────────────────────────────
+  if (!localStorage.getItem("access_token")) {
+    return (
+      <div className="min-h-screen bg-[#f7f5f1]">
+        {/* 흐린 배경 레이아웃 (미리보기) */}
+        <div className="pointer-events-none select-none opacity-30 blur-sm">
+          <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
+            <div className="overflow-hidden rounded-[36px] bg-gradient-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100">
+              <div className="h-8 w-48 rounded-full bg-orange-100" />
+              <div className="mt-4 h-10 w-80 rounded-xl bg-slate-200" />
+              <div className="mt-3 h-5 w-64 rounded-lg bg-slate-100" />
+            </div>
+            <div className="mt-8 rounded-[32px] border border-orange-100 bg-white p-8 shadow-lg">
+              <div className="h-8 w-40 rounded-xl bg-slate-200" />
+              <div className="mt-6 flex gap-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-48 w-72 rounded-[28px] bg-slate-100" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
 
-  const handleUpdatePet = (updatedPet: PetProfile) => {
-    setPets((prev) =>
-      prev.map((pet) => (pet.id === updatedPet.id ? updatedPet : pet))
+        {/* 로그인 요청 오버레이 */}
+        <div className="absolute inset-0 flex items-center justify-center px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.25 }}
+            className="w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl ring-1 ring-orange-100"
+          >
+            {/* 상단 오렌지 배너 */}
+            <div className="bg-gradient-to-br from-orange-400 to-orange-500 px-8 py-10 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                <Lock className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="mt-4 text-2xl font-bold text-white">로그인이 필요해요</h2>
+              <p className="mt-2 text-sm text-orange-100">
+                마이페이지는 로그인 후 이용할 수 있어요
+              </p>
+            </div>
+
+            {/* 안내 메시지 */}
+            <div className="px-8 py-6">
+              <ul className="space-y-3 text-sm text-slate-600">
+                {[
+                  "🐾 반려견 프로필 등록 및 관리",
+                  "🗺️ AI 맞춤 여행지 추천",
+                  "📔 AI 그림일기 생성",
+                  "📅 멍캘린더 일정 관리",
+                ].map((text) => (
+                  <li key={text} className="flex items-center gap-2">
+                    <span>{text}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 py-4 text-base font-bold text-white transition hover:bg-orange-600 active:scale-95"
+              >
+                <LogIn className="h-5 w-5" />
+                로그인 하러 가기
+              </button>
+
+              <p className="mt-4 text-center text-xs text-slate-400">
+                소셜 로그인(카카오 · 구글 · 네이버)으로 간편 가입
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </div>
     );
-    setSelectedPetId(updatedPet.id);
-  };
+  }
 
-  const profileCompletion = useMemo(() => {
-    if (!selectedPet) return 0;
-
-    const fields = [
-      selectedPet.name,
-      selectedPet.nickname,
-      selectedPet.breed !== "견종 미입력" ? selectedPet.breed : "",
-      selectedPet.birthDate,
-      selectedPet.gender,
-      selectedPet.neutered,
-      selectedPet.image,
-      selectedPet.personality?.length ? "personality" : "",
-    ];
-
-    const filled = fields.filter(Boolean).length;
-    return Math.round((filled / fields.length) * 100);
-  }, [selectedPet]);
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f5f1]">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-orange-400 border-t-transparent" />
+          <p className="mt-4 text-slate-500">불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f5f1] px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl">
+        {/* 헤더 */}
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           className="overflow-hidden rounded-[36px] bg-gradient-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100 lg:p-10"
         >
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-600">
-                <User className="h-4 w-4" />
-                마이페이지
+            {/* 왼쪽: 프로필 사진 + 인사말 */}
+            <div className="flex items-center gap-6">
+              <div className="relative shrink-0">
+                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
+                  {(() => {
+                    const petPhoto = selectedPetId ? localStorage.getItem(`pet_photo_${selectedPetId}`) : null;
+                    const photo = petPhoto ?? profilePhoto;
+                    return photo ? (
+                      <img src={photo} alt="프로필" className="h-full w-full object-cover" />
+                    ) : (
+                      <Dog className="h-12 w-12 text-orange-400" />
+                    );
+                  })()}
+                </div>
+                <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-orange-500 text-sm shadow">
+                  🐾
+                </span>
               </div>
-
-              <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-900">
-                반려견 프로필을 기반으로
-                <br />
-                여행 추천과 기록을 이어보세요
-              </h1>
-
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-500">
-                세부 정보를 입력하면 AI 맞춤 여행 추천, 지도 탐색, AI 그림일기의
-                성능이 더 좋아져요!
-              </p>
+              <div>
+                <p className="text-sm font-medium text-orange-500">마이페이지</p>
+                <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+                  {user?.nickname ?? "보호자"}님 안녕하세요! 👋
+                </h1>
+                <p className="mt-2 text-base text-slate-500">
+                  오늘은 반려견과 어떤 기록을 이어가볼까요?
+                </p>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 lg:w-[420px]">
-              <SummaryMiniCard label="내 반려동물" value={`${pets.length}마리`} />
-              <SummaryMiniCard
-                label="프로필 완성도"
-                value={`${profileCompletion}%`}
-              />
-              <SummaryMiniCard
-                label="현재 선택"
-                value={selectedPet ? selectedPet.name : "없음"}
-              />
+            {/* 오른쪽: 요약 + 수정 버튼 */}
+            <div className="flex flex-col items-start gap-3 lg:items-end">
+              <button
+                type="button"
+                onClick={() =>
+                  navigate("/step", {
+                    state: {
+                      editMode: true,
+                      userId: user?.id,
+                      petId: selectedPet?.id,
+                      userData: {
+                        nickname: user?.nickname ?? "",
+                        gender: user?.gender ?? null,
+                        birth_date: user?.birth_date ?? "",
+                      },
+                      petData: {
+                        name: selectedPet?.name ?? "",
+                        breed_id: rawPets.find((p) => p.id === selectedPet?.id)?.breed_id ?? null,
+                        breed_name: selectedPet?.breedName ?? "",
+                        birth_date: selectedPet?.birthDate ?? "",
+                        gender: selectedPet?.gender ?? null,
+                        is_neutered: selectedPet?.isNeutered ?? null,
+                        selected_tags: selectedPet?.selectedTags ?? [],
+                      },
+                    },
+                  })
+                }
+                className="inline-flex items-center gap-2 rounded-2xl border border-orange-200 bg-white px-5 py-2.5 text-sm font-semibold text-orange-600 shadow-sm transition hover:bg-orange-50"
+              >
+                <Settings className="h-4 w-4" />
+                회원정보 수정
+              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <SummaryMiniCard label="내 반려동물" value={`${pets.length}마리`} />
+                <SummaryMiniCard label="현재 선택" value={selectedPet?.name ?? "없음"} />
+              </div>
             </div>
           </div>
         </motion.div>
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1.5fr_1fr]">
-          <div className="space-y-8">
-            <motion.section
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="rounded-[32px] border border-orange-100 bg-white p-8 shadow-lg"
-            >
-              <div className="mb-6 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    반려동물 프로필
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    마이페이지 핵심 정보와 등록된 반려동물 목록
-                  </p>
-                </div>
+        <div className="mt-8 space-y-8">
+          {/* 반려동물 프로필 카드 목록 */}
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-[32px] border border-orange-100 bg-white p-8 shadow-lg"
+          >
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">반려동물 프로필</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  마이페이지 핵심 정보와 등록된 반려동물 목록
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/step", { state: { petOnlyMode: true } })}
+                className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
+              >
+                <Plus className="h-4 w-4" />
+                반려동물 추가
+              </button>
+            </div>
 
+            {pets.length === 0 ? (
+              <div className="rounded-3xl bg-slate-50 p-8 text-center text-slate-500">
+                아직 등록된 반려동물이 없어요.{" "}
                 <button
                   type="button"
-                  onClick={() => setIsAddOpen(true)}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
+                  onClick={() => navigate("/step", { state: { petOnlyMode: true } })}
+                  className="text-orange-500 underline"
                 >
-                  <Plus className="h-4 w-4" />
-                  반려동물 추가
+                  지금 추가하기
                 </button>
               </div>
-
+            ) : (
               <div className="-mx-1 overflow-x-auto pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex w-max gap-5 px-1">
                   {pets.map((pet) => {
                     const selected = pet.id === selectedPetId;
-
                     return (
                       <button
                         key={pet.id}
@@ -378,60 +376,32 @@ export default function MyPage() {
                       >
                         <div className="flex items-start gap-4">
                           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
-                            {pet.image ? (
-                              <img
-                                src={pet.image}
-                                alt={pet.name}
-                                className="h-full w-full object-cover"
-                              />
+                            {localStorage.getItem(`pet_photo_${pet.id}`) ? (
+                              <img src={localStorage.getItem(`pet_photo_${pet.id}`)!} alt={pet.name} className="h-full w-full object-cover" />
                             ) : (
                               <Dog className="h-8 w-8 text-orange-500" />
                             )}
                           </div>
-
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <h3 className="truncate text-xl font-bold text-slate-900">
-                                {pet.name}
-                              </h3>
+                              <h3 className="truncate text-xl font-bold text-slate-900">{pet.name}</h3>
                               {selected && (
                                 <span className="rounded-full bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white">
                                   선택됨
                                 </span>
                               )}
                             </div>
-
-                            <p className="mt-1 truncate text-sm text-slate-500">
-                              {pet.nickname || "닉네임 미입력"}
-                            </p>
-
+                            <p className="mt-1 truncate text-sm text-slate-500">{pet.breedName}</p>
                             <div className="mt-4 flex flex-wrap gap-2">
                               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                                {pet.breed}
+                                {pet.gender === "MALE" ? "수컷" : pet.gender === "FEMALE" ? "암컷" : "성별 미입력"}
                               </span>
-
                               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                                {pet.gender === "male"
-                                  ? "수컷"
-                                  : pet.gender === "female"
-                                  ? "암컷"
-                                  : "성별 미입력"}
+                                {pet.isNeutered === true ? "중성화 O" : pet.isNeutered === false ? "중성화 X" : "중성화 미입력"}
                               </span>
-
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                                {pet.neutered === "yes"
-                                  ? "중성화 O"
-                                  : pet.neutered === "no"
-                                  ? "중성화 X"
-                                  : "중성화 미입력"}
-                              </span>
-
-                              {pet.personality?.map((trait) => (
-                                <span
-                                  key={trait}
-                                  className="rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600"
-                                >
-                                  {trait}
+                              {pet.selectedTags.slice(0, 3).map((tag) => (
+                                <span key={tag} className="rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600">
+                                  {tag}
                                 </span>
                               ))}
                             </div>
@@ -443,20 +413,37 @@ export default function MyPage() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditPet(pet);
+                              const rawPet = rawPets.find((p) => p.id === pet.id);
+                              navigate("/step", {
+                                state: {
+                                  editMode: true,
+                                  userId: user?.id,
+                                  petId: pet.id,
+                                  userData: {
+                                    nickname: user?.nickname ?? "",
+                                    gender: user?.gender ?? null,
+                                    birth_date: user?.birth_date ?? "",
+                                  },
+                                  petData: {
+                                    name: pet.name,
+                                    breed_id: rawPet?.breed_id ?? null,
+                                    breed_name: pet.breedName,
+                                    birth_date: pet.birthDate ?? "",
+                                    gender: pet.gender,
+                                    is_neutered: pet.isNeutered,
+                                    selected_tags: pet.selectedTags,
+                                  },
+                                },
+                              });
                             }}
                             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
                           >
                             <Pencil className="h-4 w-4" />
                             수정
                           </button>
-
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDetailPet(pet);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); setDetailPet(pet); }}
                             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
                           >
                             <Eye className="h-4 w-4" />
@@ -468,9 +455,11 @@ export default function MyPage() {
                   })}
                 </div>
               </div>
-            </motion.section>
+            )}
+          </motion.section>
 
-            <motion.section
+          {/* 선택된 반려견 요약 */}
+          <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -481,15 +470,11 @@ export default function MyPage() {
                 <HeartPulse className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">
-                  선택된 반려견 요약
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  추천과 기록의 기준이 되는 프로필 정보
-                </p>
+                <h2 className="text-2xl font-bold text-slate-900">선택된 반려견 요약</h2>
+                <p className="mt-1 text-sm text-slate-500">추천과 기록의 기준이 되는 프로필 정보</p>
               </div>
             </div>
-          
+
             {selectedPet ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -498,92 +483,56 @@ export default function MyPage() {
                       <Dog className="h-5 w-5" />
                     </div>
                     <p className="mt-4 text-sm text-slate-500">견종</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-900">
-                      {selectedPet.breed}
-                    </p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{selectedPet.breedName}</p>
                   </div>
-          
+
                   <div className="rounded-[24px] bg-[#F6F7FB] p-5">
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
                       <CalendarDays className="h-5 w-5" />
                     </div>
                     <p className="mt-4 text-sm text-slate-500">나이</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-900">
-                      {selectedPet.age}
-                    </p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{selectedPet.ageLabel}</p>
                   </div>
-          
+
                   <div className="rounded-[24px] bg-[#F6F7FB] p-5">
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
                       <BadgeCheck className="h-5 w-5" />
                     </div>
                     <p className="mt-4 text-sm text-slate-500">성별</p>
                     <p className="mt-1 text-2xl font-bold text-slate-900">
-                      {selectedPet.gender === "male"
-                        ? "수컷"
-                        : selectedPet.gender === "female"
-                        ? "암컷"
-                        : "미입력"}
+                      {selectedPet.gender === "MALE" ? "수컷" : selectedPet.gender === "FEMALE" ? "암컷" : "미입력"}
                     </p>
                   </div>
-          
+
                   <div className="rounded-[24px] bg-[#F6F7FB] p-5">
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
                       <HeartPulse className="h-5 w-5" />
                     </div>
                     <p className="mt-4 text-sm text-slate-500">중성화 여부</p>
                     <p className="mt-1 text-2xl font-bold text-slate-900">
-                      {selectedPet.neutered === "yes"
-                        ? "했어요"
-                        : selectedPet.neutered === "no"
-                        ? "안 했어요"
-                        : "미입력"}
+                      {selectedPet.isNeutered === true ? "했어요" : selectedPet.isNeutered === false ? "안 했어요" : "미입력"}
                     </p>
                   </div>
                 </div>
-          
-                <div className="rounded-[28px] bg-[#FCF6EA] p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-semibold text-orange-500">성향 분석</p>
-                      <h3 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                        {selectedPet.name}는 이런 성격이에요
-                      </h3>
-                      <p className="mt-4 text-base leading-7 text-slate-600">
-                        {getPersonalitySummary(selectedPet.personality)}
-                      </p>
+
+                {selectedPet.selectedTags.length > 0 && (
+                  <div className="rounded-[28px] bg-[#FCF6EA] p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm font-semibold text-orange-500">성격 태그</p>
+                      <div className="rounded-[14px] border border-slate-200 bg-white px-4 py-2 text-center shadow-sm">
+                        <p className="text-xs text-slate-400">등록된 성격</p>
+                        <p className="text-2xl font-bold text-orange-500">{selectedPet.selectedTags.length}</p>
+                      </div>
                     </div>
-          
-                    <div className="min-w-[92px] rounded-[20px] border border-slate-200 bg-white px-5 py-4 text-center shadow-sm">
-                      <p className="text-xs text-slate-400">등록된 성격</p>
-                      <p className="mt-1 text-4xl font-bold text-orange-500">
-                        {selectedPet.personality?.length ?? 0}
-                      </p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedPet.selectedTags.map((tag) => (
+                        <span key={tag} className="rounded-full bg-[#F8E7CC] px-4 py-2 text-sm font-medium text-orange-600">
+                          #{tag}
+                        </span>
+                      ))}
                     </div>
                   </div>
-          
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {getPersonalityBadges(selectedPet.personality).map((badge) => (
-                      <span
-                        key={badge}
-                        className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-orange-600"
-                      >
-                        {badge}
-                      </span>
-                    ))}
-                  </div>
-          
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {(selectedPet.personality ?? []).map((trait) => (
-                      <span
-                        key={trait}
-                        className="rounded-full bg-[#F8E7CC] px-4 py-2 text-sm font-medium text-orange-600"
-                      >
-                        #{trait}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                )}
               </div>
             ) : (
               <div className="rounded-3xl bg-slate-50 p-8 text-center text-slate-500">
@@ -591,90 +540,8 @@ export default function MyPage() {
               </div>
             )}
           </motion.section>
-          </div>
-
-          <div className="space-y-8">
-            <motion.section
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="rounded-[32px] border border-orange-100 bg-white p-8 shadow-lg"
-            >
-              <h2 className="text-2xl font-bold text-slate-900">빠른 실행</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                선택된 반려견 기준으로 바로 이동할 수 있는 기능
-              </p>
-
-              <div className="mt-6 space-y-3">
-                <QuickLinkCard
-                  icon={<Sparkles className="h-5 w-5" />}
-                  title="여행 추천 받기"
-                  desc="반려견 성향 기반 추천 시작"
-                />
-                <QuickLinkCard
-                  icon={<MapPin className="h-5 w-5" />}
-                  title="지도에서 장소 탐색"
-                  desc="동반 가능 여행지/장소 보기"
-                />
-                <QuickLinkCard
-                  icon={<BookOpenText className="h-5 w-5" />}
-                  title="AI 그림일기 만들기"
-                  desc="여행 후 기록을 감성 콘텐츠로 생성"
-                />
-              </div>
-            </motion.section>
-
-            <motion.section
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="rounded-[32px] border border-orange-100 bg-white p-8 shadow-lg"
-            >
-              <h2 className="text-2xl font-bold text-slate-900">
-                프로필 완성 안내
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                정보가 많을수록 추천 정확도가 높아져요
-              </p>
-
-              <div className="mt-6">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="text-slate-500">완성도</span>
-                  <span className="font-semibold text-slate-900">
-                    {profileCompletion}%
-                  </span>
-                </div>
-
-                <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-orange-500 transition-all"
-                    style={{ width: `${profileCompletion}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-3xl bg-orange-50 p-5 text-sm leading-6 text-orange-700">
-                생년월일, 성별, 중성화, 견종, 사진, 성격까지 채우면
-                <br />
-                추천/기록 기능에서 더 자연스럽게 활용할 수 있어요.
-              </div>
-            </motion.section>
-          </div>
         </div>
       </div>
-
-      <PetFormModal
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        onSubmit={handleAddPet}
-      />
-
-      <PetFormModal
-        isOpen={Boolean(editPet)}
-        onClose={() => setEditPet(null)}
-        onSubmit={handleUpdatePet}
-        initialPet={editPet}
-      />
 
       <PetDetailModal pet={detailPet} onClose={() => setDetailPet(null)} />
     </div>
@@ -687,51 +554,5 @@ function SummaryMiniCard({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
     </div>
-  );
-}
-
-function InfoCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[28px] bg-slate-50 p-5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
-        {icon}
-      </div>
-      <p className="mt-4 text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function QuickLinkCard({
-  icon,
-  title,
-  desc,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="flex w-full items-center gap-4 rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-orange-200 hover:bg-orange-50/40"
-    >
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-slate-900">{title}</p>
-        <p className="mt-1 text-sm text-slate-500">{desc}</p>
-      </div>
-      <ChevronRight className="h-5 w-5 text-slate-400" />
-    </button>
   );
 }
