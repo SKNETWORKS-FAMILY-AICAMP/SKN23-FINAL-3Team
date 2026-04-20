@@ -34,11 +34,9 @@ from dataclasses import dataclass
 from core.location.place import Place
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from services.image_service import upload_to_s3
+from services.image_service import _upload_to_s3
 from services.intent_service import IntentResult
 from services.place_service import search_places_from_db
-from ai.llm.prompts.diary_prompt import build_diary_prompt
-from ai.llm.prompts.diary_prompt import build_final_image_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +209,8 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
 
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     """build_diary_prompt → GPT 호출 → JSON 파싱."""
+    from ai.llm.prompts.diary_prompt import build_diary_prompt
+
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
     conversation_summary = f"보호자: {query.strip()}"
@@ -255,6 +255,7 @@ async def _generate_and_store_image(
         build_final_image_prompt → OpenAI 이미지 생성 → S3 업로드 → images 테이블 저장.
         실패 시 None 을 반환하고 호출 측에서 이미지 없이 응답합니다.
     """
+    from ai.llm.prompts.diary_prompt import build_final_image_prompt
 
     image_prompt = build_final_image_prompt(
         image_prompt_base=diary_data.get("image_prompt_base", ""),
