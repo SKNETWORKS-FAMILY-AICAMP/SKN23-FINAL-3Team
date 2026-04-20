@@ -18,15 +18,14 @@ services/user.py
 
 from __future__ import annotations
 
-from datetime import datetime
-from core.utils import kst_now
-
-from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from models.user import User
+from sqlalchemy import select
+from core.utils import kst_now
+from models.image import Image
+from models.keyword import Keyword
 from schemas.user import UserUpdate
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
@@ -47,7 +46,6 @@ def _assert_owner(user: User, current_user_id: int) -> None:
 
 async def _verify_image_exists(image_id: int, db: AsyncSession) -> None:
     """profile_id FK: 이미지가 존재하는지 검증합니다."""
-    from models.image import Image
 
     result = await db.execute(
         select(Image).where(
@@ -64,7 +62,6 @@ async def _verify_image_exists(image_id: int, db: AsyncSession) -> None:
 
 async def _verify_keyword_exists(keyword_id: int, db: AsyncSession) -> None:
     """type_id FK: 키워드가 존재하는지 검증합니다."""
-    from models.keyword import Keyword
 
     result = await db.execute(
         select(Keyword).where(Keyword.id == keyword_id)

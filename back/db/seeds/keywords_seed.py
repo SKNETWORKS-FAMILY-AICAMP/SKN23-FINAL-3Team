@@ -22,12 +22,18 @@ ai/utils/scoring.py 의 DOG_TAG_SCORES, OWNER_TAG_SCORES 를 읽어:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import sys
+import json
+import asyncio
+import core.database
 
+from sqlalchemy import select
 from dotenv import load_dotenv
+from core.config import settings
+from models.keyword import Keyword
+from sshtunnel import SSHTunnelForwarder
+from utils.scoring import DOG_TAG_SCORES, OWNER_TAG_SCORES  # noqa: E402
 
 # ── 경로 설정 ─────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))                # back/db/seeds/
@@ -39,17 +45,9 @@ sys.path.insert(0, _AI_UTILS)
 
 load_dotenv(os.path.normpath(os.path.join(_HERE, "../../../.env")))
 
-# ── scoring.py 에서 태그 점수표 임포트 ────────────────────────────────────
-from utils.scoring import DOG_TAG_SCORES, OWNER_TAG_SCORES  # noqa: E402
-
-
 # ── DB 적재 (비동기) ───────────────────────────────────────────────────────
 async def seed() -> None:
     """keywords 테이블에 시드 데이터를 적재합니다."""
-    import core.database
-    from core.config import settings
-    from models.keyword import Keyword
-    from sqlalchemy import select
 
     # ── SSH 터널 (local 환경) ─────────────────────────────────────────────
     db_host = settings.DB_HOST
@@ -58,7 +56,6 @@ async def seed() -> None:
     tunnel = None
     if settings.SERVER == "local":
         print("SSH 터널 연결 중...")
-        from sshtunnel import SSHTunnelForwarder
         tunnel = SSHTunnelForwarder(
             (settings.SSH_HOST, settings.SSH_PORT),
             ssh_username=settings.SSH_USER,

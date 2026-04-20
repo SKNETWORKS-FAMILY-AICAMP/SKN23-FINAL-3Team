@@ -12,9 +12,9 @@ Settings 클래스가 프로젝트 루트의 .env 파일을 자동으로 읽어
 from __future__ import annotations
 
 import os
-from functools import lru_cache
-from typing import Literal
 
+from typing import Literal
+from functools import lru_cache
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     SSH_PORT: int = Field(default=22)
     SSH_USER: str = Field(default="ubuntu")
     SSH_PKEY: str = Field(default="")
+
+    # ── OpenAI ───────────────────────────────────────────────────────────────
+    OPENAI_API_KEY: str = Field(default="")
+    GPT_MODEL: str = Field(default="gpt-4.1-mini")
+    DIARY_IMAGE_MODEL: str = Field(default="gpt-image-1")
+
+    # ── 개발 모드 플래그 ─────────────────────────────────────────────────────
+    USE_DUMMY_PLACES: bool = Field(default=False)
 
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]

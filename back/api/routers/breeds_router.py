@@ -14,13 +14,11 @@ routers/breeds.py
 from __future__ import annotations
 
 from typing import Annotated
-
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from core.deps import get_db
 from schemas.breed import BreedResponse
+from fastapi import APIRouter, Depends, Query
 from services import breed_service as breed_svc
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["Breeds"])
 

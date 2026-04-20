@@ -14,11 +14,9 @@ keywords 테이블은 마스터 데이터이므로 엔드포인트 레벨 CUD �
 from __future__ import annotations
 
 from typing import Sequence
-
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from models.keyword import Keyword
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def list_keywords(

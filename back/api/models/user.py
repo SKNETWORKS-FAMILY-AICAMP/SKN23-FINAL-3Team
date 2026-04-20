@@ -12,33 +12,14 @@ users 테이블 ORM 모델.
 
 from __future__ import annotations
 
-import enum
-from datetime import date, datetime
-from core.utils import kst_now
 from typing import Any
-
-from sqlalchemy import (
-    BigInteger,
-    DateTime,
-    Date,
-    Enum as SAEnum,
-    ForeignKey,
-    Index,
-    JSON,
-    String,
-    UniqueConstraint,
-    func,
-)
+from core.utils import kst_now
+from core.database import Base
+from datetime import date, datetime
+from core.type.gender import GenderEnum
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from core.database import Base
-
-
-class GenderEnum(str, enum.Enum):
-    """성별 Enum."""
-    MALE = "MALE"
-    FEMALE = "FEMALE"
+from sqlalchemy import (BigInteger, DateTime, Date, Enum as SAEnum, ForeignKey, Index, JSON, String, UniqueConstraint, func)
 
 
 class User(Base):

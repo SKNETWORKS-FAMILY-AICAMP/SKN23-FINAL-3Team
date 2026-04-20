@@ -15,14 +15,12 @@ routers/chat_rooms.py
 from __future__ import annotations
 
 from typing import Annotated
-
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.deps import get_current_user, get_db
 from models.user import User
-from schemas.chat_room import ChatRoomCreate, ChatRoomResponse, ChatRoomUpdateTitle
+from core.deps import get_current_user, get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from services import chat_room_service as room_svc
+from fastapi import APIRouter, Depends, Query, status
+from schemas.chat_room import ChatRoomCreate, ChatRoomResponse, ChatRoomUpdateTitle
 
 router = APIRouter(tags=["ChatRooms"])
 

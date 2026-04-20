@@ -13,11 +13,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from core.utils import kst_now
-
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from core.database import Base
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
+
 
 
 class ChatMessage(Base):

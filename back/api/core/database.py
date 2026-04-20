@@ -16,6 +16,7 @@ main.py의 lifespan에서 터널을 시작한 후 create_engine()을 호출합�
 
 from __future__ import annotations
 
+from core.config import settings
 from sqlalchemy.ext.asyncio import (
     AsyncAttrs,
     AsyncEngine,
@@ -24,8 +25,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
-
-from core.config import settings
 
 # ── ORM 베이스 클래스 ──────────────────────────────────────────────────────
 class Base(AsyncAttrs, DeclarativeBase):

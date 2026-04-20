@@ -1,8 +1,9 @@
 import os
-import pandas as pd
 import chromadb
-from sentence_transformers import SentenceTransformer
+import pandas as pd
+
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 

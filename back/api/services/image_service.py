@@ -16,17 +16,15 @@ users.profile_id / diaries.image_id 참조 시 409 예외로 삭제를 거부합
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from core.utils import kst_now
-from pathlib import Path
-
 import aioboto3
-from fastapi import HTTPException, UploadFile, status
+
+from pathlib import Path
+from models.image import Image
+from core.utils import kst_now
+from core.config import settings
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.config import settings
-from models.image import Image
+from fastapi import HTTPException, UploadFile, status
 
 
 # ── S3 업로드 헬퍼 ───────────────────────────────────────────────────────────

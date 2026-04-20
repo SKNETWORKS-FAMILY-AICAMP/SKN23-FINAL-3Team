@@ -25,16 +25,15 @@ services/auth.py
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
-
 import httpx
-from fastapi import HTTPException, status
-from jose import JWTError, jwt
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+from jose import JWTError, jwt
+from typing import Any, Literal
 from core.config import settings
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta, timezone
 
 # ── 지원하는 소셜 로그인 Provider 타입 ────────────────────────────────────
 Provider = Literal["kakao", "google", "naver"]

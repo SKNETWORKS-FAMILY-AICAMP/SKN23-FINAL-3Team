@@ -9,20 +9,13 @@ places 테이블 ORM 모델.
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
-import enum
-
-from sqlalchemy import BigInteger, Boolean, DateTime, Numeric, String, Text, UniqueConstraint, Index, func, Enum as SAEnum
+from datetime import datetime
+from core.database import Base
+from core.type.place import YNEnum
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
-
-from core.database import Base
-
-
-class YNEnum(str, enum.Enum):
-    Y = "Y"
-    N = "N"
+from sqlalchemy import BigInteger, Boolean, DateTime, Numeric, String, Text, UniqueConstraint, Index, func, Enum as SAEnum
 
 
 class Place(Base):

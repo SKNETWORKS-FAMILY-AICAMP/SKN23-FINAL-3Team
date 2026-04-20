@@ -22,22 +22,23 @@ FastAPI 애플리케이션 진입점.
 
 from __future__ import annotations
 
-import json
-import logging
 import os
-from contextlib import asynccontextmanager
-from logging.handlers import RotatingFileHandler
-from typing import AsyncGenerator
+import logging
 
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from openai import AsyncOpenAI
-from pydantic import BaseModel
-
+from sqlalchemy import text
 from core.config import settings
+from typing import AsyncGenerator
+from core.database import get_engine
+from sshtunnel import SSHTunnelForwarder
+from contextlib import asynccontextmanager
+from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, status
+from logging.handlers import RotatingFileHandler
+from fastapi.middleware.cors import CORSMiddleware
+from services.intent_service import warmup_intent_model
 from core.database import close_db, init_db, init_engine
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from services.scheduler_service import hard_delete_withdrawn_users
 
 # =============================================================================
 # 로깅 설정
@@ -111,7 +112,6 @@ def _start_ssh_tunnel() -> tuple[str, int]:
                 (host, port) - DB 연결에 사용할 로컬 바인딩 주소와 포트
     """
     global _ssh_tunnel
-    from sshtunnel import SSHTunnelForwarder
 
     _ssh_tunnel = SSHTunnelForwarder(
         (settings.SSH_HOST, settings.SSH_PORT),
@@ -141,8 +141,6 @@ def _stop_ssh_tunnel() -> None:
 
 def _setup_scheduler(app: FastAPI) -> None:
     """APScheduler를 초기화하고 배치 작업을 등록합니다."""
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    from services.scheduler_service import hard_delete_withdrawn_users
 
     scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
 
@@ -200,7 +198,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 의도 분류 모델 워밍업 (첫 요청 지연 방지, 실패 시 lazy-load 로 폴백)
     try:
-        from services.intent_service import warmup_intent_model
         warmup_intent_model()
     except Exception as e:
         logger.warning(f"[Intent] 워밍업 훅 등록 실패 (무시): {e}")
@@ -333,8 +330,6 @@ app.include_router(places_router.router,       prefix="/places",       tags=["Pl
 @app.get("/health", tags=["Health"], summary="서버 상태 확인")
 async def health_check() -> dict:
     """서버 및 DB 연결 상태를 반환합니다."""
-    from sqlalchemy import text
-    from core.database import get_engine
 
     try:
         engine = get_engine()

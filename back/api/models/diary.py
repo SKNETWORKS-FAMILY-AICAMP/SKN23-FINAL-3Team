@@ -16,20 +16,10 @@ diaries 테이블 ORM 모델.
 from __future__ import annotations
 
 from datetime import datetime
-from core.utils import kst_now
-
-from sqlalchemy import (
-    BigInteger,
-    DateTime,
-    ForeignKey,
-    Index,
-    String,
-    Text,
-    func,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from core.database import Base
+from core.utils import kst_now
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (BigInteger, DateTime, ForeignKey, Index, String, Text, func)
 
 
 class Diary(Base):
