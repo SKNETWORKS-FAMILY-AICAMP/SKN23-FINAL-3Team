@@ -8,6 +8,7 @@ services/chat_response_service.py
     - "다이어리 작성" → _handle_diary()  (다이어리 텍스트 + 이미지 생성 → S3 업로드 → URL 반환)
     - "장소추천"      → _handle_places(top_k=5)
     - "시설정보"      → _handle_facility(top_k=1)
+    - "기타"          → _handle_fallback()  (인사, 케어 상담, 잡담 등 RAG 없이 GPT 직답)
     - (unknown)       → _handle_fallback()
 
 dispatch() 는 DispatchContext(user_id, db) 를 선택 인자로 받아
@@ -35,7 +36,7 @@ from core.location.place import Place
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.image_service import _upload_to_s3
-from services.intent_service import IntentResult
+from services.intent_service import IntentResult, RAG_STRATEGY_MAP
 from services.place_service import search_places_from_db
 
 logger = logging.getLogger(__name__)
@@ -408,8 +409,11 @@ async def dispatch(
         return await _handle_diary(query, ctx)
     if intent == "장소추천":
         return await _handle_places(query, ctx, top_k=top_k)
-    # if intent == "시설정보":
-    #     return await _handle_facility(query, ctx)
+    if intent == "시설정보":
+        return await _handle_facility(query, ctx)
+    if intent == "기타" or intent not in RAG_STRATEGY_MAP:
+        logger.info("[Dispatch] 기타 분기 처리")
+        return await _handle_fallback(query)
 
     logger.warning(f"[ChatResponse] 알 수 없는 의도: {intent} → fallback 처리")
     return await _handle_fallback(query)
