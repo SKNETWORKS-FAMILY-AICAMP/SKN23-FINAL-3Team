@@ -46,8 +46,9 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = Field(...)
     DB_NAME: str = Field(default="withdog")
 
-    # ── JWT ────────────────────────────────────────────────────────────────
-    SECRET_KEY: str = Field(..., description="JWT 서명 비밀키")
+    # ── JWT / 관리자 공용 ──────────────────────────────────────────────────
+    # SECRET_KEY는 JWT 서명 및 관리자 X-Admin-Key 인증에 함께 사용됩니다.
+    SECRET_KEY: str = Field(..., description="JWT 서명 비밀키 (관리자 X-Admin-Key와 공용)")
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60)
 
