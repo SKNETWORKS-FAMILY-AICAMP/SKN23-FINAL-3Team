@@ -11,6 +11,7 @@ KoELECTRA 기반 의도 분류 서비스.
     - "다이어리 작성"  → 강아지 시점 일기 생성
     - "장소추천"       → 반려견 동반 가능 장소 추천
     - "시설정보"       → 특정 시설 상세 정보
+    - "기타"           → RAG 없이 GPT 직답 처리 (인사, 케어 상담, 잡담 등)
 
 [모델 로딩]
 최초 호출 시 lazy-load 하며, 프로세스 내 싱글톤으로 유지됩니다.
@@ -31,9 +32,11 @@ import logging
 import threading
 
 from typing import Any
+from dotenv import load_dotenv
 from dataclasses import dataclass
 from transformers import ElectraForSequenceClassification, ElectraTokenizer
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +46,6 @@ _DEFAULT_MODEL_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "ai", "intent", "model")
 )
 MODEL_DIR = os.getenv("INTENT_MODEL_DIR", _DEFAULT_MODEL_DIR)
-
 
 # ── RAG 전략 맵 (각 의도별 다운스트림 서비스 힌트) ────────────────────────────
 RAG_STRATEGY_MAP: dict[str, dict[str, Any]] = {
@@ -61,6 +63,11 @@ RAG_STRATEGY_MAP: dict[str, dict[str, Any]] = {
         "collection": "places",
         "top_k": 1,
         "description": "특정 시설 상세 정보 검색",
+    },
+    "기타": {
+        "collection": None,
+        "top_k": 0,
+        "description": "기타/미분류 — RAG 없이 GPT 직답 처리",
     },
 }
 
@@ -145,7 +152,7 @@ def classify_intent(text: str) -> IntentResult:
 
     intent = _id2label[str(pred_id)]
     confidence = round(float(probs[pred_id].item()), 4)
-    strategy = RAG_STRATEGY_MAP.get(intent, RAG_STRATEGY_MAP["장소추천"])
+    strategy = RAG_STRATEGY_MAP.get(intent, RAG_STRATEGY_MAP["기타"])
 
     return IntentResult(intent=intent, confidence=confidence, strategy=strategy)
 

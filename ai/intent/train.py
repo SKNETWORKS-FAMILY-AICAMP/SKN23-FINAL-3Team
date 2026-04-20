@@ -3,6 +3,8 @@ withDOG 챗봇 의도 분류기 - KoELECTRA 파인튜닝
 사전학습 모델: monologg/koelectra-base-v3-discriminator
 """
 import os
+import shutil
+import tempfile
 import pandas as pd
 import numpy as np
 import torch
@@ -28,7 +30,7 @@ CONFIG = {
     "seed": 42,
 }
 
-LABELS = ["다이어리 작성", "장소추천", "시설정보"]
+LABELS = ["다이어리 작성", "장소추천", "시설정보", "기타"]
 LABEL2ID = {label: idx for idx, label in enumerate(LABELS)}
 ID2LABEL = {idx: label for idx, label in enumerate(LABELS)}
 
@@ -149,11 +151,18 @@ def main():
 
         if accuracy > best_accuracy:
             best_accuracy = accuracy
-            os.makedirs(CONFIG["save_dir"], exist_ok=True)
-            model.save_pretrained(CONFIG["save_dir"])
-            tokenizer.save_pretrained(CONFIG["save_dir"])
-            with open(f"{CONFIG['save_dir']}/label_map.json", "w", encoding="utf-8") as f:
-                json.dump({"id2label": ID2LABEL, "label2id": LABEL2ID}, f, ensure_ascii=False, indent=2)
+            # 임시 디렉터리에 저장 후 교체 (Windows 파일 잠금 우회)
+            tmp_dir = tempfile.mkdtemp()
+            try:
+                model.save_pretrained(tmp_dir)
+                tokenizer.save_pretrained(tmp_dir)
+                with open(os.path.join(tmp_dir, "label_map.json"), "w", encoding="utf-8") as f:
+                    json.dump({"id2label": ID2LABEL, "label2id": LABEL2ID}, f, ensure_ascii=False, indent=2)
+                if os.path.exists(CONFIG["save_dir"]):
+                    shutil.rmtree(CONFIG["save_dir"])
+                shutil.copytree(tmp_dir, CONFIG["save_dir"])
+            finally:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
             print(f"  → 최고 성능 모델 저장 완료 (Accuracy: {best_accuracy:.4f})")
 
     print("\n" + "=" * 50 + "\n최종 평가 리포트\n" + "=" * 50)
