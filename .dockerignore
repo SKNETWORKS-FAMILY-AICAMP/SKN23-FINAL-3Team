@@ -1,0 +1,10 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.git
+.env
+front/node_modules
+front/.next
+data/raw
+data/processed
+*.tar.gz
