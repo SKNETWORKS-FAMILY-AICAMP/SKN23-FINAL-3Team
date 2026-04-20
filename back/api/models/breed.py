@@ -10,13 +10,28 @@ breeds 테이블 ORM 모델.
 
 from __future__ import annotations
 
+import enum
 from datetime import datetime
 from core.utils import kst_now
 
-from sqlalchemy import BigInteger, Boolean, DateTime, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, String, func, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
+
+
+class BreedSizeEnum(str, enum.Enum):
+    """견종 크기 분류."""
+    small = "small"
+    medium = "medium"
+    large = "large"
+
+
+class ActivityLevelEnum(str, enum.Enum):
+    """활동량 수준."""
+    low = "low"
+    medium = "medium"
+    high = "high"
 
 
 class Breed(Base):
@@ -52,6 +67,31 @@ class Breed(Base):
         default=False,
         server_default="0",
         comment="인기 견종 TOP10 여부 (화면 노출)",
+    )
+    size: Mapped[BreedSizeEnum | None] = mapped_column(
+        SAEnum(BreedSizeEnum),
+        nullable=True,
+        comment="견종 크기 분류 (소형:<10kg, 중형:10~25kg, 대형:>25kg)",
+    )
+    activity_level: Mapped[ActivityLevelEnum | None] = mapped_column(
+        SAEnum(ActivityLevelEnum),
+        nullable=True,
+        comment="활동량 수준 (추천 점수 계산 활용)",
+    )
+    temperament: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="성격 태그 문자열 (쉼표 구분, 영문 원본)",
+    )
+    breed_group: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="견종 그룹 (Toy/Sporting/Herding/Hound 등)",
+    )
+    image_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="견종 대표 이미지 URL (Dog CEO API 캐싱)",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

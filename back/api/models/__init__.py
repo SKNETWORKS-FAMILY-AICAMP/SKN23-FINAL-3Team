@@ -17,6 +17,7 @@ from models.pet import Pet
 from models.chat_room import ChatRoom
 from models.chat_message import ChatMessage
 from models.diary import Diary
+from models.place import Place
 
 __all__ = [
     "Image",
@@ -27,4 +28,5 @@ __all__ = [
     "ChatRoom",
     "ChatMessage",
     "Diary",
+    "Place",
 ]

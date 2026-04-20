@@ -26,6 +26,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -37,6 +38,52 @@ from pydantic import BaseModel
 from core.config import settings
 from core.database import close_db, init_db, init_engine
 
+
+# =============================================================================
+# 로깅 설정
+# back/api/main.py → <project_root>/logs/app.log
+# - 콘솔(stderr)과 파일에 동시 기록
+# - 10MB 단위로 회전, 최대 5개 백업 유지
+# - 환경변수 LOG_DIR / LOG_LEVEL 로 오버라이드 가능
+# =============================================================================
+
+def _configure_logging() -> None:
+    _default_log_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "logs")
+    )
+    log_dir = os.getenv("LOG_DIR", _default_log_dir)
+    os.makedirs(log_dir, exist_ok=True)
+
+    level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    # uvicorn 기본 핸들러와 중복되지 않도록 기존 핸들러 제거 후 재설정
+    root.handlers.clear()
+
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter(fmt))
+    root.addHandler(console)
+
+    file_handler = RotatingFileHandler(
+        os.path.join(log_dir, "app.log"),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(logging.Formatter(fmt))
+    root.addHandler(file_handler)
+
+    # uvicorn 로거도 동일한 핸들러 사용
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        lg = logging.getLogger(name)
+        lg.handlers.clear()
+        lg.propagate = True  # root 로거 핸들러 재사용
+
+
+_configure_logging()
+
 # AI 일기/이미지 생성 모듈 (프로젝트 루트의 ai/ 패키지)
 try:
     from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
@@ -46,7 +93,6 @@ except ImportError:
     _AI_AVAILABLE = False
     logger_tmp = logging.getLogger(__name__)
     logger_tmp.warning("[AI] ai 패키지 임포트 실패 — /api/diary/* 엔드포인트 비활성화")
-
 logger = logging.getLogger(__name__)
 
 
@@ -152,6 +198,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"[Scheduler] 초기화 실패 (무시하고 계속): {e}")
 
+    # 의도 분류 모델 워밍업 (첫 요청 지연 방지, 실패 시 lazy-load 로 폴백)
+    try:
+        from services.intent_service import warmup_intent_model
+        warmup_intent_model()
+    except Exception as e:
+        logger.warning(f"[Intent] 워밍업 훅 등록 실패 (무시): {e}")
+
     yield  # 앱 실행 중
 
     # ── 종료 ────────────────────────────────────────────────────────────────
@@ -208,6 +261,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # =============================================================================
 
 from routers import (
+    admin_router,
     auth_router,
     breeds_router,
     chat_messages_router,
@@ -219,6 +273,9 @@ from routers import (
     users_router,
     places_router,
 )
+
+# 관리자 (영구 토큰 발급)
+app.include_router(admin_router.router,         prefix="/admin",      tags=["Admin"])
 
 # 인증 (소셜 로그인)
 app.include_router(auth_router.router,          prefix="/auth",       tags=["Auth"])
@@ -424,3 +481,16 @@ async def generate_image(req: ImageRequest) -> ImageResponse:
     print_eval_summary(eval_record)
 
     return ImageResponse(image_base64=b64)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # uvicorn 실행 설정
+    uvicorn.run(
+        "main:app",     # 파일명:객체명
+        host="0.0.0.0",
+        port=8000,      # 포트 번호
+        reload=True,    # 코드 수정 시 자동 재시작 (디버깅 시 유용)
+        log_level="info"
+    )
