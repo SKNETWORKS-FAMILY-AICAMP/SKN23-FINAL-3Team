@@ -194,6 +194,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # =============================================================================
 
 from routers import (
+    admin_router,
     auth_router,
     breeds_router,
     chat_messages_router,
@@ -205,6 +206,9 @@ from routers import (
     users_router,
     places_router,
 )
+
+# 관리자 (영구 토큰 발급)
+app.include_router(admin_router.router,         prefix="/admin",      tags=["Admin"])
 
 # 인증 (소셜 로그인)
 app.include_router(auth_router.router,          prefix="/auth",       tags=["Auth"])
