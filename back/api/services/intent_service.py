@@ -31,9 +31,11 @@ import logging
 import threading
 
 from typing import Any
+from dotenv import load_dotenv
 from dataclasses import dataclass
 from transformers import ElectraForSequenceClassification, ElectraTokenizer
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,6 @@ _DEFAULT_MODEL_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "ai", "intent", "model")
 )
 MODEL_DIR = os.getenv("INTENT_MODEL_DIR", _DEFAULT_MODEL_DIR)
-
 
 # ── RAG 전략 맵 (각 의도별 다운스트림 서비스 힌트) ────────────────────────────
 RAG_STRATEGY_MAP: dict[str, dict[str, Any]] = {
