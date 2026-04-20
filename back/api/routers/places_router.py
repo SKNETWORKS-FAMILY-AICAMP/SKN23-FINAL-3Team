@@ -1,11 +1,10 @@
 import os
-import sys
 import requests
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-
-from ai.llm.rag.places_retriever import search_similar_places
+from core.deps import get_db
+from services.place_service import search_places_from_db
 
 router = APIRouter(tags=["places"])
 
@@ -87,17 +86,11 @@ def get_kakao_image(place_name: str) -> str:
 
 
 @router.get("/search")
-def search_places(query: str, category: str = None, city: str = None):
-    places = search_similar_places(
-        query_text=query,
-        n_results=5,
-        category=category,
-        city=city,
-    )
+async def search_places(query: str, db: AsyncSession = Depends(get_db)):
+    places = await search_places_from_db(query, db, n_results=5)
     for place in places:
         image = get_place_image(place["name"])
         if not image:
             image = get_kakao_image(place["name"])
-        print(f"{place['name']} 이미지: {image}")   
         place["image"] = image
     return {"places": places}

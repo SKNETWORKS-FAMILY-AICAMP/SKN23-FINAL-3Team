@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     GPT_MODEL: str = Field(default="gpt-4.1-mini")
     DIARY_IMAGE_MODEL: str = Field(default="gpt-image-1")
 
+    # ── 개발 모드 플래그 ─────────────────────────────────────────────────────
+    USE_DUMMY_PLACES: bool = Field(default=False)
+
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]
     @property

@@ -77,16 +77,6 @@ _FALLBACK_SYSTEM_PROMPT = (
 )
 
 
-# ── 장소 검색 (동기 함수 → to_thread 로 호출) ────────────────────────────────
-def _search_places_sync(query: str, n_results: int) -> list[dict]:
-    """ai.llm.rag.places_retriever 를 동기로 호출 (lazy import로 순환 참조 방지)."""
-    try:
-        from ai.llm.rag.places_retriever import search_similar_places
-        return search_similar_places(query_text=query, n_results=n_results)
-    except Exception as e:
-        logger.warning(f"[ChatResponse] 장소 검색 실패: {e}")
-        return []
-
 
 def _format_places_brief(places: Sequence[dict]) -> str:
     """검색된 장소를 프롬프트에 넣을 간단한 텍스트로 포맷."""
@@ -364,15 +354,33 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
     return "\n".join(lines)
 
 
-async def _handle_places(query: str, top_k: int = 5) -> str:
-    places = await asyncio.to_thread(_search_places_sync, query, top_k)
+async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5) -> str:
+    if settings.USE_DUMMY_PLACES:
+        from core.location.place import Place
+        places = await Place().find_place(top_k=top_k)
+    elif ctx.db is not None:
+        from services.place_service import search_places_from_db
+        places = await search_places_from_db(query, ctx.db, n_results=top_k)
+    else:
+        logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
+        places = []
+
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
     return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
 
 
-async def _handle_facility(query: str) -> str:
-    places = await asyncio.to_thread(_search_places_sync, query, 1)
+async def _handle_facility(query: str, ctx: DispatchContext) -> str:
+    if settings.USE_DUMMY_PLACES:
+        from core.location.place import Place
+        places = await Place().find_place(top_k=1)
+    elif ctx.db is not None:
+        from services.place_service import search_places_from_db
+        places = await search_places_from_db(query, ctx.db, n_results=1)
+    else:
+        logger.warning("[ChatResponse] db 세션 없음 — 시설 검색 불가")
+        places = []
+
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 시설]\n{places_text}"
     return await _chat_completion(_FACILITY_SYSTEM_PROMPT, user_prompt)
@@ -411,9 +419,9 @@ async def dispatch(
     if intent == "다이어리 작성":
         return await _handle_diary(query, ctx)
     if intent == "장소추천":
-        return await _handle_places(query, top_k=top_k)
+        return await _handle_places(query, ctx, top_k=top_k)
     # if intent == "시설정보":
-    #     return await _handle_facility(query)
+    #     return await _handle_facility(query, ctx)
 
     logger.warning(f"[ChatResponse] 알 수 없는 의도: {intent} → fallback 처리")
     return await _handle_fallback(query)
