@@ -22,6 +22,7 @@ export interface UserUpdateInput {
   age?: number
   type_id?: number
   selected_tags?: string[]
+  profile_id?: number
 }
 
 /** GET /users/me */
