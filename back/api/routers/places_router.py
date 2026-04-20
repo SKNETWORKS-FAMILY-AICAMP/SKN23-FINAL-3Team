@@ -2,7 +2,7 @@ import os
 import requests
 
 from core.deps import get_db
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.place_service import search_places_from_db
 
@@ -86,8 +86,8 @@ def get_kakao_image(place_name: str) -> str:
 
 
 @router.get("/search")
-async def search_places(query: str, db: AsyncSession = Depends(get_db)):
-    places = await search_places_from_db(query, db, n_results=5)
+async def search_places(query: str, request: Request, db: AsyncSession = Depends(get_db)):
+    places = await search_places_from_db(query, db, n_results=5, request=request)
     for place in places:
         image = get_place_image(place["name"])
         if not image:

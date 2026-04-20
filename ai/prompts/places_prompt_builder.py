@@ -1,8 +1,10 @@
-# ai/llm/prompts/places_prompt.py
-# 장소 추천 설명 프롬프트 템플릿
+# -*- coding: utf-8 -*-
+from ai.core.interfaces.base_prompt_builder import BasePromptBuilder
 
+class PlacesPromptBuilder(BasePromptBuilder):
 
-PLACES_SYSTEM_PROMPT = """
+    def build_system_prompt(self) -> str:
+        return """
 당신은 반려견 동반 여행 전문 챗봇입니다.
 반려견과 보호자의 성향을 고려해서 추천 장소를 자연스럽고 따뜻하게 설명해주세요.
 
@@ -29,37 +31,25 @@ PLACES_SYSTEM_PROMPT = """
 중요:
 - 후보 장소 목록에 있는 모든 장소에 대해 반드시 reason을 작성하세요.
 - name은 후보 장소 목록의 이름을 그대로 사용하세요.
-"""
+""".strip()
 
+    def build_user_prompt(
+        self,
+        pet_name: str = "",
+        dog_type_name: str = "",
+        owner_type_name: str = "",
+        dog_tags: list = None,
+        owner_tags: list = None,
+        places_text: str = "",
+        user_query: str = "",
+        **kwargs,
+    ) -> str:
+        dog_tags = dog_tags or []
+        owner_tags = owner_tags or []
+        dog_tags_str = ", ".join(dog_tags)
+        owner_tags_str = ", ".join(owner_tags)
 
-def build_places_prompt(
-    pet_name: str,
-    dog_type_name: str,
-    owner_type_name: str,
-    dog_tags: list,
-    owner_tags: list,
-    places_text: str,
-    user_query: str = "",
-) -> str:
-    """
-    장소 추천 유저 프롬프트 구성
-
-    Parameters:
-        pet_name: 강아지 이름
-        dog_type_name: 반려견 타입 이름 (예: "🐾 산책 탐험대")
-        owner_type_name: 보호자 타입 이름 (예: "🌿 자연 애호가")
-        dog_tags: 반려견 성격 태그 목록
-        owner_tags: 보호자 라이프스타일 태그 목록
-        places_text: places_retriever에서 가져온 장소 정보 텍스트
-        user_query: 사용자 추가 질문 (선택, 예: "한강이랑 비슷한 곳 추천해줘")
-
-    Returns:
-        GPT user 프롬프트 문자열
-    """
-    dog_tags_str = ", ".join(dog_tags)
-    owner_tags_str = ", ".join(owner_tags)
-
-    prompt = f"""
+        prompt = f"""
 [반려견 정보]
 - 이름: {pet_name}
 - 성향 타입: {dog_type_name}
@@ -69,14 +59,12 @@ def build_places_prompt(
 - 성향 타입: {owner_type_name}
 - 라이프스타일 태그: {owner_tags_str}
 """
-
-    if user_query:
-        prompt += f"""
+        if user_query:
+            prompt += f"""
 [사용자 요청]
 {user_query}
 """
-
-    prompt += f"""
+        prompt += f"""
 [추천 후보 장소]
 {places_text}
 
@@ -84,5 +72,4 @@ def build_places_prompt(
 후보 장소 목록에 있는 모든 장소에 대해 reason을 작성해주세요.
 반드시 JSON 형식으로만 답하세요.
 """
-
-    return prompt.strip()
+        return prompt.strip()
