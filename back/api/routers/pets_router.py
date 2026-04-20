@@ -2,10 +2,10 @@
 """
 routers/pets.py
 ---------------
-반려동물 도메인 HTTP 엔드포인트.
+반려견 도메인 HTTP 엔드포인트.
 
 엔드포인트:
-    POST   /pets                  반려동물 등록 (breed_id FK 검증)
+    POST   /pets                  반려견 등록 (breed_id FK 검증)
     GET    /pets?user_id={id}     사용자별 목록 (deleted_at IS NULL)
     GET    /pets/{pet_id}         단건 조회
     PATCH  /pets/{pet_id}         정보 수정 (본인만)
@@ -35,9 +35,9 @@ router = APIRouter(tags=["Pets"])
     "",
     response_model=PetResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="반려동물 등록",
+    summary="반려견 등록",
     description=(
-        "로그인 사용자의 반려동물을 등록합니다.\n\n"
+        "로그인 사용자의 반려견을 등록합니다.\n\n"
         "- `breed_id`: breeds 테이블 참조 검증\n"
         "- `type_id`: keywords 테이블 참조 검증\n"
         "- `user_id`는 JWT에서 자동 추출됩니다."
@@ -55,7 +55,7 @@ async def create_pet(
 @router.get(
     "",
     response_model=list[PetResponse],
-    summary="사용자별 반려동물 목록 조회",
+    summary="사용자별 반려견 목록 조회",
 )
 async def list_pets(
     user_id: Annotated[int, Query(description="조회할 사용자 ID")],
@@ -69,7 +69,7 @@ async def list_pets(
 @router.get(
     "/{pet_id}",
     response_model=PetResponse,
-    summary="반려동물 단건 조회",
+    summary="반려견 단건 조회",
 )
 async def get_pet(
     pet_id: int,
@@ -83,10 +83,10 @@ async def get_pet(
 @router.patch(
     "/{pet_id}",
     response_model=PetResponse,
-    summary="반려동물 정보 수정",
+    summary="반려견 정보 수정",
     description=(
         "제공된 필드만 업데이트합니다 (PATCH 시맨틱).\n\n"
-        "**본인의 반려동물만 수정 가능** (다른 소유자 접근 시 403)"
+        "**본인의 반려견만 수정 가능** (다른 소유자 접근 시 403)"
     ),
 )
 async def update_pet(
@@ -102,8 +102,8 @@ async def update_pet(
 @router.delete(
     "/{pet_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="반려동물 삭제 (Soft Delete)",
-    description="**본인의 반려동물만 삭제 가능** (다른 소유자 접근 시 403)",
+    summary="반려견 삭제 (Soft Delete)",
+    description="**본인의 반려견만 삭제 가능** (다른 소유자 접근 시 403)",
 )
 async def delete_pet(
     pet_id: int,

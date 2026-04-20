@@ -13,6 +13,11 @@ function authHeaders(): HeadersInit {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
+  if (res.status === 401) {
+    // 토큰 만료 또는 무효 → 자동 로그아웃
+    localStorage.removeItem('access_token')
+    window.dispatchEvent(new Event('auth-change'))
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { detail?: string }
     throw new Error(err.detail ?? `API 오류 ${res.status}`)

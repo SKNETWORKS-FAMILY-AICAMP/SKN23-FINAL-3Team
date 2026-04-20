@@ -4,7 +4,7 @@ models/diary.py
 ---------------
 diaries 테이블 ORM 모델.
 
-반려동물 동반 기록 다이어리 (6하원칙 구조).
+반려견 동반 기록 다이어리 (6하원칙 구조).
 - user_id : users.id FK
 - pet_id  : pets.id FK
 - image_id: images.id FK (AI 생성 이미지, nullable → 2-phase 저장 지원)
@@ -33,14 +33,14 @@ from core.database import Base
 
 
 class Diary(Base):
-    """반려동물 동반 기록 다이어리."""
+    """반려견 동반 기록 다이어리."""
 
     __tablename__ = "diaries"
     __table_args__ = (
         Index("idx_diaries_user_id", "user_id", "deleted_at"),
         Index("idx_diaries_pet_id", "pet_id"),
         {
-            "comment": "반려동물 동반 기록 다이어리 (6하원칙 구조)",
+            "comment": "반려견 동반 기록 다이어리 (6하원칙 구조)",
             "mysql_engine": "InnoDB",
             "mysql_charset": "utf8mb4",
             "mysql_collate": "utf8mb4_unicode_ci",
@@ -59,7 +59,7 @@ class Diary(Base):
     pet_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("pets.id", onupdate="CASCADE", ondelete="CASCADE"),
-        nullable=False, comment="반려동물 ID",
+        nullable=False, comment="반려견 ID",
     )
     # FK → images (nullable: 2-phase 저장 지원)
     image_id: Mapped[int | None] = mapped_column(

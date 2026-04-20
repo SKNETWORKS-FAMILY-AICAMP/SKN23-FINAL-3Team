@@ -4,7 +4,7 @@ models/keyword.py
 -----------------
 keywords 테이블 ORM 모델.
 
-사용자/반려동물 성향 태그 마스터 데이터.
+사용자/반려견 성향 태그 마스터 데이터.
 users(type_id), pets(type_id) 에서 FK로 참조됩니다.
 """
 

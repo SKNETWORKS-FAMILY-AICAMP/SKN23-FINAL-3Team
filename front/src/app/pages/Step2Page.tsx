@@ -10,6 +10,7 @@ import {
 import { getMe, updateUser } from "../services/userService";
 import { createPet, updatePet } from "../services/petService";
 import { getAllBreeds, type Breed } from "../services/breedService";
+import { uploadImage } from "../services/imageService";
 
 type GuardianGender = "male" | "female" | "other" | undefined;
 type PetGender = "male" | "female" | undefined;
@@ -37,12 +38,14 @@ const popularBreeds = [
   "시추",
   "골든 리트리버",
   "라브라도 리트리버",
-  "웰시코기",
+  "웰시 코기",
   "프렌치 불독",
   "진돗개",
   "닥스훈트",
   "치와와",
-  "믹스",
+  "믹스견(소형)",
+  "믹스견(중형)",
+  "믹스견(대형)",
 ];
 
 const allBreeds = [
@@ -53,9 +56,11 @@ const allBreeds = [
   "닥스훈트",
   "달마시안",
   "도베르만",
+  "독일 셰퍼드",
   "라브라도 리트리버",
   "라사 압소",
   "말티즈",
+  "말티푸",
   "맨체스터 테리어",
   "마스티프",
   "미니어처 슈나우저",
@@ -64,23 +69,36 @@ const allBreeds = [
   "바셋 하운드",
   "버니즈 마운틴 독",
   "보더 콜리",
+  "보스턴 테리어",
+  "불 테리어",
+  "비글",
   "비숑 프리제",
   "사모예드",
+  "삽살개",
   "시바 이누",
+  "시베리안 허스키",
   "시추",
   "아메리칸 코커 스패니얼",
   "아키타",
+  "아프간 하운드",
   "요크셔 테리어",
-  "웰시코기",
+  "웰시 코기",
+  "잭 러셀 테리어",
   "진돗개",
+  "차우차우",
   "치와와",
+  "카발리에 킹 찰스 스패니얼",
+  "케언 테리어",
   "코커 스패니얼",
   "콜리",
   "퍼그",
+  "페키니즈",
   "포메라니안",
   "푸들",
   "프렌치 불독",
-  "믹스",
+  "믹스견(소형)",
+  "믹스견(중형)",
+  "믹스견(대형)",
 ];
 
 // scoring.py DOG_TAG_SCORES 기준 (24개)
@@ -136,6 +154,12 @@ const ownerPersonalityOptions = [
 
 const previewPersonalityOptions = personalityOptions.slice(0, 10);
 const previewOwnerPersonalityOptions = ownerPersonalityOptions.slice(0, 9);
+
+async function base64ToFile(base64: string, filename: string): Promise<File> {
+  const res = await fetch(base64);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+}
 
 const defaultData: ProfileSetupData = {
   guardianName: "",
@@ -551,9 +575,10 @@ export default function ProfileSetupPage() {
   };
 
   // 인기 견종 칩 클릭 시 breed_id도 같이 세팅
+  const normalize = (s: string) => s.replace(/[\s\-·（）()]/g, '').toLowerCase();
   const handlePopularBreedSelect = (breedName: string) => {
     setForm((prev) => ({ ...prev, breed: breedName }));
-    const found = breeds.find((b) => b.name_ko === breedName);
+    const found = breeds.find((b) => normalize(b.name_ko) === normalize(breedName));
     if (found) setSelectedBreedId(found.id);
     else setSelectedBreedId(null);
   };
@@ -563,7 +588,7 @@ export default function ProfileSetupPage() {
       alert("반려견 이름을 입력해주세요.");
       return;
     }
-    if (!selectedBreedId) {
+    if (selectedBreedId === null) {
       alert("견종을 선택해주세요. (목록에서 선택하거나 견종 선택 버튼을 눌러주세요)");
       return;
     }
@@ -582,11 +607,21 @@ export default function ProfileSetupPage() {
         const petId = editState.petId;
         if (!userId || !petId) throw new Error("수정 대상 정보가 없습니다.");
 
+        let profileId: number | undefined;
+        let imageUrl: string | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'profile.jpg');
+          const uploaded = await uploadImage(file);
+          profileId = uploaded.id;
+          imageUrl = uploaded.url;
+        }
+
         await updateUser(userId, {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
           selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          profile_id: profileId,
         });
         const updatedPet = await updatePet(petId, {
           breed_id: selectedBreedId,
@@ -596,13 +631,14 @@ export default function ProfileSetupPage() {
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
         });
-        if (form.image) {
-          localStorage.setItem(`profile_photo_${userId}`, form.image);
+        if (imageUrl) {
+          localStorage.setItem(`pet_photo_${updatedPet.id}`, imageUrl);
+        } else if (form.image) {
           localStorage.setItem(`pet_photo_${updatedPet.id}`, form.image);
         }
         navigate("/mypage", { replace: true });
       } else if (isPetOnlyMode) {
-        // 반려동물 추가 모드: createPet만
+        // 반려견 추가 모드: createPet만
         const newPet = await createPet({
           breed_id: selectedBreedId,
           name: form.petName,
@@ -616,11 +652,22 @@ export default function ProfileSetupPage() {
       } else {
         // 최초 등록 모드: getMe + updateUser + createPet
         const me = await getMe();
+
+        let profileId: number | undefined;
+        let imageUrl: string | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'profile.jpg');
+          const uploaded = await uploadImage(file);
+          profileId = uploaded.id;
+          imageUrl = uploaded.url;
+        }
+
         await updateUser(me.id, {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
           selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          profile_id: profileId,
         });
         const newPet = await createPet({
           breed_id: selectedBreedId,
@@ -630,8 +677,9 @@ export default function ProfileSetupPage() {
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
         });
-        if (form.image) {
-          localStorage.setItem(`profile_photo_${me.id}`, form.image);
+        if (imageUrl) {
+          localStorage.setItem(`pet_photo_${newPet.id}`, imageUrl);
+        } else if (form.image) {
           localStorage.setItem(`pet_photo_${newPet.id}`, form.image);
         }
         navigate("/home");
@@ -648,7 +696,7 @@ export default function ProfileSetupPage() {
     <div className="min-h-screen bg-[#F6F1EC]">
       <header className="border-b-[3px] border-[#3DA0FF] bg-[#F6F1EC] px-4 py-4 text-center">
         <h1 className="text-sm font-bold tracking-tight text-[#2F2B27]">
-          {isEditMode ? "정보 수정" : isPetOnlyMode ? "반려동물 추가" : "프로필 설정"}
+          {isEditMode ? "정보 수정" : isPetOnlyMode ? "반려견 추가" : "프로필 설정"}
         </h1>
       </header>
 

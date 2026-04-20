@@ -2,9 +2,9 @@
 """
 schemas/pet.py
 --------------
-반려동물 도메인 Pydantic v2 스키마.
+반려견 도메인 Pydantic v2 스키마.
 
-- PetCreate  : 반려동물 등록 요청
+- PetCreate  : 반려견 등록 요청
 - PetUpdate  : 정보 수정 요청 (PATCH, 모든 필드 optional)
 - PetResponse: 응답 스키마
 """
@@ -20,16 +20,16 @@ from services.common_service import calculate_age
 
 
 class PetGenderEnum(str, enum.Enum):
-    """반려동물 성별."""
+    """반려견 성별."""
     MALE = "MALE"
     FEMALE = "FEMALE"
 
 
 class PetCreate(BaseModel):
-    """반려동물 등록 요청."""
+    """반려견 등록 요청."""
 
     breed_id: int = Field(..., gt=0, description="견종 ID (breeds 테이블 참조)")
-    name: str = Field(..., min_length=1, max_length=50, description="반려동물 이름")
+    name: str = Field(..., min_length=1, max_length=50, description="반려견 이름")
     birth_date: date | None = Field(None, description="생년월일 (YYYY-MM-DD)")
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부 (미입력 가능)")
@@ -39,7 +39,7 @@ class PetCreate(BaseModel):
 
 class PetUpdate(BaseModel):
     """
-        반려동물 정보 수정 요청.
+        반려견 정보 수정 요청.
 
         제공된 필드만 업데이트합니다 (PATCH 시맨틱).
     """
@@ -54,14 +54,14 @@ class PetUpdate(BaseModel):
 
 
 class PetResponse(BaseModel):
-    """반려동물 응답 스키마."""
+    """반려견 응답 스키마."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int = Field(..., description="반려동물 ID")
+    id: int = Field(..., description="반려견 ID")
     user_id: int = Field(..., description="보호자 사용자 ID")
     breed_id: int = Field(..., description="견종 ID")
-    name: str = Field(..., description="반려동물 이름")
+    name: str = Field(..., description="반려견 이름")
     birth_date: date | None = Field(None, description="생년월일")
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부")

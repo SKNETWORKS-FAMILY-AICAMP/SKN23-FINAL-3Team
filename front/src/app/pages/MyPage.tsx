@@ -110,6 +110,7 @@ function PetDetailModal({ pet, onClose }: { pet: PetCard | null; onClose: () => 
 
 export default function MyPage() {
   const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('access_token'));
   const [user, setUser] = useState<UserProfile | null>(null);
   const [pets, setPets] = useState<PetCard[]>([]);
   const [rawPets, setRawPets] = useState<Pet[]>([]);
@@ -118,7 +119,22 @@ export default function MyPage() {
   const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
   const [detailPet, setDetailPet] = useState<PetCard | null>(null);
 
+  // auth-change 이벤트(토큰 만료/로그아웃) 감지
   useEffect(() => {
+    const sync = () => setIsLoggedIn(!!localStorage.getItem('access_token'));
+    window.addEventListener('auth-change', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('auth-change', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       try {
         const [me, breeds] = await Promise.all([getMe(), getAllBreeds()]);
@@ -144,12 +160,21 @@ export default function MyPage() {
         if (cards.length) setSelectedPetId(cards[0].id);
       } catch (err) {
         console.error("마이페이지 로드 실패", err);
+        // 401로 인해 token이 이미 삭제된 경우 isLoggedIn이 false로 바뀌므로 별도 처리 불필요
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [isLoggedIn]);
+
+  // 선택된 반려견 ID를 localStorage에 저장 → Navbar 프로필 사진 연동
+  useEffect(() => {
+    if (selectedPetId !== null) {
+      localStorage.setItem('selected_pet_id', String(selectedPetId));
+      window.dispatchEvent(new Event('pet-select-change'));
+    }
+  }, [selectedPetId]);
 
   const selectedPet = useMemo(
     () => pets.find((p) => p.id === selectedPetId) ?? pets[0] ?? null,
@@ -157,7 +182,7 @@ export default function MyPage() {
   );
 
   // ── 비로그인 상태 ────────────────────────────────────────────────────────────
-  if (!localStorage.getItem("access_token")) {
+  if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-[#f7f5f1]">
         {/* 흐린 배경 레이아웃 (미리보기) */}
@@ -272,13 +297,20 @@ export default function MyPage() {
                 </span>
               </div>
               <div>
-                <p className="text-sm font-medium text-orange-500">마이페이지</p>
+                <div className="flex items-center gap-2">
+                  {user?.provider && (
+                    <ProviderBadge provider={user.provider} />
+                  )}
+                </div>
                 <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
                   {user?.nickname ?? "보호자"}님 안녕하세요! 👋
                 </h1>
                 <p className="mt-2 text-base text-slate-500">
-                  오늘은 반려견과 어떤 기록을 이어가볼까요?
+                  오늘은 {selectedPet?.name ?? "반려견"}과 어떤 기록을 이어가볼까요?
                 </p>
+                {user?.email && (
+                  <p className="mt-1 text-sm text-slate-400">{user.email}</p>
+                )}
               </div>
             </div>
 
@@ -315,7 +347,7 @@ export default function MyPage() {
                 회원정보 수정
               </button>
               <div className="grid grid-cols-2 gap-3">
-                <SummaryMiniCard label="내 반려동물" value={`${pets.length}마리`} />
+                <SummaryMiniCard label="내 반려견" value={`${pets.length}마리`} />
                 <SummaryMiniCard label="현재 선택" value={selectedPet?.name ?? "없음"} />
               </div>
             </div>
@@ -323,7 +355,7 @@ export default function MyPage() {
         </motion.div>
 
         <div className="mt-8 space-y-8">
-          {/* 반려동물 프로필 카드 목록 */}
+          {/* 반려견 프로필 카드 목록 */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -332,9 +364,9 @@ export default function MyPage() {
           >
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">반려동물 프로필</h2>
+                <h2 className="text-2xl font-bold text-slate-900">반려견 프로필</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  마이페이지 핵심 정보와 등록된 반려동물 목록
+                  마이페이지 핵심 정보와 등록된 반려견 목록
                 </p>
               </div>
               <button
@@ -343,13 +375,13 @@ export default function MyPage() {
                 className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
               >
                 <Plus className="h-4 w-4" />
-                반려동물 추가
+                반려견 추가
               </button>
             </div>
 
             {pets.length === 0 ? (
               <div className="rounded-3xl bg-slate-50 p-8 text-center text-slate-500">
-                아직 등록된 반려동물이 없어요.{" "}
+                아직 등록된 반려견이 없어요.{" "}
                 <button
                   type="button"
                   onClick={() => navigate("/step", { state: { petOnlyMode: true } })}
@@ -458,7 +490,7 @@ export default function MyPage() {
             )}
           </motion.section>
 
-          {/* 선택된 반려견 요약 */}
+          {/* 선택된 동물 요약 */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -470,8 +502,9 @@ export default function MyPage() {
                 <HeartPulse className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">선택된 반려견 요약</h2>
-                <p className="mt-1 text-sm text-slate-500">추천과 기록의 기준이 되는 프로필 정보</p>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {selectedPet ? `반려견 ${selectedPet.name}의 성격` : "선택된 반려견 성격"}
+                </h2>
               </div>
             </div>
 
@@ -516,17 +549,10 @@ export default function MyPage() {
                 </div>
 
                 {selectedPet.selectedTags.length > 0 && (
-                  <div className="rounded-[28px] bg-[#FCF6EA] p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="text-sm font-semibold text-orange-500">성격 태그</p>
-                      <div className="rounded-[14px] border border-slate-200 bg-white px-4 py-2 text-center shadow-sm">
-                        <p className="text-xs text-slate-400">등록된 성격</p>
-                        <p className="text-2xl font-bold text-orange-500">{selectedPet.selectedTags.length}</p>
-                      </div>
-                    </div>
+                  <div className="rounded-[28px] bg-[#FCF6EA] px-6 pt-5 pb-6">
                     <div className="flex flex-wrap gap-2">
                       {selectedPet.selectedTags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-[#F8E7CC] px-4 py-2 text-sm font-medium text-orange-600">
+                        <span key={tag} className="rounded-full bg-[#F8E7CC] px-5 py-2.5 text-base font-semibold text-orange-600">
                           #{tag}
                         </span>
                       ))}
@@ -536,7 +562,7 @@ export default function MyPage() {
               </div>
             ) : (
               <div className="rounded-3xl bg-slate-50 p-8 text-center text-slate-500">
-                등록된 반려동물이 없어요.
+                등록된 반려견이 없어요.
               </div>
             )}
           </motion.section>
@@ -554,5 +580,51 @@ function SummaryMiniCard({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
     </div>
+  );
+}
+
+function ProviderBadge({ provider }: { provider: string }) {
+  const key = provider.toLowerCase();
+
+  if (key === 'google') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-0.5 text-xs font-semibold text-gray-600 shadow-sm">
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+        </svg>
+        구글 로그인
+      </span>
+    );
+  }
+
+  if (key === 'kakao') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-semibold text-[#191919] shadow-sm" style={{ backgroundColor: '#FEE500' }}>
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="#000000">
+          <path d="M12 3C6.477 3 2 6.477 2 10.8c0 2.863 1.922 5.374 4.818 6.78-.198.73-.644 2.478-.735 2.868-.11.478.172.471.372.343.164-.107 2.63-1.798 3.048-2.094C10.155 18.884 11.053 19 12 19c5.523 0 10-3.477 10-7.8S17.523 3 12 3z" />
+        </svg>
+        카카오 로그인
+      </span>
+    );
+  }
+
+  if (key === 'naver') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-semibold text-white shadow-sm" style={{ backgroundColor: '#03C75A' }}>
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="white">
+          <path d="M16.273 12.845L7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727z" />
+        </svg>
+        네이버 로그인
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-3 py-0.5 text-xs font-semibold text-slate-600 shadow-sm">
+      🔑 {provider} 로그인
+    </span>
   );
 }

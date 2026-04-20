@@ -1,46 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { getDiariesByUser } from '../services/dbDiaryService';
+import { getMe } from '../services/userService';
 
 interface DayEmotion {
-  date: string;
+  date: string;   // 'YYYY-MM-DD'
   emotion: string;
+  diaryId: number;
 }
 
-const EMOTIONS_LIST = ['😊', '😆', '😌', '😴', '😢', '😠', '🤔', '😨'];
-
-const SAMPLE_EMOTIONS: DayEmotion[] = [
-  { date: '2026-01-01', emotion: '😊' },
-  { date: '2026-01-02', emotion: '😆' },
-  { date: '2026-01-03', emotion: '😊' },
-  { date: '2026-01-04', emotion: '😌' },
-  { date: '2026-01-05', emotion: '😠' },
-  { date: '2026-01-06', emotion: '😊' },
-  { date: '2026-01-07', emotion: '😴' },
-  { date: '2026-01-08', emotion: '😊' },
-  { date: '2026-01-09', emotion: '😆' },
-  { date: '2026-01-10', emotion: '😴' },
-  { date: '2026-01-11', emotion: '😊' },
-  { date: '2026-01-12', emotion: '😆' },
-  { date: '2026-01-13', emotion: '😌' },
-  { date: '2026-01-14', emotion: '😊' },
-  { date: '2026-01-15', emotion: '😊' },
-  { date: '2026-01-16', emotion: '😢' },
-  { date: '2026-01-17', emotion: '😊' },
-  { date: '2026-01-18', emotion: '😌' },
-  { date: '2026-01-19', emotion: '😆' },
-  { date: '2026-01-20', emotion: '😊' },
-  { date: '2026-01-21', emotion: '😴' },
-  { date: '2026-01-22', emotion: '😢' },
-  { date: '2026-01-23', emotion: '😊' },
-  { date: '2026-01-24', emotion: '😆' },
-  { date: '2026-01-25', emotion: '😊' },
-  { date: '2026-01-26', emotion: '😌' },
-  { date: '2026-01-27', emotion: '😊' },
-  { date: '2026-01-28', emotion: '😆' },
-  { date: '2026-01-29', emotion: '😊' },
-  { date: '2026-01-30', emotion: '😴' },
-  { date: '2026-01-31', emotion: '😊' },
-];
 
 const MONTHS = [
   { num: 1, name: '1월' },
@@ -58,7 +26,27 @@ const MONTHS = [
 ];
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1)); // January 2026
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [emotions, setEmotions] = useState<DayEmotion[]>([]);
+
+  // 로그인한 유저의 일기 목록을 불러와 날짜별 감정 이모지를 세팅
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    getMe()
+      .then((me) => getDiariesByUser(me.id))
+      .then((diaries) => {
+        const mapped: DayEmotion[] = diaries
+          .filter((d) => d.emotion)
+          .map((d) => ({
+            date: d.created_at.substring(0, 10),  // 'YYYY-MM-DD'
+            emotion: d.emotion!,
+            diaryId: d.id,
+          }));
+        setEmotions(mapped);
+      })
+      .catch(() => {/* 로그인 안 된 경우 등 무시 */});
+  }, []);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -79,8 +67,7 @@ export default function CalendarPage() {
   const getEmotionForDate = (day: number | null) => {
     if (!day) return null;
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const emotion = SAMPLE_EMOTIONS.find((e) => e.date === dateStr);
-    return emotion?.emotion || null;
+    return emotions.find((e) => e.date === dateStr)?.emotion ?? null;
   };
 
   const goToPreviousMonth = () => {

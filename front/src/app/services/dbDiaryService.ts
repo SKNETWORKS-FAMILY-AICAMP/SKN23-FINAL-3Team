@@ -32,7 +32,10 @@ export interface DiaryCreateInput {
   how_text?: string
   why_text?: string
   title?: string
+  content?: string
+  summary?: string
   emotion?: string
+  image_id?: number
 }
 
 export interface DiaryUpdateInput {

@@ -60,7 +60,7 @@ class Place(Base):
     acmpy_type_cd: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="동반유형 (예: 전구역 동반가능 / 일부구역 동반가능)")
     acmpy_psbl_cpam: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="동반가능동물 설명 (예: 전 견종 가능, 맹견 입마개 필수)")
     acmpy_need_mtr: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="동반 시 필요사항 (예: 목줄 착용)")
-    rela_poses_fclty: Mapped[YNEnum | None] = mapped_column(SAEnum(YNEnum), nullable=True, comment="반려동물 관련 구비 시설 (Y/N)")
+    rela_poses_fclty: Mapped[YNEnum | None] = mapped_column(SAEnum(YNEnum), nullable=True, comment="반려견 관련 구비 시설 (Y/N)")
     etc_acmpy_info: Mapped[str | None] = mapped_column(Text, nullable=True, comment="기타 동반 정보 (상세 안내 텍스트)")
     description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="장소 통합 설명 텍스트 (VectorDB ChromaDB 임베딩 소스)")
     

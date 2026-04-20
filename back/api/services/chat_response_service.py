@@ -11,7 +11,7 @@ services/chat_response_service.py
     - (unknown)       → _handle_fallback()
 
 dispatch() 는 DispatchContext(user_id, db) 를 선택 인자로 받아
-다이어리 핸들러에서 사용자 반려동물/이미지 DB 에 접근할 수 있도록 합니다.
+다이어리 핸들러에서 사용자 반려견/이미지 DB 에 접근할 수 있도록 합니다.
 
 장시간 블로킹 호출(RAG, GPT)은 asyncio.to_thread 로 스레드 풀에서 실행됩니다.
 """
@@ -57,7 +57,7 @@ def _get_openai_client() -> AsyncOpenAI:
 class DispatchContext:
     """
         핸들러에 사용자/DB 컨텍스트를 전달하는 컨테이너.
-        장소/시설 핸들러는 무시하지만, 다이어리 핸들러는 user_id 로 반려동물을 조회합니다.
+        장소/시설 핸들러는 무시하지만, 다이어리 핸들러는 user_id 로 반려견을 조회합니다.
     """
     user_id: int | None = None
     db: AsyncSession | None = None
@@ -176,7 +176,7 @@ def _infer_diary_type(text: str) -> str:
 
 async def _load_pet_context(ctx: DispatchContext) -> dict:
     """
-        ctx.user_id 로 사용자의 첫 번째 반려동물을 조회하여
+        ctx.user_id 로 사용자의 첫 번째 반려견을 조회하여
         diary_prompt 입력에 필요한 필드 딕셔너리로 변환합니다.
         조회 실패 시 기본값을 반환합니다.
     """
@@ -197,7 +197,7 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
         )
         pet = result.scalar_one_or_none()
     except Exception as e:
-        logger.warning(f"[Diary] 반려동물 조회 실패: {e}")
+        logger.warning(f"[Diary] 반려견 조회 실패: {e}")
         return dict(_DEFAULT_DIARY_PET)
 
     if pet is None:
@@ -332,7 +332,7 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
         사용자 메시지를 바탕으로 그림일기(텍스트 + 이미지)를 생성합니다.
 
         흐름:
-            1. ctx.user_id 로 반려동물 컨텍스트 확보 (없으면 기본값)
+            1. ctx.user_id 로 반려견 컨텍스트 확보 (없으면 기본값)
             2. build_diary_prompt → GPT (_DIARY_MODEL) → 일기 JSON
             3. build_final_image_prompt → OpenAI Images → base64
             4. base64 → S3 업로드 → images 테이블 저장

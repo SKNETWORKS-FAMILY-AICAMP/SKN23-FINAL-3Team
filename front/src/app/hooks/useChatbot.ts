@@ -313,11 +313,19 @@ export function useChatbot(pet: Pet) {
       emotionEmoji: state.selectedEmotionEmoji,
       emotionTone: em.tone,
     })
-      .then((diary) => dispatch({ type: 'SET_DIARY', diary }))
+      .then((diary) => dispatch({
+        type: 'SET_DIARY',
+        diary: { ...diary, emotion: state.selectedEmotionEmoji ?? undefined },
+      }))
       .catch(() =>
         dispatch({
           type: 'SET_DIARY',
-          diary: { title: '생성 실패', content: '일기 생성 중 오류가 발생했어요. 다시 시도해주세요.', summary: '' },
+          diary: {
+            title: '생성 실패',
+            content: '일기 생성 중 오류가 발생했어요. 다시 시도해주세요.',
+            summary: '',
+            emotion: state.selectedEmotionEmoji ?? undefined,
+          },
         })
       )
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -205,6 +205,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"[Intent] 워밍업 훅 등록 실패 (무시): {e}")
 
+    # 커스텀 견종 (Dog API에 없는 믹스견) 초기 삽입
+    try:
+        from sqlalchemy import select
+        from core.database import AsyncSessionLocal
+        from models.breed import Breed, BreedSizeEnum
+
+        _CUSTOM_BREEDS = [
+            {"name_ko": "믹스견(소형)", "name_en": "Mixed Breed (Small)", "size": BreedSizeEnum.small},
+            {"name_ko": "믹스견(중형)", "name_en": "Mixed Breed (Medium)", "size": BreedSizeEnum.medium},
+            {"name_ko": "믹스견(대형)", "name_en": "Mixed Breed (Large)", "size": BreedSizeEnum.large},
+        ]
+        async with AsyncSessionLocal() as _sess:
+            for _cb in _CUSTOM_BREEDS:
+                _res = await _sess.execute(select(Breed).where(Breed.name_ko == _cb["name_ko"]))
+                if _res.scalar_one_or_none() is None:
+                    _sess.add(Breed(name_ko=_cb["name_ko"], name_en=_cb["name_en"], top10=False, size=_cb["size"]))
+            await _sess.commit()
+        logger.info("[DB] 커스텀 견종(믹스견 3종) 확인/삽입 완료")
+    except Exception as e:
+        logger.warning(f"[DB] 커스텀 견종 삽입 실패 (무시): {e}")
+
     yield  # 앱 실행 중
 
     # ── 종료 ────────────────────────────────────────────────────────────────
@@ -283,7 +304,7 @@ app.include_router(auth_router.router,          prefix="/auth",       tags=["Aut
 # 사용자 (4순위) — /me 가 /{user_id} 보다 먼저 매칭되도록 순서 보장
 app.include_router(users_router.router,         prefix="/users",      tags=["Users"])
 
-# 반려동물 (5순위)
+# 반려견 (5순위)
 app.include_router(pets_router.router,          prefix="/pets",       tags=["Pets"])
 
 # 채팅방 + 채팅 메시지 (6순위) — 같은 prefix 공유
