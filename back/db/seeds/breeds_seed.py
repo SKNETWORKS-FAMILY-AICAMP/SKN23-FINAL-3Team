@@ -23,16 +23,17 @@ import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
+load_dotenv()
+
 # ── 경로 설정: back/api 를 sys.path 에 추가 ────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))            # back/db/seeds/
 _BACK_API = os.path.normpath(os.path.join(_HERE, "../../api"))  # back/api/
 sys.path.insert(0, _BACK_API)
 
-load_dotenv(os.path.normpath(os.path.join(_HERE, "../../../.env")))
-
 # ── 설정 ──────────────────────────────────────────────────────────────────
 DOG_API_URL = "https://api.thedogapi.com/v1/breeds"
 DOG_API_KEY = os.getenv("DOG_API_KEY", "")
+_CHAT_MODEL = os.getenv("GPT_MODEL", "gpt-4.1-mini")
 
 # 국내 인기 견종 TOP10 (The Dog API 영문명 소문자 기준)
 TOP10_NAMES: set[str] = {
@@ -75,7 +76,7 @@ def translate_breed_name(breed_name: str) -> str:
     """영문 견종명 → 한국어 번역 (GPT-4.1-mini)."""
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=_CHAT_MODEL,
             messages=[
                 {
                     "role": "system",
