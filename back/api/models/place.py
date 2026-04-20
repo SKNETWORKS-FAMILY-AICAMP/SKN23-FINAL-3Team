@@ -11,18 +11,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-import enum
-
 from sqlalchemy import BigInteger, Boolean, DateTime, Numeric, String, Text, UniqueConstraint, Index, func, Enum as SAEnum
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
-
-
-class YNEnum(str, enum.Enum):
-    Y = "Y"
-    N = "N"
+from core.type.place import YNEnum
 
 
 class Place(Base):

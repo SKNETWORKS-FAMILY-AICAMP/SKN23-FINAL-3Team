@@ -10,14 +10,10 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class YNEnum(str, Enum):
-    Y = "Y"
-    N = "N"
+from core.type.place import YNEnum
 
 
 class PlaceResponse(BaseModel):

@@ -10,7 +10,6 @@ breeds 테이블 ORM 모델.
 
 from __future__ import annotations
 
-import enum
 from datetime import datetime
 from core.utils import kst_now
 
@@ -18,20 +17,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, String, func, Enum as SAEn
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
-
-
-class BreedSizeEnum(str, enum.Enum):
-    """견종 크기 분류."""
-    small = "small"
-    medium = "medium"
-    large = "large"
-
-
-class ActivityLevelEnum(str, enum.Enum):
-    """활동량 수준."""
-    low = "low"
-    medium = "medium"
-    high = "high"
+from core.type.breed import ActivityLevelEnum, BreedSizeEnum
 
 
 class Breed(Base):

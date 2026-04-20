@@ -10,18 +10,13 @@ schemas/user.py
 
 from __future__ import annotations
 
-import enum
 from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from services.common_service import calculate_age
 
-
-class GenderEnum(str, enum.Enum):
-    """성별 Enum (API 응답/요청 공용)."""
-    MALE = "MALE"
-    FEMALE = "FEMALE"
+from core.type.gender import GenderEnum
 
 
 class UserResponse(BaseModel):
