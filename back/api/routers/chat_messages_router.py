@@ -8,9 +8,10 @@ routers/chat_messages.py
 
 엔드포인트:
     POST /chat-rooms/{room_id}/messages
-            메시지 저장 (role: user | assistant | system)
-            → 동시에 chat_rooms.updated_at 갱신
-            → 채팅방 title이 None이면 첫 메시지로 자동 생성
+            사용자 메시지 저장 → 의도 분류(KoELECTRA) → 각 서비스 디스패치
+            → assistant 응답 메시지 저장까지 한 턴 처리
+            → chat_rooms.updated_at 갱신 및 title 자동 생성
+            → role 은 'user' 로 고정됨 (다른 role 은 400)
 
     GET  /chat-rooms/{room_id}/messages
             전체 메시지 조회 (created_at ASC, LLM 컨텍스트용)
@@ -31,7 +32,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_current_user, get_db
 from models.user import User
-from schemas.chat_message import MessageCreate, MessageResponse
+from schemas.chat_message import (
+    ChatTurnResponse,
+    IntentInfo,
+    MessageCreate,
+    MessageResponse,
+)
 from services import chat_message_service as msg_svc
 
 router = APIRouter(tags=["ChatMessages"])
@@ -39,13 +45,17 @@ router = APIRouter(tags=["ChatMessages"])
 
 @router.post(
     "/{room_id}/messages",
-    response_model=MessageResponse,
+    response_model=ChatTurnResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="채팅 메시지 저장",
+    summary="채팅 메시지 전송 (의도 분류 + 응답 생성)",
     description=(
-        "메시지를 저장하고 채팅방의 `updated_at`을 갱신합니다.\n\n"
-        "- 채팅방 `title`이 `null`이면 첫 메시지 내용(앞 100자)으로 자동 설정됩니다.\n"
-        "- `role`: `user` | `assistant` | `system`"
+        "사용자 메시지를 저장하고 한 턴을 완결합니다.\n\n"
+        "1. role='user' 메시지 저장 (다른 role 은 400)\n"
+        "2. KoELECTRA 의도 분류 (`다이어리 작성` / `장소추천` / `시설정보`)\n"
+        "3. 의도에 맞는 도메인 서비스(placeRAG/LLM)로 라우팅하여 응답 생성\n"
+        "4. role='assistant' 메시지 저장\n"
+        "5. `chat_rooms.updated_at` 갱신, `title` 이 null 이면 첫 메시지로 자동 설정\n\n"
+        "응답에는 저장된 user/assistant 메시지와 의도 분류 결과가 함께 포함됩니다."
     ),
 )
 async def create_message(
@@ -53,9 +63,18 @@ async def create_message(
     data: MessageCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> MessageResponse:
-    message = await msg_svc.create_message(room_id, data, db, current_user.id)
-    return MessageResponse.model_validate(message)
+) -> ChatTurnResponse:
+    user_msg, assistant_msg, intent_result = await msg_svc.create_message_with_response(
+        room_id, data, db, current_user.id
+    )
+    return ChatTurnResponse(
+        user_message=MessageResponse.model_validate(user_msg),
+        assistant_message=MessageResponse.model_validate(assistant_msg),
+        intent=IntentInfo(
+            intent=intent_result.intent,
+            confidence=intent_result.confidence,
+        ),
+    )
 
 
 @router.get(
