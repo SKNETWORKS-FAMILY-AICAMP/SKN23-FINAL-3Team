@@ -4,6 +4,8 @@ from sqlalchemy import or_, select
 from models.place import Place as PlaceModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import Request
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,20 +13,73 @@ async def search_places_from_db(
     query: str,
     db: AsyncSession,
     n_results: int = 5,
+    category: str = None,
+    city: str = None, 
+    request: Request = None,
 ) -> list[dict]:
-    """places 테이블에서 쿼리 키워드로 LIKE 검색 후 결과를 반환한다.
+    """하이브리드 장소 검색 (ChromaDB 벡터 검색 + RDB 상세 조회)
 
-    결과가 없으면 최근 등록된 장소 n_results개를 반환하여
-    파이프라인이 항상 응답을 반환할 수 있도록 보장한다.
+    1. ChromaDB에서 의미 기반 유사 장소 검색 → content_id 추출
+    2. content_id로 RDB에서 상세 정보 조회 + 점수 계산
+    3. ChromaDB 실패 시 RDB LIKE 검색으로 폴백
 
     Args:
-        query: 검색 키워드 (name 또는 description 컬럼에 LIKE 매칭).
-        db: 비동기 DB 세션.
-        n_results: 반환할 최대 결과 수.
+        query: 검색 쿼리 (예: "한강이랑 비슷한 분위기 장소")
+        db: 비동기 DB 세션
+        n_results: 반환할 최대 결과 수
+        category: 카테고리 필터 (선택)
+        city: 도시 필터 (선택)
+        request: FastAPI Request 객체 (AIContainer 접근용, 선택)
 
     Returns:
         장소 정보 dict 리스트. 예외 발생 시 빈 리스트 반환.
     """
+    # ── 1. ChromaDB 벡터 검색 ──────────────────────────────
+    vector_results = []
+    try:
+        container = request.app.state.ai_container if request else None
+        if container:
+            vector_results = container._places_retriever.search(
+                query=query,
+                n_results=n_results,
+                category=category,
+                city=city,
+            )
+    except Exception as e:
+        logger.warning(f"[PlaceService] ChromaDB 검색 실패, RDB 검색으로 전환: {e}")
+
+    # ── 2. ChromaDB 결과 있으면 → content_id로 RDB 조회 ───
+    if vector_results:
+        try:
+            content_ids = [
+                vr["content_id"] for vr in vector_results
+                if vr.get("content_id")
+            ]
+            if content_ids:
+                stmt = select(PlaceModel).where(PlaceModel.content_id.in_(content_ids))
+                result = await db.execute(stmt)
+                db_places = {p.content_id: p for p in result.scalars().all()}
+
+                places = []
+                for vr in vector_results:
+                    cid = vr.get("content_id", "")
+                    if cid and cid in db_places:
+                        place_dict = _to_dict(db_places[cid])
+                        place_dict["rag_score"]   = vr.get("similarity", 0.0)
+                        place_dict["rule_score"]  = _calc_rule_score(db_places[cid])
+                        place_dict["final_score"] = round(
+                            place_dict["rag_score"] * 0.7 +
+                            place_dict["rule_score"] * 0.3, 4
+                        )
+                        places.append(place_dict)
+
+                if places:
+                    return sorted(places, key=lambda x: x["final_score"], reverse=True)
+
+        except Exception as e:
+            logger.warning(f"[PlaceService] RDB 상세 조회 실패, LIKE 검색으로 전환: {e}")
+
+    # ── 3. 기존 LIKE 검색 (폴백) ───────────────────────────
     try:
         keyword = f"%{query}%"
         stmt = (
@@ -46,12 +101,20 @@ async def search_places_from_db(
         logger.warning(f"[PlaceService] DB 장소 검색 실패: {e}")
         return []
 
+def _calc_rule_score(place: PlaceModel) -> float:
+    score = 0.5
+    if place.acmpy_type_cd and "전구역" in place.acmpy_type_cd:
+        score += 0.3
+    if place.is_indoor is not None:
+        score += 0.2
+    return round(min(score, 1.0), 4)
 
 def _to_dict(place: PlaceModel) -> dict:
     return {
         "name": place.name or "",
         "address": place.address or "",
         "category": place.content_type_id or "",
+        "content_id":  place.content_id or "",  
         "lat": float(place.latitude) if place.latitude else 0.0,
         "lng": float(place.longitude) if place.longitude else 0.0,
         "tel": place.tel or "",
@@ -61,4 +124,7 @@ def _to_dict(place: PlaceModel) -> dict:
         "description": place.description or "",
         "firstimage": place.firstimage or "",
         "similarity": 1.0,
+        "rag_score":   0.0,                
+        "rule_score":  0.0,             
+        "final_score": 0.0,          
     }

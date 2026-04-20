@@ -38,6 +38,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.image_service import _upload_to_s3
 from services.intent_service import IntentResult, RAG_STRATEGY_MAP
 from services.place_service import search_places_from_db
+from fastapi import Request
+
+from ai.prompts.diary_prompt_builder import DiaryPromptBuilder
+_diary_prompt_builder = DiaryPromptBuilder()
 
 logger = logging.getLogger(__name__)
 
@@ -210,13 +214,12 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
 
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     """build_diary_prompt → GPT 호출 → JSON 파싱."""
-    from ai.llm.prompts.diary_prompt import build_diary_prompt
 
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
     conversation_summary = f"보호자: {query.strip()}"
 
-    prompt = build_diary_prompt(
+    prompt = _diary_prompt_builder.build_diary_prompt(
         pet_name=pet_ctx["pet_name"],
         breed=pet_ctx["breed"],
         birth_date=pet_ctx["birth_date"],
@@ -256,9 +259,8 @@ async def _generate_and_store_image(
         build_final_image_prompt → OpenAI 이미지 생성 → S3 업로드 → images 테이블 저장.
         실패 시 None 을 반환하고 호출 측에서 이미지 없이 응답합니다.
     """
-    from ai.llm.prompts.diary_prompt import build_final_image_prompt
 
-    image_prompt = build_final_image_prompt(
+    image_prompt = _diary_prompt_builder.build_final_image_prompt(
         image_prompt_base=diary_data.get("image_prompt_base", ""),
         breed=pet_ctx["breed"],
         breed_en=pet_ctx["breed_en"],
@@ -347,11 +349,11 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
     return "\n".join(lines)
 
 
-async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5) -> str:
+async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, request: Request = None) -> str:
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=top_k)
+        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request)
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
@@ -384,6 +386,7 @@ async def dispatch(
     intent_result: IntentResult,
     query: str,
     ctx: DispatchContext | None = None,
+    request: Request = None,
 ) -> str:
     """
         의도 분류 결과에 따라 적절한 핸들러로 라우팅하고 assistant 응답 텍스트를 반환합니다.
@@ -408,7 +411,7 @@ async def dispatch(
     if intent == "다이어리 작성":
         return await _handle_diary(query, ctx)
     if intent == "장소추천":
-        return await _handle_places(query, ctx, top_k=top_k)
+        return await _handle_places(query, ctx, top_k=top_k, request=request)
     if intent == "시설정보":
         return await _handle_facility(query, ctx)
     if intent == "기타" or intent not in RAG_STRATEGY_MAP:

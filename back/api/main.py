@@ -89,15 +89,17 @@ def _configure_logging() -> None:
 _configure_logging()
 
 # AI 일기/이미지 생성 모듈 (프로젝트 루트의 ai/ 패키지)
+logger = logging.getLogger(__name__)
+
 try:
-    from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
+    from ai.prompts.diary_prompt_builder import DiaryPromptBuilder
     from ai.eval.evaluator import create_diary_session, complete_image_eval, print_eval_summary
+    _diary_prompt_builder = DiaryPromptBuilder()
     _AI_AVAILABLE = True
 except ImportError:
     _AI_AVAILABLE = False
-    logger_tmp = logging.getLogger(__name__)
-    logger_tmp.warning("[AI] ai 패키지 임포트 실패 — /api/diary/* 엔드포인트 비활성화")
-logger = logging.getLogger(__name__)
+    _diary_prompt_builder = None
+    logger.warning("[AI] ai 패키지 임포트 실패 — /api/diary/* 엔드포인트 비활성화")
 
 
 # =============================================================================
@@ -225,6 +227,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("[DB] 커스텀 견종(믹스견 3종) 확인/삽입 완료")
     except Exception as e:
         logger.warning(f"[DB] 커스텀 견종 삽입 실패 (무시): {e}")
+
+    # AIContainer 초기화 (ChromaDB + 임베딩 모델)
+    try:
+        from ai.container import AIContainer
+        app.state.ai_container = AIContainer(
+            openai_api_key=settings.OPENAI_API_KEY
+        )
+        logger.info("[AI] AIContainer 초기화 완료")
+    except Exception as e:
+        logger.warning(f"[AI] AIContainer 초기화 실패 (무시): {e}")
+        app.state.ai_container = None
 
     yield  # 앱 실행 중
 
@@ -405,7 +418,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     if not conversation_summary:
         raise HTTPException(status_code=400, detail="답변 내용이 없습니다.")
 
-    prompt = build_diary_prompt(
+    prompt = _diary_prompt_builder.build_diary_prompt(
         pet_name=req.pet_name,
         breed=req.breed,
         birth_date=req.birth_date,
@@ -433,7 +446,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail=f"LLM 응답 파싱 실패: {raw[:200]}")
 
-    image_prompt = build_final_image_prompt(
+    image_prompt = _diary_prompt_builder.build_final_image_prompt(
         image_prompt_base=data.get("image_prompt_base", ""),
         breed=req.breed,
         breed_en=req.breed_en,
