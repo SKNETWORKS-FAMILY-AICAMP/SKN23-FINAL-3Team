@@ -2,7 +2,7 @@
 """
 services/pet.py
 ---------------
-반려동물 도메인 서비스 레이어 (DB 쿼리 + 비즈니스 로직 통합).
+반려견 도메인 서비스 레이어 (DB 쿼리 + 비즈니스 로직 통합).
 
 주요 함수:
     - create_pet() : 등록 (breed_id / type_id FK 무결성 검증)
@@ -12,7 +12,7 @@ services/pet.py
     - delete_pet() : Soft Delete (본인 확인)
 
 [소유권 정책]
-반려동물의 수정 · 삭제는 등록한 사용자(pet.user_id == current_user_id) 본인만 가능합니다.
+반려견의 수정 · 삭제는 등록한 사용자(pet.user_id == current_user_id) 본인만 가능합니다.
 """
 
 from __future__ import annotations
@@ -30,11 +30,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
 def _assert_owner(pet: Pet, current_user_id: int) -> None:
-    """요청자가 해당 반려동물의 보호자인지 검증합니다."""
+    """요청자가 해당 반려견의 보호자인지 검증합니다."""
     if pet.user_id != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="본인의 반려동물만 수정/삭제할 수 있습니다.",
+            detail="본인의 반려견만 수정/삭제할 수 있습니다.",
         )
 
 
@@ -62,15 +62,35 @@ async def _verify_keyword(keyword_id: int, db: AsyncSession) -> None:
 
 # ── 공개 서비스 함수 ─────────────────────────────────────────────────────────
 
+async def _get_default_keyword_id(db: AsyncSession) -> int:
+    """type_id 미전송 시 PET 카테고리 첫 번째 키워드 ID를 반환합니다."""
+    from models.keyword import Keyword
+    result = await db.execute(
+        select(Keyword).where(Keyword.category == "PET").limit(1)
+    )
+    keyword = result.scalar_one_or_none()
+    if keyword is None:
+        # PET 카테고리 없으면 전체에서 첫 번째
+        result = await db.execute(select(Keyword).limit(1))
+        keyword = result.scalar_one_or_none()
+    if keyword is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="등록된 키워드가 없습니다. 관리자에게 문의하세요.",
+        )
+    return keyword.id
+
+
 async def create_pet(
     data: PetCreate,
     db: AsyncSession,
     current_user_id: int,
 ) -> Pet:
     """
-        반려동물을 등록합니다.
+        반려견을 등록합니다.
 
         user_id는 current_user_id로 자동 설정됩니다 (요청 바디에서 받지 않음).
+        type_id 미전송 시 PET 카테고리 첫 번째 키워드를 자동 사용합니다.
 
         Args:
                 data           : PetCreate 요청 데이터
@@ -83,9 +103,22 @@ async def create_pet(
         Raises:
                 HTTPException 404: breed_id 또는 type_id 참조 불일치
     """
+    # gender 필수 검증
+    if data.gender is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="반려견 성별(gender)은 필수 항목입니다.",
+        )
+
     # FK 무결성 검증
     await _verify_breed(data.breed_id, db)
-    await _verify_keyword(data.type_id, db)
+
+    # type_id: 미전송 시 첫 번째 PET 키워드 자동 사용
+    type_id = data.type_id
+    if type_id is None:
+        type_id = await _get_default_keyword_id(db)
+    else:
+        await _verify_keyword(type_id, db)
 
     pet = Pet(
         user_id=current_user_id,
@@ -94,7 +127,7 @@ async def create_pet(
         birth_date=data.birth_date,
         gender=data.gender,
         is_neutered=data.is_neutered,
-        type_id=data.type_id,
+        type_id=type_id,
         selected_tags=data.selected_tags,
     )
     db.add(pet)
@@ -106,7 +139,7 @@ async def create_pet(
 
 async def list_pets(user_id: int, db: AsyncSession) -> Sequence[Pet]:
     """
-        사용자별 반려동물 목록 조회 (deleted_at IS NULL, 최신 등록순).
+        사용자별 반려견 목록 조회 (deleted_at IS NULL, 최신 등록순).
 
         Args:
                 user_id: 조회할 사용자 ID
@@ -125,10 +158,10 @@ async def list_pets(user_id: int, db: AsyncSession) -> Sequence[Pet]:
 
 async def get_pet(pet_id: int, db: AsyncSession) -> Pet:
     """
-        반려동물 단건 조회.
+        반려견 단건 조회.
 
         Raises:
-                HTTPException 404: 존재하지 않거나 삭제된 반려동물
+                HTTPException 404: 존재하지 않거나 삭제된 반려견
     """
     result = await db.execute(
         select(Pet).where(Pet.id == pet_id, Pet.deleted_at.is_(None))
@@ -138,7 +171,7 @@ async def get_pet(pet_id: int, db: AsyncSession) -> Pet:
     if pet is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"반려동물(id={pet_id})을 찾을 수 없습니다.",
+            detail=f"반려견(id={pet_id})을 찾을 수 없습니다.",
         )
 
     return pet
@@ -151,14 +184,14 @@ async def update_pet(
     current_user_id: int,
 ) -> Pet:
     """
-        반려동물 정보를 수정합니다.
+        반려견 정보를 수정합니다.
 
         제공된 필드만 업데이트합니다 (PATCH 시맨틱).
         breed_id / type_id 변경 시 FK 무결성 검증을 수행합니다.
 
         Raises:
-                HTTPException 403: 본인 반려동물 아님
-                HTTPException 404: 반려동물 / 견종 / 키워드 없음
+                HTTPException 403: 본인 반려견 아님
+                HTTPException 404: 반려견 / 견종 / 키워드 없음
     """
     pet = await get_pet(pet_id, db)
     _assert_owner(pet, current_user_id)
@@ -190,11 +223,11 @@ async def delete_pet(
     current_user_id: int,
 ) -> None:
     """
-        반려동물 Soft Delete.
+        반려견 Soft Delete.
 
         Raises:
-                HTTPException 403: 본인 반려동물 아님
-                HTTPException 404: 반려동물 없음
+                HTTPException 403: 본인 반려견 아님
+                HTTPException 404: 반려견 없음
     """
     pet = await get_pet(pet_id, db)
     _assert_owner(pet, current_user_id)

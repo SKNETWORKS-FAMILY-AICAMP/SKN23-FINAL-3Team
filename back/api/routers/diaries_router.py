@@ -7,7 +7,7 @@ routers/diaries.py
 엔드포인트:
     POST   /diaries                         다이어리 생성 (image_id 없이 1차 저장 가능)
     GET    /diaries?user_id={id}            사용자별 목록 (created_at DESC)
-    GET    /diaries?user_id={id}&pet_id={id} 반려동물별 추가 필터
+    GET    /diaries?user_id={id}&pet_id={id} 반려견별 추가 필터
     GET    /diaries/{diary_id}              단건 조회
     PATCH  /diaries/{diary_id}              수정 (image_id 바인딩 포함, 본인만)
     DELETE /diaries/{diary_id}              Soft Delete (본인만)
@@ -56,13 +56,13 @@ async def create_diary(
     summary="다이어리 목록 조회",
     description=(
         "- `user_id`: 사용자별 필터 (필수)\n"
-        "- `pet_id`: 반려동물별 추가 필터 (선택)\n"
+        "- `pet_id`: 반려견별 추가 필터 (선택)\n"
         "- 정렬: `created_at DESC`"
     ),
 )
 async def list_diaries(
     user_id: Annotated[int, Query(description="조회할 사용자 ID")],
-    pet_id: Annotated[int | None, Query(description="반려동물 ID 필터")] = None,
+    pet_id: Annotated[int | None, Query(description="반려견 ID 필터")] = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[DiaryResponse]:

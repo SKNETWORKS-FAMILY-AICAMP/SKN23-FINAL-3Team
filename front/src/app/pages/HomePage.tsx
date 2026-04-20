@@ -1,11 +1,16 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { Settings, PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map } from 'lucide-react';
+import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map } from 'lucide-react';
 import type { Pet, DiaryEntry, User } from '../types';
 import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
 import ChatBot from '../components/ChatBot';
+import ChatHistory from '../components/ChatHistory';
 import type { GeneratedDiary } from '../services/diaryService';
+import { createDiary, updateDiary } from '../services/dbDiaryService';
+import { uploadImage } from '../services/imageService';
+import { getMe } from '../services/userService';
+import { getPets } from '../services/petService';
 
 type Tab = 'diary' | 'map' | null;
 
@@ -176,7 +181,7 @@ function MapIntro({ onStartMap }: { onStartMap: () => void }) {
           </p>
 
           <div className="mb-8 flex flex-wrap gap-2">
-            {['#반려견동반', '#펫프렌들리', '#실내추천', '#산책코스', '#여행지'].map((tag) => (
+            {['#반려견동반', '#실내추천', '#산책코스', '#여행지'].map((tag) => (
               <span
                 key={tag}
                 className="rounded-full border border-[#C8E6C9] bg-white/90 px-4 py-1.5 text-sm text-[#3A7A4A] shadow-sm"
@@ -397,8 +402,10 @@ export default function HomePage({
 }: Partial<Props>) {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const [tab, setTab] = useState<Tab>(null);
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = new URLSearchParams(location.search).get('tab');
+    return (t === 'diary' || t === 'map') ? t : null;
+  });
   const [autoPlace, setAutoPlace] = useState('');
   const [showDiaryEditor, setShowDiaryEditor] = useState(false);
   const [showMapSearch, setShowMapSearch] = useState(false);
@@ -406,25 +413,35 @@ export default function HomePage({
   const [diaryTrigger, setDiaryTrigger] = useState(0);
   const [showAlbum, setShowAlbum] = useState(false);
   const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
-  const [testConfig, setTestConfig] = useState<{ petName: string; breed: string; ownerName: string; birthDate: string }>(() => {
-    try {
-      const saved = localStorage.getItem('mungDiaryTestConfig');
-      const parsed = saved ? JSON.parse(saved) : {};
-      return {
-        petName: parsed.petName ?? '콩이',
-        breed: parsed.breed ?? '말티즈',
-        ownerName: parsed.ownerName ?? '테스트유저',
-        birthDate: parsed.birthDate ?? '',
-      };
-    } catch {
-      return { petName: '콩이', breed: '말티즈', ownerName: '테스트유저', birthDate: '' };
+  const [isSaving, setIsSaving] = useState(false);
+  const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+
+  // 로그인된 유저의 첫 번째 반려견 ID를 백엔드에서 가져옴
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    getMe()
+      .then((me) => getPets(me.id))
+      .then((pets) => { if (pets.length > 0) setFetchedPetId(pets[0].id); })
+      .catch(() => {/* 로그인 안 된 경우 무시 */});
+  }, []);
+
+  // URL ?tab= 파라미터 변경 시 탭 동기화
+  useEffect(() => {
+    const t = new URLSearchParams(location.search).get('tab');
+    if (t === 'diary' || t === 'map') {
+      setTab(t);
+      setShowDiaryEditor(false);
+      setShowMapSearch(false);
+      setShowAlbum(false);
     }
-  });
-  const [draftConfig, setDraftConfig] = useState(testConfig);
+  }, [location.search]);
 
   // 로고·홈 버튼 클릭 시 항상 인트로로 리셋
   useEffect(() => {
+    const t = new URLSearchParams(location.search).get('tab');
+    if (t) return; // tab 파라미터 있으면 리셋 안 함
     setTab(null);
     setShowDiaryEditor(false);
     setShowMapSearch(false);
@@ -435,18 +452,12 @@ export default function HomePage({
   const safePets = useMemo(() => {
     if (Array.isArray(pets) && pets.length > 0) return pets;
     if (pet) return [pet];
-    return [{ name: testConfig.petName, breed: testConfig.breed, ownerName: testConfig.ownerName, birthDate: testConfig.birthDate || undefined } as Pet];
-  }, [pets, pet, testConfig.petName, testConfig.breed, testConfig.ownerName, testConfig.birthDate]);
+    return [];
+  }, [pets, pet]);
 
-  const safeUser = user ?? ({ name: testConfig.ownerName } as User);
+  const safeUser = user;
   const safeDiaries = diaries ?? [];
   const currentPet = selectedPet ?? safePets[0] ?? pet;
-
-  const handleSaveTestConfig = () => {
-    setTestConfig(draftConfig);
-    localStorage.setItem('mungDiaryTestConfig', JSON.stringify(draftConfig));
-    setShowSettings(false);
-  };
 
   const handleOpenDiaryTab = () => {
     setTab('diary');
@@ -547,7 +558,7 @@ export default function HomePage({
               {tab === 'diary' && showDiaryEditor && !diaryResult && currentPet && (
                 <DiaryView
                   pet={currentPet}
-                  user={safeUser}
+                  user={safeUser!}
                   diaries={safeDiaries}
                   autoPlace={autoPlace}
                   onClearAutoPlace={() => setAutoPlace('')}
@@ -615,21 +626,54 @@ export default function HomePage({
 
         {/* 저장 버튼 */}
         <button
-          onClick={() => {
-            handleSaveDiary({
-              id: Date.now().toString(),
-              title: diaryResult.diary.title,
-              body: diaryResult.diary.content,
-              summary: diaryResult.diary.summary ?? '',
-              date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
-              place: autoPlace || '',
-              imageUrl: diaryResult.imageUrl,
-            });
-            alert('그림일기가 저장되었어요 🐾');
+          disabled={isSaving}
+          onClick={async () => {
+            const petId = currentPet?.id ?? fetchedPetId ?? undefined;
+            if (!petId) {
+              alert('반려견 정보를 찾을 수 없어요.');
+              return;
+            }
+            setIsSaving(true);
+            try {
+              // 1단계: 일기 텍스트 먼저 저장
+              const saved = await createDiary({
+                pet_id: petId,
+                title: diaryResult.diary.title,
+                content: diaryResult.diary.content,
+                summary: diaryResult.diary.summary ?? '',
+                emotion: diaryResult.diary.emotion ?? '',
+              });
+
+              // 2단계: base64 이미지 → File → S3 업로드 → image_id 바인딩
+              try {
+                const blob = await fetch(diaryResult.imageUrl).then((r) => r.blob());
+                const file = new File([blob], 'diary.png', { type: 'image/png' });
+                const imgRecord = await uploadImage(file);
+                await updateDiary(saved.id, { image_id: imgRecord.id });
+              } catch {
+                // 이미지 업로드 실패해도 일기 텍스트는 저장됨
+              }
+
+              // 로컬 앨범에도 추가
+              handleSaveDiary({
+                id: saved.id.toString(),
+                title: diaryResult.diary.title,
+                body: diaryResult.diary.content,
+                summary: diaryResult.diary.summary ?? '',
+                date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
+                place: autoPlace || '',
+                imageUrl: diaryResult.imageUrl,
+              });
+              alert('그림일기가 저장되었어요 🐾');
+            } catch {
+              alert('저장에 실패했어요. 다시 시도해주세요.');
+            } finally {
+              setIsSaving(false);
+            }
           }}
-          className="mt-6 w-full rounded-2xl bg-[#F4845F] py-4 text-sm font-bold text-white transition hover:bg-[#e8764f]"
+          className="mt-6 w-full rounded-2xl bg-[#F4845F] py-4 text-sm font-bold text-white transition hover:bg-[#e8764f] disabled:opacity-60"
         >
-          💾 저장하기
+          {isSaving ? '저장 중...' : '💾 저장하기'}
         </button>
       </div>
     </div>
@@ -669,85 +713,35 @@ export default function HomePage({
                       AI 멍봇
                     </p>
                     <p className="text-xs" style={{ color: '#8B6355' }}>
-                      {testConfig.petName} · {testConfig.breed}
+                      {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'}
                     </p>
                   </div>
 
                   <button
-                    onClick={() => setShowSettings((v) => !v)}
-                    className="rounded-full p-1.5 transition hover:bg-[#FFF0E6]"
-                    title="테스트 설정"
+                    onClick={() => setShowChatHistory((prev) => !prev)}
+                    className="rounded-full px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80"
+                    style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
                   >
-                    <Settings className="h-4 w-4 text-[#B08B7A]" />
+                    {showChatHistory ? '← 챗봇' : '최근 대화 기록'}
                   </button>
-
-                  <div
-                    className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                    style={{ background: '#F4845F', color: '#FFFFFF' }}
-                  >
-                    AI
-                  </div>
                 </div>
-
-                {showSettings && (
-                  <div className="mt-3 space-y-2 rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] p-3">
-                    <p className="mb-1 text-[11px] font-bold text-[#B08B7A]">테스트 설정</p>
-                    {[
-                      { label: '반려견 이름', field: 'petName' as const },
-                      { label: '견종', field: 'breed' as const },
-                      { label: '보호자 이름', field: 'ownerName' as const },
-                    ].map(({ label, field }) => (
-                      <div key={field} className="flex items-center gap-2">
-                        <label className="w-[72px] shrink-0 text-[11px] text-[#8B6355]">{label}</label>
-                        <input
-                          value={draftConfig[field]}
-                          onChange={(e) => setDraftConfig((prev) => ({ ...prev, [field]: e.target.value }))}
-                          className="flex-1 rounded-lg border border-[#F5D6C8] bg-white px-2 py-1 text-xs outline-none focus:border-[#F4845F]"
-                        />
-                      </div>
-                    ))}
-                    <div className="flex items-center gap-2">
-                      <label className="w-[72px] shrink-0 text-[11px] text-[#8B6355]">생년월일</label>
-                      <input
-                        type="date"
-                        value={draftConfig.birthDate}
-                        onChange={(e) => setDraftConfig((prev) => ({ ...prev, birthDate: e.target.value }))}
-                        className="flex-1 rounded-lg border border-[#F5D6C8] bg-white px-2 py-1 text-xs outline-none focus:border-[#F4845F]"
-                      />
-                    </div>
-                    {draftConfig.birthDate && (
-                      <p className="text-[10px] text-[#B08B7A]">
-                        → {(() => {
-                          const birth = new Date(draftConfig.birthDate)
-                          const now = new Date()
-                          const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth())
-                          const years = Math.floor(months / 12)
-                          const rem = months % 12
-                          return years > 0 ? `${years}살 ${rem > 0 ? `${rem}개월` : ''}` : `${months}개월`
-                        })()}
-                      </p>
-                    )}
-                    <button
-                      onClick={handleSaveTestConfig}
-                      className="mt-1 w-full rounded-lg bg-[#F4845F] py-1.5 text-xs font-bold text-white transition hover:bg-[#e8764f]"
-                    >
-                      저장
-                    </button>
-                  </div>
-                )}
               </div>
 
               <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
-                <div className="h-full p-3">
-                  <ChatBot
-                    pet={currentPet}
-                    onSelectPlace={handleUsePlace}
-                    onNavigateToDiary={handleOpenDiaryTab}
-                    onNavigateToMap={handleOpenMapTab}
-                    onDiaryReady={handleDiaryReady}
-                    diaryTrigger={diaryTrigger}
-                  />
-                </div>
+                {showChatHistory ? (
+                  <ChatHistory onBack={() => setShowChatHistory(false)} />
+                ) : (
+                  <div className="h-full p-3">
+                    <ChatBot
+                      pet={currentPet}
+                      onSelectPlace={handleUsePlace}
+                      onNavigateToDiary={handleOpenDiaryTab}
+                      onNavigateToMap={handleOpenMapTab}
+                      onDiaryReady={handleDiaryReady}
+                      diaryTrigger={diaryTrigger}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

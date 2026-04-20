@@ -45,9 +45,31 @@ export function OAuthCallbackPage() {
         const data = await res.json();
         localStorage.setItem('access_token', data.access_token);
         sessionStorage.removeItem('oauth_provider');
+        window.dispatchEvent(new Event('auth-change'));
 
-        // 신규 유저 → 온보딩, 기존 유저 → 홈
-        navigate(data.is_new_user ? '/step' : '/home', { replace: true });
+        // 신규 유저이거나 펫이 없으면 → 온보딩, 펫 있으면 → 홈
+        if (data.is_new_user) {
+          navigate('/step', { replace: true });
+          return;
+        }
+
+        // 기존 유저: 펫 등록 여부 확인
+        const token = data.access_token;
+        const meRes = await fetch(`${API_URL}/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!meRes.ok) {
+          navigate('/home', { replace: true });
+          return;
+        }
+        const me = await meRes.json();
+
+        const petsRes = await fetch(`${API_URL}/pets?user_id=${me.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const pets = petsRes.ok ? await petsRes.json() : [];
+
+        navigate(pets.length === 0 ? '/step' : '/home', { replace: true });
       } catch (err) {
         console.error('소셜 로그인 오류:', err);
         sessionStorage.removeItem('oauth_provider');

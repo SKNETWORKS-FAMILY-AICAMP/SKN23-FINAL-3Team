@@ -28,7 +28,7 @@ class DiaryCreate(BaseModel):
         image_id는 AI 파이프라인 완료 후 PATCH로 바인딩합니다.
     """
 
-    pet_id: int = Field(..., gt=0, description="반려동물 ID (pets 테이블 참조)")
+    pet_id: int = Field(..., gt=0, description="반려견 ID (pets 테이블 참조)")
 
     # 6하원칙
     when_text: str | None = Field(None, max_length=255, description="언제")
@@ -54,7 +54,7 @@ class DiaryUpdate(BaseModel):
         image_id 바인딩 시 images 테이블 참조 무결성을 검증합니다.
     """
 
-    pet_id: int | None = Field(None, gt=0, description="반려동물 ID")
+    pet_id: int | None = Field(None, gt=0, description="반려견 ID")
 
     # 6하원칙
     when_text: str | None = Field(None, max_length=255)
@@ -79,7 +79,7 @@ class DiaryResponse(BaseModel):
 
     id: int = Field(..., description="일기 ID")
     user_id: int = Field(..., description="사용자 ID")
-    pet_id: int = Field(..., description="반려동물 ID")
+    pet_id: int = Field(..., description="반려견 ID")
     image_id: int | None = Field(None, description="AI 이미지 ID")
 
     # 6하원칙

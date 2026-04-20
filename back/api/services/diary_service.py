@@ -54,12 +54,12 @@ async def _verify_pet(pet_id: int, user_id: int, db: AsyncSession) -> None:
     if pet is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"반려동물(id={pet_id})을 찾을 수 없습니다.",
+            detail=f"반려견(id={pet_id})을 찾을 수 없습니다.",
         )
     if pet.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="본인의 반려동물만 다이어리에 등록할 수 있습니다.",
+            detail="본인의 반려견만 다이어리에 등록할 수 있습니다.",
         )
 
 
@@ -143,14 +143,14 @@ async def list_diaries(
         다이어리 목록을 조회합니다.
 
         - user_id: 사용자별 필터 (created_at DESC)
-        - pet_id : 반려동물별 추가 필터
+        - pet_id : 반려견별 추가 필터
         - 두 파라미터 동시 사용 가능 (AND 조건)
         - deleted_at IS NULL 기본 적용
 
         Args:
                 db     : AsyncSession
                 user_id: 조회할 사용자 ID (선택)
-                pet_id : 조회할 반려동물 ID (선택)
+                pet_id : 조회할 반려견 ID (선택)
 
         Returns:
                 Diary ORM 객체 목록 (created_at DESC)

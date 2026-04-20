@@ -1,5 +1,5 @@
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from "motion/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router";
 import {
   Home,
@@ -8,7 +8,13 @@ import {
   X,
   ChevronDown,
   Calendar,
+  NotebookPen,
+  Map,
+  Bell,
+  LogOut,
 } from "lucide-react";
+import { getMe } from "../services/userService";
+import { getPets } from "../services/petService";
 
 interface SubItem {
   label: string;
@@ -26,19 +32,83 @@ interface NavItem {
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('access_token'));
   const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
+  const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const { scrollY } = useScroll();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // 로그인 상태 동기화
+  useEffect(() => {
+    const syncAuth = () => {
+      setIsLoggedIn(!!localStorage.getItem('access_token'));
+      if (!localStorage.getItem('access_token')) setProfilePhoto(null);
+    };
+    window.addEventListener('auth-change', syncAuth);
+    window.addEventListener('storage', syncAuth);
+    return () => {
+      window.removeEventListener('auth-change', syncAuth);
+      window.removeEventListener('storage', syncAuth);
+    };
+  }, []);
+
+  // 라우트 이동마다 토큰 재확인
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem('access_token'));
+  }, [location.pathname]);
+
+  // 선택된 반려견 사진 로드 (MyPage와 연동)
+  const loadProfilePhoto = () => {
+    const selectedPetId = localStorage.getItem('selected_pet_id');
+    if (selectedPetId) {
+      const petPhoto = localStorage.getItem(`pet_photo_${selectedPetId}`);
+      if (petPhoto) { setProfilePhoto(petPhoto); return; }
+    }
+    // selected_pet_id 없으면 첫 번째 반려견 사진 fallback
+    if (!isLoggedIn) return;
+    getMe()
+      .then((me) => getPets(me.id))
+      .then((pets) => {
+        if (pets.length > 0) {
+          const petPhoto = localStorage.getItem(`pet_photo_${pets[0].id}`);
+          if (petPhoto) setProfilePhoto(petPhoto);
+          localStorage.setItem('selected_pet_id', String(pets[0].id));
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    loadProfilePhoto();
+  }, [isLoggedIn]);
+
+  // MyPage에서 반려견 선택 변경 시 즉시 반영
+  useEffect(() => {
+    const onPetChange = () => loadProfilePhoto();
+    window.addEventListener('pet-select-change', onPetChange);
+    return () => window.removeEventListener('pet-select-change', onPetChange);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     setScrolled(latest > 20);
   });
 
   const navItems: NavItem[] = [
-    { icon: Home, label: "홈", path: "/home" },
+    {
+      icon: Home,
+      label: "홈",
+      path: "/home",
+      subItems: [
+        { label: "강아지 일기장", path: "/home?tab=diary", icon: NotebookPen },
+        { label: "지도", path: "/home?tab=map", icon: Map },
+      ],
+    },
     { icon: Calendar, label: "멍캘린더", path: "/calendar" },
     { icon: User, label: "마이페이지", path: "/mypage" },
   ];
@@ -51,6 +121,13 @@ export function Navbar() {
       setOpenSubMenu(null);
       setMobileOpen(false);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    window.dispatchEvent(new Event('auth-change'));
+    setProfileOpen(false);
+    navigate("/login");
   };
 
   return (
@@ -73,50 +150,143 @@ export function Navbar() {
             <span className="text-lg leading-none">🐾</span>
           </Link>
 
-      {/* 오른쪽: 메뉴 + 로그인 */}
-      <div className="hidden md:flex items-center gap-2">
-        <nav className="flex items-center gap-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = item.path && location.pathname === item.path;
-            return (
-              <button
-                key={item.label}
-                onClick={() => handleNavClick(item)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  isActive
-                    ? "text-orange-600 bg-orange-50"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <button
-          onClick={() => {
-            if (isLoggedIn) {
-              setIsLoggedIn(false);
-            } else {
-              navigate("/login");
-            }
-          }}
-          className="ml-4 px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors"
-        >
-          {isLoggedIn ? "로그아웃" : "로그인"}
-        </button>
-      </div>
+          {/* 오른쪽: 메뉴 + 프로필/로그인 */}
+          <div className="hidden md:flex items-center gap-2">
+            <nav className="flex items-center gap-2">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.path && location.pathname === item.path;
+                const isHovered = hoveredMenu === item.label;
 
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-      >
-        {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-    </div>
+                return (
+                  <div
+                    key={item.label}
+                    className="relative"
+                    onMouseEnter={() => item.subItems && setHoveredMenu(item.label)}
+                    onMouseLeave={() => setHoveredMenu(null)}
+                  >
+                    <button
+                      onClick={() => handleNavClick(item)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                        isActive
+                          ? "text-orange-600 bg-orange-50"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{item.label}</span>
+                      {item.subItems && (
+                        <motion.div
+                          animate={{ rotate: isHovered ? 180 : 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </motion.div>
+                      )}
+                    </button>
+
+                    {/* 데스크탑 드롭다운 */}
+                    <AnimatePresence>
+                      {item.subItems && isHovered && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute left-0 top-full pt-2 z-50"
+                        >
+                          <div className="min-w-[160px] rounded-2xl border border-gray-100 bg-white py-2 shadow-lg">
+                            {item.subItems.map((sub) => {
+                              const SubIcon = sub.icon;
+                              return (
+                                <button
+                                  key={sub.label}
+                                  onClick={() => {
+                                    navigate(sub.path);
+                                    setHoveredMenu(null);
+                                  }}
+                                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                                >
+                                  <SubIcon className="w-4 h-4" />
+                                  {sub.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </nav>
+
+            {/* 프로필 아바타 (로그인) / 로그인 버튼 (비로그인) */}
+            {isLoggedIn ? (
+              <div
+                className="relative ml-2"
+                onMouseEnter={() => setProfileOpen(true)}
+                onMouseLeave={() => setProfileOpen(false)}
+              >
+                {/* 아바타 버튼 */}
+                <button className="flex items-center justify-center w-10 h-10 rounded-full overflow-hidden ring-2 ring-orange-300 hover:ring-orange-400 transition-all">
+                  {profilePhoto ? (
+                    <img src={profilePhoto} alt="프로필" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-orange-100 flex items-center justify-center">
+                      <User className="w-5 h-5 text-orange-500" />
+                    </div>
+                  )}
+                </button>
+
+                {/* 드롭다운 */}
+                <AnimatePresence>
+                  {profileOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full pt-2 z-50"
+                    >
+                      <div className="min-w-[160px] rounded-2xl border border-gray-100 bg-white py-2 shadow-lg">
+                        <button
+                          onClick={() => { setProfileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                        >
+                          <Bell className="w-4 h-4" />
+                          알림 설정
+                        </button>
+                        <button
+                          onClick={handleLogout}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-red-50 hover:text-red-500"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          로그아웃
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate("/login")}
+                className="ml-4 px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                로그인
+              </button>
+            )}
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </div>
 
       {/* 모바일 메뉴 */}
@@ -130,7 +300,6 @@ export function Navbar() {
           >
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = item.path && location.pathname === item.path;
               const isOpen = openSubMenu === item.label;
 
               return (
@@ -196,19 +365,32 @@ export function Navbar() {
               );
             })}
 
-            <button
-              onClick={() => {
-                if (isLoggedIn) {
-                  setIsLoggedIn(false);
-                } else {
-                  navigate("/login");
-                }
-                setMobileOpen(false);
-              }}
-              className="mt-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors"
-            >
-              {isLoggedIn ? "로그아웃" : "로그인"}
-            </button>
+            {/* 모바일: 로그아웃 / 로그인 */}
+            {isLoggedIn ? (
+              <>
+                <button
+                  onClick={() => { setMobileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                >
+                  <Bell className="w-4 h-4" />
+                  알림 설정
+                </button>
+                <button
+                  onClick={() => { handleLogout(); setMobileOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => { navigate("/login"); setMobileOpen(false); }}
+                className="mt-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                로그인
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

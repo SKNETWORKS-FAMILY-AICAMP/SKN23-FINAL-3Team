@@ -18,6 +18,7 @@ export interface GeneratedDiary {
   title: string
   content: string
   summary: string
+  emotion?: string          // 챗봇에서 선택한 감정 이모지
   image_prompt?: string
   session_id?: string
 }
