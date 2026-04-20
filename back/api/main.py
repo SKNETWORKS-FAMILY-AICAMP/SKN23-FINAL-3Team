@@ -23,9 +23,12 @@ FastAPI 애플리케이션 진입점.
 from __future__ import annotations
 
 import os
+import json
 import logging
 
 from sqlalchemy import text
+from openai import AsyncOpenAI
+from pydantic import BaseModel
 from core.config import settings
 from typing import AsyncGenerator
 from core.database import get_engine
@@ -356,7 +359,7 @@ _openai_client: AsyncOpenAI | None = None
 def _get_openai_client() -> AsyncOpenAI:
     global _openai_client
     if _openai_client is None:
-        _openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     return _openai_client
 
 
