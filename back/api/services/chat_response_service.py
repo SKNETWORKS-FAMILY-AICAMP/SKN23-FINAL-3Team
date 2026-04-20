@@ -18,37 +18,39 @@ dispatch() 는 DispatchContext(user_id, db) 를 선택 인자로 받아
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
+import base64
 import logging
-import os
-from dataclasses import dataclass
+import asyncio
+
 from datetime import date
+from models.pet import Pet
 from typing import Sequence
-
-from dotenv import load_dotenv
+from sqlalchemy import select
 from openai import AsyncOpenAI
+from models.image import Image
+from core.config import settings
+from dataclasses import dataclass
+from core.location.place import Place
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from services.image_service import _upload_to_s3
 from services.intent_service import IntentResult
-
-load_dotenv()
+from services.place_service import search_places_from_db
 
 logger = logging.getLogger(__name__)
 
 
 # ── OpenAI 클라이언트 (lazy singleton) ───────────────────────────────────────
 _openai_client: AsyncOpenAI | None = None
-_CHAT_MODEL = os.getenv("GPT_MODEL", "gpt-4.1-mini")
-_DIARY_MODEL = os.getenv("DIARY_GPT_MODEL", "gpt-4o")
-_IMAGE_MODEL = os.getenv("DIARY_IMAGE_MODEL", "gpt-image-1")
+_GPT_MODEL = settings.GPT_MODEL
+_IMAGE_MODEL = settings.DIARY_IMAGE_MODEL
 
 
 def _get_openai_client() -> AsyncOpenAI:
     global _openai_client
     if _openai_client is None:
-        _openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     return _openai_client
 
 
@@ -80,16 +82,6 @@ _FALLBACK_SYSTEM_PROMPT = (
     "사용자의 질문에 간결하고 따뜻하게 답변해."
 )
 
-
-# ── 장소 검색 (동기 함수 → to_thread 로 호출) ────────────────────────────────
-def _search_places_sync(query: str, n_results: int) -> list[dict]:
-    """ai.llm.rag.places_retriever 를 동기로 호출 (lazy import로 순환 참조 방지)."""
-    try:
-        from ai.llm.rag.places_retriever import search_similar_places
-        return search_similar_places(query_text=query, n_results=n_results)
-    except Exception as e:
-        logger.warning(f"[ChatResponse] 장소 검색 실패: {e}")
-        return []
 
 
 def _format_places_brief(places: Sequence[dict]) -> str:
@@ -123,7 +115,7 @@ async def _chat_completion(
     try:
         client = _get_openai_client()
         resp = await client.chat.completions.create(
-            model=model or _CHAT_MODEL,
+            model=model or _GPT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -184,10 +176,6 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
         return dict(_DEFAULT_DIARY_PET)
 
     try:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        from models.pet import Pet
-
         result = await ctx.db.execute(
             select(Pet)
             .where(Pet.user_id == ctx.user_id)
@@ -221,11 +209,7 @@ async def _load_pet_context(ctx: DispatchContext) -> dict:
 
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     """build_diary_prompt → GPT 호출 → JSON 파싱."""
-    try:
-        from ai.llm.prompts.diary_prompt import build_diary_prompt
-    except Exception as e:
-        logger.error(f"[Diary] diary_prompt 임포트 실패: {e}")
-        return None
+    from ai.llm.prompts.diary_prompt import build_diary_prompt
 
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
@@ -245,7 +229,7 @@ async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     try:
         client = _get_openai_client()
         resp = await client.chat.completions.create(
-            model=_DIARY_MODEL,
+            model=_GPT_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
@@ -271,11 +255,7 @@ async def _generate_and_store_image(
         build_final_image_prompt → OpenAI 이미지 생성 → S3 업로드 → images 테이블 저장.
         실패 시 None 을 반환하고 호출 측에서 이미지 없이 응답합니다.
     """
-    try:
-        from ai.llm.prompts.diary_prompt import build_final_image_prompt
-    except Exception as e:
-        logger.error(f"[Diary] diary_prompt.build_final_image_prompt 임포트 실패: {e}")
-        return None
+    from ai.llm.prompts.diary_prompt import build_final_image_prompt
 
     image_prompt = build_final_image_prompt(
         image_prompt_base=diary_data.get("image_prompt_base", ""),
@@ -307,7 +287,6 @@ async def _generate_and_store_image(
 
     # 2) S3 업로드 + DB 저장 (ctx.db 있을 때만)
     try:
-        from services.image_service import _upload_to_s3
         image_bytes = base64.b64decode(b64)
         file_url = await _upload_to_s3(image_bytes, "diary.png", "image/png")
     except Exception as e:
@@ -316,7 +295,6 @@ async def _generate_and_store_image(
 
     if ctx.db is not None:
         try:
-            from models.image import Image
             image_row = Image(file_url=file_url, file_name="diary.png")
             ctx.db.add(image_row)
             await ctx.db.flush()
@@ -333,7 +311,7 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
 
         흐름:
             1. ctx.user_id 로 반려동물 컨텍스트 확보 (없으면 기본값)
-            2. build_diary_prompt → GPT (_DIARY_MODEL) → 일기 JSON
+            2. build_diary_prompt → GPT (_GPT_MODEL) → 일기 JSON
             3. build_final_image_prompt → OpenAI Images → base64
             4. base64 → S3 업로드 → images 테이블 저장
             5. 일기 텍스트 + 이미지 URL(마크다운)을 assistant 응답으로 반환
@@ -368,15 +346,29 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
     return "\n".join(lines)
 
 
-async def _handle_places(query: str, top_k: int = 5) -> str:
-    places = await asyncio.to_thread(_search_places_sync, query, top_k)
+async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5) -> str:
+    if settings.USE_DUMMY_PLACES:
+        places = await Place().find_place(top_k=top_k)
+    elif ctx.db is not None:
+        places = await search_places_from_db(query, ctx.db, n_results=top_k)
+    else:
+        logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
+        places = []
+
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
     return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
 
 
-async def _handle_facility(query: str) -> str:
-    places = await asyncio.to_thread(_search_places_sync, query, 1)
+async def _handle_facility(query: str, ctx: DispatchContext) -> str:
+    if settings.USE_DUMMY_PLACES:
+        places = await Place().find_place(top_k=1)
+    elif ctx.db is not None:
+        places = await search_places_from_db(query, ctx.db, n_results=1)
+    else:
+        logger.warning("[ChatResponse] db 세션 없음 — 시설 검색 불가")
+        places = []
+
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 시설]\n{places_text}"
     return await _chat_completion(_FACILITY_SYSTEM_PROMPT, user_prompt)
@@ -415,9 +407,9 @@ async def dispatch(
     if intent == "다이어리 작성":
         return await _handle_diary(query, ctx)
     if intent == "장소추천":
-        return await _handle_places(query, top_k=top_k)
+        return await _handle_places(query, ctx, top_k=top_k)
     # if intent == "시설정보":
-    #     return await _handle_facility(query)
+    #     return await _handle_facility(query, ctx)
 
     logger.warning(f"[ChatResponse] 알 수 없는 의도: {intent} → fallback 처리")
     return await _handle_fallback(query)

@@ -1,9 +1,10 @@
 import os
 import httpx
 import chromadb
+
 from openai import OpenAI
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 

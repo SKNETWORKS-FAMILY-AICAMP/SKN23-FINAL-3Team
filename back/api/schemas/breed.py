@@ -11,21 +11,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class BreedSizeEnum(str, Enum):
-    small = "small"
-    medium = "medium"
-    large = "large"
-
-class ActivityLevelEnum(str, Enum):
-    low = "low"
-    medium = "medium"
-    high = "high"
+from core.type.breed import ActivityLevelEnum, BreedSizeEnum
 
 
 class BreedResponse(BaseModel):

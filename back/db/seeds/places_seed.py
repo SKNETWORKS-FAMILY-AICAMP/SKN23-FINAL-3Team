@@ -6,13 +6,18 @@ places 테이블에 장소 데이터를 적재하는 시드 스크립트.
 """
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
+import asyncio
 import hashlib
-
 import pandas as pd
+import core.database
+
+from sqlalchemy import text
+from models.place import Place
 from dotenv import load_dotenv
+from core.config import settings
+from sshtunnel import SSHTunnelForwarder
 
 # ── 경로 설정: back/api 를 sys.path 에 추가 ────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))            # back/db/seeds/
@@ -162,10 +167,6 @@ def build_document(row) -> str:
 
 
 async def seed() -> None:
-    import core.database
-    from core.config import settings
-    from models.place import Place
-    from sqlalchemy import text
 
     db_host = settings.DB_HOST
     db_port = settings.DB_PORT
@@ -173,7 +174,6 @@ async def seed() -> None:
     tunnel = None
     if settings.SERVER == "local":
         print("SSH 터널 연결 중...")
-        from sshtunnel import SSHTunnelForwarder
         tunnel = SSHTunnelForwarder(
             (settings.SSH_HOST, settings.SSH_PORT),
             ssh_username=settings.SSH_USER,

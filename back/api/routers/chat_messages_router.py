@@ -26,19 +26,12 @@ routers/chat_messages.py
 from __future__ import annotations
 
 from typing import Annotated
-
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.deps import get_current_user, get_db
 from models.user import User
-from schemas.chat_message import (
-    ChatTurnResponse,
-    IntentInfo,
-    MessageCreate,
-    MessageResponse,
-)
+from sqlalchemy.ext.asyncio import AsyncSession
+from core.deps import get_current_user, get_db
 from services import chat_message_service as msg_svc
+from fastapi import APIRouter, Depends, Query, status
+from schemas.chat_message import (ChatTurnResponse, IntentInfo, MessageCreate, MessageResponse)
 
 router = APIRouter(tags=["ChatMessages"])
 

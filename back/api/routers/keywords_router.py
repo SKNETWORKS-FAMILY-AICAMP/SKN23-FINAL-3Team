@@ -12,13 +12,11 @@ routers/keywords_router.py
 
 from __future__ import annotations
 
+from core.deps import get_db
 from typing import Annotated, Literal
-
+from schemas.keyword import KeywordResponse
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.deps import get_db
-from schemas.keyword import KeywordResponse
 from services import keyword_service as keyword_svc
 
 router = APIRouter(tags=["Keywords"])

@@ -23,15 +23,15 @@ run_in_executor 로 감싸서 호출합니다 (classify_intent_async).
 
 from __future__ import annotations
 
-import asyncio
-import json
-import logging
 import os
-import threading
-from dataclasses import dataclass
-from typing import Any
-
+import json
 import torch
+import asyncio
+import logging
+import threading
+
+from typing import Any
+from dataclasses import dataclass
 from transformers import ElectraForSequenceClassification, ElectraTokenizer
 
 logger = logging.getLogger(__name__)

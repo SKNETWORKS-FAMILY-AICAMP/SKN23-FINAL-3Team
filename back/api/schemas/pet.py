@@ -11,18 +11,13 @@ schemas/pet.py
 
 from __future__ import annotations
 
-import enum
 from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from services.common_service import calculate_age
 
-
-class PetGenderEnum(str, enum.Enum):
-    """반려동물 성별."""
-    MALE = "MALE"
-    FEMALE = "FEMALE"
+from core.type.gender import PetGenderEnum
 
 
 class PetCreate(BaseModel):

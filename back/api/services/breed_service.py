@@ -15,12 +15,11 @@ breeds 테이블은 마스터 데이터이므로 엔드포인트 레벨 CUD 없�
 from __future__ import annotations
 
 from typing import Sequence
-
-from fastapi import HTTPException, status
+from models.breed import Breed
 from sqlalchemy import or_, select
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.breed import Breed
 
 
 async def list_breeds(

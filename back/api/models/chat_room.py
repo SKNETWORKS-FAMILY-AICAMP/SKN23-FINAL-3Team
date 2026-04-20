@@ -12,12 +12,11 @@ AI 챗봇 대화 세션.
 from __future__ import annotations
 
 from datetime import datetime
-from core.utils import kst_now
-
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from core.database import Base
+from core.utils import kst_now
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
+
 
 
 class ChatRoom(Base):
