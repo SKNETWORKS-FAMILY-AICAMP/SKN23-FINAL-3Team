@@ -6,6 +6,7 @@ export interface DiaryGenerationInput {
   birthDate?: string
   personalities?: string[]
   ownerName?: string
+  ownerGender?: string
   diaryType: DiaryTypeId
   typeFocus: string
   mainAnswers: string[]
@@ -36,6 +37,7 @@ export async function generateDiary(input: DiaryGenerationInput): Promise<Genera
         birth_date: input.birthDate ?? null,
         personalities: input.personalities ?? [],
         owner_name: input.ownerName ?? '',
+        owner_gender: input.ownerGender ?? '',
         main_answers: input.mainAnswers,
         additional_answers: input.additionalAnswers,
         diary_type: input.diaryType,
@@ -107,5 +109,7 @@ function mockGenerateDiary(input: DiaryGenerationInput): GeneratedDiary {
     title: `${petName}의 오늘 하루`,
     content: `${opener} ${middle} ${closer}`,
     summary: `오늘도 ${petName}와 보호자의 소중한 하루.`,
+    image_prompt: `A cute ${input.breed ?? 'dog'} named ${petName} having a fun day with its owner, illustrated in a warm pastel picture book style, soft colors, cheerful mood`,
+    session_id: 'mock',
   }
 }

@@ -55,7 +55,10 @@ export default function ChatBot({
   }
 
   const handleGenerateImage = async () => {
-    if (!generatedDiary?.image_prompt) return
+    if (!generatedDiary?.image_prompt) {
+      alert('이미지 프롬프트가 없어요. 백엔드 서버가 실행 중인지 확인해주세요.')
+      return
+    }
     setImageLoading(true)
     try {
       const url = await generateDiaryImage(generatedDiary.image_prompt, generatedDiary.session_id)

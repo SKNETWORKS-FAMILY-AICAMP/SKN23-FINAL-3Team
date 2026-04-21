@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getDiariesByUser } from '../services/dbDiaryService';
+import { getDiariesByUser, getDiary, type DiaryRecord } from '../services/dbDiaryService';
+import { getImage } from '../services/imageService';
 import { getMe } from '../services/userService';
 
 interface DayEmotion {
@@ -28,6 +29,29 @@ const MONTHS = [
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [emotions, setEmotions] = useState<DayEmotion[]>([]);
+  const [selectedDiary, setSelectedDiary] = useState<DiaryRecord | null>(null);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [diaryLoading, setDiaryLoading] = useState(false);
+
+  const handleDayClick = (day: number) => {
+    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const found = emotions.find((e) => e.date === dateStr);
+    if (!found) return;
+    setDiaryLoading(true);
+    setSelectedImageUrl(null);
+    getDiary(found.diaryId)
+      .then(async (diary) => {
+        setSelectedDiary(diary);
+        if (diary.image_id) {
+          try {
+            const img = await getImage(diary.image_id);
+            setSelectedImageUrl(img.url);
+          } catch { /* 이미지 없으면 무시 */ }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setDiaryLoading(false));
+  };
 
   // 로그인한 유저의 일기 목록을 불러와 날짜별 감정 이모지를 세팅
   useEffect(() => {
@@ -108,6 +132,64 @@ export default function CalendarPage() {
     }
     return days;
   };
+
+  /* ── 일기 상세 뷰 ─────────────────────────────────── */
+  if (selectedDiary || diaryLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
+        <div className="max-w-2xl mx-auto">
+          <button
+            onClick={() => { setSelectedDiary(null); setSelectedImageUrl(null); }}
+            className="mb-6 flex items-center gap-2 rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-500 shadow-sm transition hover:bg-orange-50"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            캘린더로 돌아가기
+          </button>
+
+          {diaryLoading ? (
+            <div className="flex h-60 items-center justify-center rounded-[32px] bg-white shadow-lg">
+              <span className="text-sm text-gray-400">불러오는 중...</span>
+            </div>
+          ) : selectedDiary && (
+            <div className="rounded-[32px] bg-white shadow-lg border border-orange-100 overflow-hidden">
+              {/* 그림일기 이미지 */}
+              {selectedImageUrl ? (
+                <img
+                  src={selectedImageUrl}
+                  alt="그림일기"
+                  className="w-full object-cover max-h-80"
+                />
+              ) : (
+                <div className="flex h-40 items-center justify-center bg-orange-50 text-5xl">🐾</div>
+              )}
+
+              {/* 헤더 */}
+              <div className="px-8 pt-6 pb-2 flex items-center gap-3">
+                <span className="text-4xl">{selectedDiary.emotion ?? '🐾'}</span>
+                <div>
+                  <p className="text-xs text-orange-400 font-semibold">
+                    {new Date(selectedDiary.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                  <h2 className="text-xl font-bold text-[#3D2B1F] mt-0.5">{selectedDiary.title ?? '오늘의 일기'}</h2>
+                </div>
+              </div>
+
+              <div className="px-8 py-6 space-y-4">
+                {selectedDiary.summary && (
+                  <p className="rounded-xl bg-orange-50 px-4 py-3 text-sm font-medium text-orange-700">
+                    {selectedDiary.summary}
+                  </p>
+                )}
+                <p className="text-[15px] leading-8 text-[#3D2B1F] whitespace-pre-wrap">
+                  {selectedDiary.content ?? '내용이 없어요.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
@@ -224,17 +306,19 @@ export default function CalendarPage() {
               return (
                 <div
                   key={idx}
+                  onClick={() => day && emotion && handleDayClick(day)}
                   className={`aspect-square flex items-center justify-center rounded-2xl transition-all relative ${
                     day
                       ? isToday
                         ? 'bg-orange-100 border-2 border-orange-400'
-                        : 'bg-gray-50 hover:bg-orange-50 cursor-pointer'
+                        : emotion
+                          ? 'bg-gray-50 hover:bg-orange-50 cursor-pointer'
+                          : 'bg-gray-50'
                       : ''
                   }`}
                 >
                   {day && (
                     <>
-                      {/* 날짜 - 왼쪽 상단에 작게 */}
                       <div
                         className={`absolute top-2 left-2 text-sm font-medium ${
                           isToday ? 'text-orange-600 font-bold' : 'text-gray-700'
@@ -242,7 +326,6 @@ export default function CalendarPage() {
                       >
                         {day}
                       </div>
-                      {/* 감정 이모지 - 중앙에 매우 크게 */}
                       {emotion && (
                         <div className="text-7xl leading-none">{emotion}</div>
                       )}

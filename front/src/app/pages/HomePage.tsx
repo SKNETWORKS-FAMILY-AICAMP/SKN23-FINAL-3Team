@@ -7,10 +7,13 @@ import MapView from '../components/MapView';
 import ChatBot from '../components/ChatBot';
 import ChatHistory from '../components/ChatHistory';
 import type { GeneratedDiary } from '../services/diaryService';
-import { createDiary, updateDiary } from '../services/dbDiaryService';
+import { createDiary, updateDiary, deleteDiary } from '../services/dbDiaryService';
 import { uploadImage } from '../services/imageService';
 import { getMe } from '../services/userService';
 import { getPets } from '../services/petService';
+import { getBreed } from '../services/breedService';
+import { getDiariesByUser } from '../services/dbDiaryService';
+import { getImage } from '../services/imageService';
 
 type Tab = 'diary' | 'map' | null;
 
@@ -213,10 +216,68 @@ function MapIntro({ onStartMap }: { onStartMap: () => void }) {
 function DiaryAlbum({
   diaries,
   onBack,
+  onDelete,
 }: {
   diaries: DiaryEntry[];
   onBack: () => void;
+  onDelete: (id: string) => void;
 }) {
+  const [selected, setSelected] = useState<DiaryEntry | null>(null);
+
+  if (selected) {
+    return (
+      <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+        <div className="mx-auto w-full max-w-[720px]">
+          <div className="mb-4 flex items-center gap-3">
+            <button
+              onClick={() => setSelected(null)}
+              className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+            >
+              ← 목록으로
+            </button>
+            <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+          </div>
+
+          <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
+            {/* 마스킹 테이프 */}
+            <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
+            <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
+
+            {/* 제목/요약 */}
+            <div className="mb-6 text-center">
+              <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
+              <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">{selected.title}</h3>
+              {selected.summary && (
+                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+                  ✨ {selected.summary}
+                </div>
+              )}
+            </div>
+
+            {/* 이미지 */}
+            <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
+              {selected.imageUrl ? (
+                <img src={selected.imageUrl} alt={selected.title} className="w-full h-auto rounded-[16px] object-contain" />
+              ) : (
+                <div className="flex h-48 items-center justify-center text-5xl">🐾</div>
+              )}
+            </div>
+
+            {/* 일기 본문 - 줄 있는 노트 */}
+            <div
+              className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
+              style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
+            >
+              <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+                {selected.body || '내용이 없어요.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (diaries.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#F6F1EA] p-8 text-center">
@@ -251,8 +312,19 @@ function DiaryAlbum({
           {[...diaries].reverse().map((entry) => (
             <div
               key={entry.id}
-              className="overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group relative cursor-pointer overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
+              onClick={() => setSelected(entry)}
             >
+              {/* 삭제 버튼 */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm('이 일기를 삭제할까요?')) onDelete(entry.id);
+                }}
+                className="absolute right-2 top-2 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-red-500 group-hover:flex"
+              >
+                ✕
+              </button>
               {entry.imageUrl ? (
                 <img
                   src={entry.imageUrl}
@@ -413,17 +485,36 @@ export default function HomePage({
   const [diaryTrigger, setDiaryTrigger] = useState(0);
   const [showAlbum, setShowAlbum] = useState(false);
   const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
+  const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
 
-  // 로그인된 유저의 첫 번째 반려견 ID를 백엔드에서 가져옴
+  // 로그인된 유저의 첫 번째 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
     getMe()
-      .then((me) => getPets(me.id))
-      .then((pets) => { if (pets.length > 0) setFetchedPetId(pets[0].id); })
+      .then(async (me) => {
+        const pets = await getPets(me.id);
+        if (pets.length === 0) return;
+        const p = pets[0];
+        setFetchedPetId(p.id);
+        let breedName = '강아지';
+        try {
+          const breed = await getBreed(p.breed_id);
+          breedName = breed.name_ko;
+        } catch { /* breed 조회 실패 시 기본값 유지 */ }
+        setFetchedPet({
+          id: p.id,
+          name: p.name,
+          breed: breedName,
+          birthDate: p.birth_date ?? undefined,
+          gender: p.gender ?? undefined,
+          ownerName: me.nickname ?? undefined,
+          ownerGender: me.gender ?? undefined,
+        });
+      })
       .catch(() => {/* 로그인 안 된 경우 무시 */});
   }, []);
 
@@ -457,7 +548,7 @@ export default function HomePage({
 
   const safeUser = user;
   const safeDiaries = diaries ?? [];
-  const currentPet = selectedPet ?? safePets[0] ?? pet;
+  const currentPet = selectedPet ?? fetchedPet ?? safePets[0] ?? pet;
 
   const handleOpenDiaryTab = () => {
     setTab('diary');
@@ -485,17 +576,89 @@ export default function HomePage({
     }
   };
 
+  // 앨범 열릴 때 백엔드에서 일기 목록 불러오기
+  useEffect(() => {
+    if (!showAlbum) return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    getMe()
+      .then((me) => getDiariesByUser(me.id))
+      .then(async (records) => {
+        const entries: DiaryEntry[] = await Promise.all(
+          records.map(async (d) => {
+            let imageUrl: string | undefined;
+            if (d.image_id) {
+              try { imageUrl = (await getImage(d.image_id)).url; } catch { /* 이미지 없으면 무시 */ }
+            }
+            return {
+              id: String(d.id),
+              title: d.title ?? '오늘의 일기',
+              body: d.content ?? '',
+              summary: d.summary ?? '',
+              date: d.created_at.substring(0, 10),
+              place: '',
+              imageUrl,
+            };
+          })
+        );
+        setAlbumDiaries(entries.reverse());
+      })
+      .catch(() => {});
+  }, [showAlbum]);
+
   const handleSaveDiary = (entry: DiaryEntry) => {
     if (onSaveDiary) {
       onSaveDiary(entry);
     }
-    setAlbumDiaries((prev) => [...prev, entry]);
+    setAlbumDiaries((prev) => [entry, ...prev]);
   };
 
   const handleDiaryReady = (diary: GeneratedDiary, imageUrl: string) => {
     setDiaryResult({ diary, imageUrl });
+    setAutoSaveState('idle');
     setTab('diary');
   };
+
+  // 일기 생성 완료 시 자동저장
+  useEffect(() => {
+    if (!diaryResult || autoSaveState !== 'idle') return;
+    const petId = currentPet?.id ?? fetchedPetId ?? undefined;
+    if (!petId) return;
+
+    setAutoSaveState('saving');
+    (async () => {
+      try {
+        const saved = await createDiary({
+          pet_id: petId,
+          title: diaryResult.diary.title,
+          content: diaryResult.diary.content,
+          summary: diaryResult.diary.summary ?? '',
+          emotion: diaryResult.diary.emotion ?? '',
+        });
+        try {
+          const blob = await fetch(diaryResult.imageUrl).then((r) => r.blob());
+          const file = new File([blob], 'diary.png', { type: 'image/png' });
+          const imgRecord = await uploadImage(file);
+          await updateDiary(saved.id, { image_id: imgRecord.id });
+        } catch (imgErr) {
+          console.warn('[자동저장] 이미지 업로드 실패:', imgErr);
+        }
+        handleSaveDiary({
+          id: saved.id.toString(),
+          title: diaryResult.diary.title,
+          body: diaryResult.diary.content,
+          summary: diaryResult.diary.summary ?? '',
+          date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
+          place: autoPlace || '',
+          imageUrl: diaryResult.imageUrl,
+        });
+        setAutoSaveState('done');
+      } catch {
+        setAutoSaveState('error');
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diaryResult]);
 
   return (
     <div className="h-screen bg-[#f8f8f6] pt-16">
@@ -552,6 +715,14 @@ export default function HomePage({
                 <DiaryAlbum
                   diaries={albumDiaries}
                   onBack={() => setShowAlbum(false)}
+                  onDelete={async (id) => {
+                    try {
+                      await deleteDiary(Number(id));
+                      setAlbumDiaries((prev) => prev.filter((d) => d.id !== id));
+                    } catch {
+                      alert('삭제에 실패했어요.');
+                    }
+                  }}
                 />
               )}
 
@@ -575,12 +746,18 @@ export default function HomePage({
           onClick={() => {
             setDiaryResult(null);
             setShowDiaryEditor(false);
+            setShowAlbum(true);
           }}
           className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
         >
           ← 뒤로
         </button>
         <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+        <div className="ml-auto text-xs font-medium">
+          {autoSaveState === 'saving' && <span className="text-[#B08B7A]">저장 중...</span>}
+          {autoSaveState === 'done' && <span className="text-green-500">✓ 저장 완료</span>}
+          {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
+        </div>
       </div>
 
       {/* 스케치북/일기장 본문 */}
@@ -623,58 +800,6 @@ export default function HomePage({
             {diaryResult.diary.content}
           </p>
         </div>
-
-        {/* 저장 버튼 */}
-        <button
-          disabled={isSaving}
-          onClick={async () => {
-            const petId = currentPet?.id ?? fetchedPetId ?? undefined;
-            if (!petId) {
-              alert('반려견 정보를 찾을 수 없어요.');
-              return;
-            }
-            setIsSaving(true);
-            try {
-              // 1단계: 일기 텍스트 먼저 저장
-              const saved = await createDiary({
-                pet_id: petId,
-                title: diaryResult.diary.title,
-                content: diaryResult.diary.content,
-                summary: diaryResult.diary.summary ?? '',
-                emotion: diaryResult.diary.emotion ?? '',
-              });
-
-              // 2단계: base64 이미지 → File → S3 업로드 → image_id 바인딩
-              try {
-                const blob = await fetch(diaryResult.imageUrl).then((r) => r.blob());
-                const file = new File([blob], 'diary.png', { type: 'image/png' });
-                const imgRecord = await uploadImage(file);
-                await updateDiary(saved.id, { image_id: imgRecord.id });
-              } catch {
-                // 이미지 업로드 실패해도 일기 텍스트는 저장됨
-              }
-
-              // 로컬 앨범에도 추가
-              handleSaveDiary({
-                id: saved.id.toString(),
-                title: diaryResult.diary.title,
-                body: diaryResult.diary.content,
-                summary: diaryResult.diary.summary ?? '',
-                date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
-                place: autoPlace || '',
-                imageUrl: diaryResult.imageUrl,
-              });
-              alert('그림일기가 저장되었어요 🐾');
-            } catch {
-              alert('저장에 실패했어요. 다시 시도해주세요.');
-            } finally {
-              setIsSaving(false);
-            }
-          }}
-          className="mt-6 w-full rounded-2xl bg-[#F4845F] py-4 text-sm font-bold text-white transition hover:bg-[#e8764f] disabled:opacity-60"
-        >
-          {isSaving ? '저장 중...' : '💾 저장하기'}
-        </button>
       </div>
     </div>
   </div>
