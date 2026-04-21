@@ -4,7 +4,7 @@ from ai.core.interfaces.base_prompt_builder import BasePromptBuilder
 
 class DiaryPromptBuilder(BasePromptBuilder):
 
-    # 감정 이모지 → 문체 톤
+    # ── 감정 이모지 → 문체 톤 ──────────────────────────
     EMOTION_TONE: dict[str, str] = {
         "😊": "밝고 신나고 경쾌한 톤. 짧고 통통 튀는 문장. 기쁨이 넘침.",
         "😌": "잔잔하고 평온한 톤. 느긋하고 부드럽게 흘러가는 문장.",
@@ -14,72 +14,82 @@ class DiaryPromptBuilder(BasePromptBuilder):
         "🤍": "다정하고 애틋한 톤. 보호자에 대한 사랑이 자연스럽게 묻어남.",
     }
 
-    # 일기 유형 → 강조 포인트
+    # ── 일기 유형 → 강조 포인트 ────────────────────────
     DIARY_TYPE_FOCUS: dict[str, str] = {
         "dog":    "반려견의 행동, 컨디션, 먹은 것, 뛰어논 것 등 아이의 하루 자체에 집중",
-        "owner":  "보호자와의 교감, 보호자가 느낀 감정, 함께한 순간의 따뜻함보다 편안한 유대감에 집중",
+        "owner":  "보호자와의 교감, 함께한 순간의 편안한 유대감에 집중",
         "memory": "특별한 장면, 처음 경험, 여행 등 오래 기억될 순간에 집중",
         "daily":  "평범하지만 소중한 일상, 루틴한 하루의 작은 안정감과 행복에 집중",
     }
 
-    # 감정 이모지 → 이미지 표정/장면 무드
-    IMAGE_EMOTION_RULES: dict[str, str] = {
-        "😊": (
-            "gentle happy expression, "
-            "curious and delighted mood, "
-            "bright readable emotion, "
-            "subtle smile, "
-            "sparkling lively eyes, "
-            "light playful energy"
-        ),
-        "😌": (
-            "peaceful and calm expression, "
-            "soft relaxed eyes, "
-            "gentle small smile, "
-            "quiet comfortable mood, "
-            "restful peaceful energy"
-        ),
-        "🥹": (
-            "tender emotional expression, "
-            "gentle sparkling eyes, "
-            "soft heartfelt mood, "
-            "slightly dreamy but calm atmosphere"
-        ),
-        "😴": (
-            "sleepy relaxed expression, "
-            "soft droopy eyes, "
-            "quiet slow mood, "
-            "restful cozy energy"
-        ),
-        "😟": (
-            "slightly cautious but gentle expression, "
-            "soft concerned mood, "
-            "subtle emotional tension, "
-            "still calm and tender atmosphere"
-        ),
-        "🤍": (
-            "affectionate and loving expression, "
-            "gentle warm eyes, "
-            "soft smile, "
-            "deeply tender and peaceful mood"
-        ),
+    # ── 견종 영문명 자동 매핑 ─────────────────────────
+    BREED_EN_MAP: dict[str, str] = {
+        "골든 리트리버": "Golden Retriever", "말티즈": "Maltese", "포메라니안": "Pomeranian",
+        "비숑 프리제": "Bichon Frise", "시바이누": "Shiba Inu", "진도견": "Jindo",
+        "닥스훈트": "Dachshund", "웰시코기": "Welsh Corgi Pembroke", "시츄": "Shih Tzu",
+        "보더콜리": "Border Collie", "사모예드": "Samoyed", "허스키": "Siberian Husky",
+        "라브라도 리트리버": "Labrador Retriever", "치와와": "Chihuahua", "아키타견": "Akita",
+        "비글": "Beagle", "페키니즈": "Pekingese", "재패니즈 스피츠": "Japanese Spitz",
+        "그레이하운드": "Greyhound", "푸들": "Poodle", "스피츠": "Japanese Spitz",
+        "불독": "English Bulldog", "프렌치 불독": "French Bulldog", "요크셔 테리어": "Yorkshire Terrier",
+        "슈나우저": "Miniature Schnauzer", "달마시안": "Dalmatian", "도베르만": "Doberman",
+        "셰퍼드": "German Shepherd", "삽살개": "Sapsali", "풍산개": "Pungsan",
     }
 
-    # 해외 키워드
+    # ── 견종별 시각적 특징 힌트 ────────────────────────
+    BREED_VISUAL_HINTS: dict[str, str] = {
+        "Poodle": "with clearly curly fluffy coat — NOT straight fur, elegant posture",
+        "Akita": "with large powerful muscular body, thick double coat, broad dignified face, erect triangular ears",
+        "Greyhound": "with slim elegant long body, narrow long snout, long slender legs, expressive gentle eyes",
+        "Shih Tzu": "with very flat face, long flowing silky coat, and large round dark eyes",
+        "Dachshund": "with distinctively very long body, very short legs, and long floppy ears",
+        "Pekingese": "with flat wrinkled face, thick lion-like mane coat, small compact body",
+        "Samoyed": "with thick fluffy white double coat, black eyes and nose, gentle smile",
+        "Siberian Husky": "with striking bi-color or blue eyes, thick coat, wolf-like facial markings",
+        "Border Collie": "with black and white coat, alert intelligent expression, medium build",
+        "Welsh Corgi Pembroke": "with short legs, long body, large upright ears, fluffy hindquarters",
+        "Bichon Frise": "with round fluffy white coat, dark eyes and nose, small compact body",
+        "Maltese": "with long silky white straight coat, tiny delicate build",
+        "Jindo": "with medium build, wedge-shaped face, erect ears, curled tail, often white or tan coat",
+        "Cocker Spaniel": "with long wavy silky ears, medium-length wavy coat, gentle round eyes",
+        "German Shepherd": "with tan and black saddle coat, large upright pointed ears, confident athletic build",
+        "French Bulldog": "with very flat wrinkled face, large upright bat-like ears, compact muscular body",
+        "Yorkshire Terrier": "with fine silky steel-blue and tan coat, small delicate build",
+        "Miniature Schnauzer": "with distinctive bushy eyebrows and beard, salt-and-pepper wiry coat",
+        "Dalmatian": "with white short coat covered in clearly defined black spots, athletic build",
+        "Sapsali": "with very long thick shaggy coat covering face and body, gentle calm expression",
+    }
+
+    # ── 야간 키워드 ──────────────────────────────────
+    NIGHT_KEYWORDS = [
+        "밤", "저녁", "야간", "잠들기 전", "자기 전", "잠자리", "취침",
+        "불 끄고", "조명 켜고", "램프", "어두워", "어둑", "달빛",
+        "night", "evening", "bedtime", "before sleep",
+    ]
+
+    # ── 해외 키워드 ───────────────────────────────────
     OVERSEAS_KEYWORDS = [
         "해외여행", "해외", "외국", "일본", "도쿄", "오사카", "미국", "뉴욕",
         "파리", "프랑스", "유럽", "태국", "방콕", "베트남", "하노이", "호치민",
         "스페인", "이탈리아", "영국", "런던", "중국", "홍콩", "대만", "타이페이",
     ]
 
+    # ── 감정 이모지 → 이미지 표정 무드 ──────────────────
+    IMAGE_EMOTION_RULES: dict[str, str] = {
+        "😊": "gentle happy expression, sparkling lively eyes, light playful energy",
+        "😌": "peaceful calm expression, soft relaxed eyes, quiet comfortable mood",
+        "🥹": "tender emotional expression, gentle sparkling eyes, soft heartfelt mood",
+        "😴": "sleepy relaxed expression, soft droopy eyes, restful cozy energy",
+        "😟": "slightly cautious but gentle expression, soft concerned mood, calm tender atmosphere",
+        "🤍": "affectionate loving expression, gentle warm eyes, deeply tender peaceful mood",
+    }
+
     # ── BasePromptBuilder 필수 구현 ──────────────────────
 
     def build_system_prompt(self) -> str:
-        """일기 생성용 시스템 프롬프트 (현재 미사용, 인터페이스 규칙 충족용)"""
-        return "너는 강아지의 하루를 대신 써주는 그림일기 작가다."
+        return "너는 강아지의 하루를 대신 써주는 프리미엄 그림일기 작가다."
 
     def build_user_prompt(self, **kwargs) -> str:
-        """일기 생성용 유저 프롬프트 — build_diary_prompt() 호출"""
         return self.build_diary_prompt(**kwargs)
 
     # ── 공개 메서드 ──────────────────────────────────────
@@ -94,6 +104,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
         emotion: str,
         conversation_summary: str,
         owner_name: str = "",
+        owner_gender: str = "",
         **kwargs,
     ) -> str:
         age_years = self._get_pet_age_years(birth_date)
@@ -103,94 +114,79 @@ class DiaryPromptBuilder(BasePromptBuilder):
         focus = self.DIARY_TYPE_FOCUS.get(diary_type, self.DIARY_TYPE_FOCUS["dog"])
         scene_hint = self._infer_scene_hint(conversation_summary)
         image_emotion_rule = self.IMAGE_EMOTION_RULES.get(emotion, self.IMAGE_EMOTION_RULES["😊"])
-        owner_label = owner_name.strip() if owner_name and owner_name.strip() else "보호자"
+        time_of_day = self._detect_time_of_day([conversation_summary])
+        time_hint = (
+            "nighttime scene, soft indoor lamp light or moonlight, cozy dim atmosphere, "
+            if time_of_day == "night"
+            else "natural soft daylight, "
+        )
+
+        if owner_name and owner_name.strip():
+            owner_label = owner_name.strip()
+        elif owner_gender.upper() == "MALE":
+            owner_label = "보호자 아빠"
+        elif owner_gender.upper() == "FEMALE":
+            owner_label = "보호자 엄마"
+        else:
+            owner_label = "보호자"
 
         return f"""
-너는 강아지의 하루를 대신 써주는 그림일기 작가다.
-
-[핵심 역할]
-보호자와 나눈 대화를 바탕으로,
-강아지 {pet_name}가 직접 일기장에 쓴 것처럼
-순수하고 사랑스럽고 귀여운 일기를 작성한다.
+너는 강아지의 하루를 대신 써주는 프리미엄 그림일기 작가다.
+보호자와 나눈 대화를 바탕으로, 강아지 {pet_name}가 직접 쓴 것처럼 순수하고 사랑스러운 일기를 작성한다.
+출력은 반드시 JSON만 한다.
 
 [절대 규칙]
 - 반드시 1인칭 강아지 시점 ("나는", "내가", "오늘 나는")
-- 화자는 {pet_name}이며, 강아지다
-- 사람은 절대 강아지처럼 표현하지 않는다
-- 등장하는 강아지는 {pet_name} 한 마리뿐
-- 보호자 호칭은 "{owner_label}"로 통일 (예: "{owner_label}이", "{owner_label}가", "{owner_label}랑")
-- "멍!"은 정확히 한 번만 사용
-- 사실에 없는 내용은 지어내지 않는다
+- 화자는 {pet_name}(강아지)이며, 사람은 절대 강아지처럼 표현하지 않는다
+- 등장하는 강아지는 {pet_name} 한 마리뿐이다
+- 보호자 호칭은 "{owner_label}" 그대로 사용하고 이름 자체를 변형하지 않는다
+- "멍!"은 정확히 한 번만 사용한다
+- 사실에 없는 사건, 장소, 음식, 행동, 감정은 지어내지 않는다
+- 병, 상처, 위험, 공격성 같은 내용은 대화에 있을 때만 반영한다
 
-[말투 규칙 - 가장 중요]
-- 어린아이가 쓴 일기장처럼 맑고 귀엽고 솔직하게
-- 강아지 특유의 엉뚱한 시선과 순수한 감정 포함
+[문체]
+- 어린아이가 쓴 일기처럼 맑고 귀엽고 솔직한 말투
+- 강아지 특유의 엉뚱한 시선과 순수한 감정
 - 짧고 리듬감 있는 문장
-- 억지 감동 금지, 자연스럽고 사랑스럽게
+- 과한 시적 표현, 사람스러운 철학적 문장, 번역체 금지
 
-[감정 톤 - 선택된 이모지: {emotion}]
+[감정 톤: {emotion}]
 {tone}
 
 [일기 유형: {diary_type}]
-이 유형의 강조 포인트: {focus}
+{focus}
 
 [내용 구성]
-- 본문 최소 300자, 5~7문장
-- 기승전결 흐름 (시작 → 상황 → 행동/감정 → 마무리)
-- 감각 묘사 2개 이상 필수 (냄새 / 촉감 / 소리 / 움직임 중)
-- 마지막 문장은 포근하고 사랑스럽게
+- 본문 최소 300자
+- 5~7문장
+- 기승전결이 느껴지는 자연스러운 흐름
+- 감각 묘사 2개 이상 포함 (냄새/촉감/소리/움직임 중)
+- 마지막 문장은 포근하고 사랑스럽게 마무리
 
 [강아지 정보]
-이름: {pet_name}
-나이: {age_text}
-견종: {breed or "강아지"}
-성격: {personality_text}
+이름: {pet_name} | 나이: {age_text} | 견종: {breed or "강아지"} | 성격: {personality_text}
 
 [오늘의 대화 내용]
 {conversation_summary}
 
-[이미지 장면 힌트]
+[이미지 힌트]
 {scene_hint}
+표정/감정: {image_emotion_rule}
 
-[이미지 감정/표정 힌트]
-{image_emotion_rule}
+[image_prompt_base 생성 규칙]
+- 반드시 영어로 작성, 90단어 이내
+- 가장 선명한 하나의 순간만 묘사
+- {time_hint}full-page picture book illustration 느낌
+- one cute dog as the main character
+- one single frozen moment, one camera view
+- no multi-panel, no split screen, no comic strip
 
-[이미지 프롬프트 생성 규칙]
-- image_prompt_base는 오늘의 핵심 장면을 영어로 설명하되, 반드시 "일기 내용과 맞는 장면"이 되도록 쓴다
-- 정적인 증명사진 같은 정면샷보다, 행동과 상황이 보이는 서사적인 장면을 우선한다
-- 장면 설명에는 위치, 행동, 감정, 분위기, 감각 단서가 포함되어야 한다
-- 아래 요소를 자연스럽게 포함한다:
-  one cute storybook dog as the main character,
-  simple rounded face,
-  small evenly spaced eyes,
-  one small clear nose,
-  tiny readable mouth,
-  symmetrical facial features,
-  clean silhouette,
-  face fully rendered,
-  lively readable expression,
-  polished premium children's book illustration quality,
-  soft storybook illustration,
-  gouache and colored pencil texture,
-  calm pastel palette with soft greens and blues,
-  natural soft daylight,
-  peaceful and comfortable atmosphere,
-  clean white fur if the dog is white,
-  avoid yellow cast,
-  avoid sepia tone,
-  no blurry face,
-  no distorted facial features,
-  no extra animals
-- 배경보다 캐릭터 가독성이 우선이지만, 배경도 일기 장면과 어울리게 서사를 전달해야 한다
-- 실사풍이 아니라 그림책 캐릭터 일러스트 느낌으로 쓴다
-- 전체 색감은 노랗거나 세피아처럼 치우치지 않게 한다
-
-[출력 형식 - 반드시 JSON으로만, 다른 말 금지]
+[출력 형식 - 반드시 JSON만]
 {{
   "title": "귀엽고 짧은 제목 (15자 이내, 강아지 말투)",
-  "content": "일기 본문 (300자 이상, 강아지 1인칭, 귀엽고 감각적으로)",
+  "content": "일기 본문 (300자 이상, 강아지 1인칭)",
   "summary": "한줄요약 (30자 이내, 귀엽게)",
-  "image_prompt_base": "Describe the most vivid storybook scene from today's diary in English within 90 words. The image must be a single scene, single panel illustration — never a comic strip, never multi-panel, never split into 2 or 4 frames. Show one cute storybook dog as the main character with a simple rounded face, small clear eyes, one small nose, tiny readable mouth, and a lively expressive face. Prefer a narrative scene over a static portrait. Include environmental storytelling, polished premium children's book illustration quality, gouache and colored pencil texture, calm pastel palette with soft greens and blues, natural soft daylight, peaceful and comfortable atmosphere, clean white fur if the dog is white, avoid yellow cast, and no blurry or distorted face."
+  "image_prompt_base": "English only. One single storybook scene within 90 words."
 }}
 """
 
@@ -203,165 +199,104 @@ class DiaryPromptBuilder(BasePromptBuilder):
         personalities: list[str],
         all_answers: list[str],
         emotion: str = "😊",
+        owner_gender: str = "",
+        **kwargs,
     ) -> str:
-        breed_name = breed_en or breed or "small dog"
+        breed_name = self._get_breed_en(breed, breed_en)
+        breed_hint = self._get_breed_visual_hint(breed_name)
         personality = ", ".join(personalities) if personalities else "cute and lovely"
         age_style = self._get_age_based_art_style(birth_date)
         age_appearance = self._get_age_appearance_hint(birth_date)
         overseas_location = self._detect_overseas(all_answers)
         image_emotion_rule = self.IMAGE_EMOTION_RULES.get(emotion, self.IMAGE_EMOTION_RULES["😊"])
         fur_color_rule = self._get_fur_color_rule(breed, image_prompt_base, all_answers)
+        time_of_day = self._detect_time_of_day(all_answers + [image_prompt_base])
+
+        if owner_gender.upper() == "MALE":
+            guardian_gender_hint = "if a guardian appears, they appear as a man — male guardian"
+        elif owner_gender.upper() == "FEMALE":
+            guardian_gender_hint = "if a guardian appears, they appear as a woman — female guardian"
+        else:
+            guardian_gender_hint = ""
+
+        subject_priority_rules = (
+            "PRIORITY ORDER: first the main dog's face and body readability, "
+            "second the dog's action and emotion, "
+            "third the immediate environment, "
+            "fourth any human or background details"
+        )
 
         face_rules = (
-            "storybook character design, "
-            "simple rounded face, "
-            "small evenly spaced eyes, "
-            "one small clear nose, "
-            "tiny readable mouth, "
-            "symmetrical facial features, "
-            "clean face shape, "
-            "clear lively expression, "
-            "face fully rendered, "
-            "not blurry, "
-            "not smudged, "
-            "no distorted face, "
-            "no duplicated eyes, "
-            "no extra ears, "
-            "no extra limbs"
+            "PRIORITY: the dog's face must be the clearest element, "
+            "simple rounded storybook dog face, two clear symmetrical eyes, "
+            "one small clear nose, one tiny readable mouth, "
+            "no blurry face, no distorted features, no duplicated eyes"
         )
 
-        all_characters_face_rules = (
-            "every character in the scene must have a clearly drawn face, "
-            "all dogs including background dogs must have simple clean readable faces, "
-            "no blurry dog faces anywhere in the image, "
-            "no smudged or undefined dog faces, "
-            "background dogs should be smaller and simplified but still clearly drawn, "
-            "IMPORTANT — human faces: draw all humans in a very simple flat storybook style, "
-            "human faces must use minimal features — simple oval face, dot eyes, small curved mouth, "
-            "no detailed realistic human faces, "
-            "keep human faces extremely simplified like a children's picture book, "
-            "if a human face cannot be drawn clearly, show the human from the side or back, "
-            "no blurry human faces, "
-            "no creepy uncanny human faces, "
-            "no faceless humans"
-        )
-
-        expression_rules = (
-            f"{image_emotion_rule}, "
-            "bright readable emotion, "
-            "subtle expressive face, "
-            "emotion should match the diary mood"
+        human_rules = (
+            "all humans MUST use soft storybook illustration style, "
+            "no photorealistic human faces, "
+            "simple rounded storybook faces, small clear dot eyes, tiny curved smile, "
+            "all humans are East Asian with black or dark brown eyes"
         )
 
         composition_rules = (
-            "single scene illustration, "
-            "single panel only, "
-            "one cohesive scene, "
-            "narrative storybook scene, "
-            "character readability first, "
-            "large clear main subject, "
-            "full body of the main dog must be fully visible within the frame, "
-            "entire dog including tail must be inside the image, "
-            "leave enough margin around the dog so no body part is cropped, "
-            "the action and environment must match the diary content, "
-            "avoid static passport-like front pose, "
-            "environmental storytelling, "
-            "picture-book layout, "
-            "balanced composition, "
-            "background supports the story, "
-            "main character remains the clearest element, "
-            "no comic strips, "
-            "no manga panels, "
-            "no multi-panel layout, "
-            "no split panels, "
-            "no panel borders, "
-            "no 2-panel, "
-            "no 4-panel, "
-            "no sequential frames, "
-            "no grid layout"
+            "ABSOLUTE: one single frozen moment — never show two locations or time periods, "
+            "ABSOLUTE: EXACTLY ONE dog in the entire image, "
+            "single scene only, single panel only, "
+            "no comic strip, no multi-panel, no split screen, "
+            "no frames, no borders, no panel dividers"
         )
 
         quality_rules = (
-            "polished high-quality children's book illustration, "
-            "premium illustration quality, "
-            "refined character rendering, "
-            "clean facial drawing, "
-            "all props and objects clearly rendered with clean defined shapes, "
-            "toys and items must have readable clean outlines, "
-            "no blurry or undefined objects, "
-            "finished composition, "
-            "soft but well-designed background, "
-            "detailed yet gentle environment, "
-            "professional picture-book artwork, "
-            "visually cohesive and aesthetically refined"
+            "premium polished children's picture book illustration, "
+            "clean readable outlines, clear character silhouette, "
+            "not photorealistic, not 3D render"
         )
 
-        texture_rules = (
-            "STYLE: Korean-Japanese soft storybook illustration, "
-            "soft gouache and colored pencil texture, "
-            "matte hand-painted storybook finish, "
-            "clean soft shading, "
-            "delicate grain texture, "
-            "calm muted pastel palette — sage green, misty green, powder blue, airy sky blue, ivory white, soft neutral beige, "
-            "soft natural daylight, "
-            "gentle warm-neutral tone, "
-            "avoid vivid saturated colors, "
-            "avoid strong yellow cast, "
-            "avoid sepia tone, "
-            "avoid orange lighting, "
-            "avoid overly warm color grading, "
-            "avoid Western cartoon style, "
-            "avoid bright primary colors, "
-            "preserve soft muted pastels and clean whites"
-        )
-
-        mood_rules = (
-            "wholesome storybook animal character, "
-            "wholesome diary illustration, "
-            "peaceful and comfortable atmosphere, "
-            "fresh and airy color mood, "
-            "soft emotionally calm feeling, "
-            "clean and balanced scene, "
-            "not realistic fur detail, "
-            "not photorealistic, "
-            "not overly detailed realism"
-        )
+        if time_of_day == "night":
+            texture_rules = (
+                "STYLE: Korean-Japanese soft picture book illustration, "
+                "soft gouache and colored pencil texture, "
+                "nighttime palette — deep navy, dusty indigo, muted lavender, warm ivory glow, "
+                "avoid bright daylight, avoid orange cast, avoid sepia tone"
+            )
+        else:
+            texture_rules = (
+                "STYLE: Korean-Japanese soft picture book illustration, "
+                "soft gouache and colored pencil texture, "
+                "calm pastel palette — sage green, powder blue, ivory white, soft neutral beige, "
+                "soft natural daylight, avoid yellow cast, avoid sepia tone"
+            )
 
         if overseas_location:
             location_suffix = (
-                f"setting inspired by {overseas_location}, "
-                f"authentic local scenery, "
-                f"travel diary feeling, "
-                f"balanced calm pastel colors"
+                f"setting inspired by {overseas_location}, authentic local scenery, travel diary feeling"
             )
         else:
             location_suffix = (
                 "Korean everyday setting if applicable, "
-                "soft natural daylight, "
-                "fresh airy atmosphere, "
-                "balanced calm pastel colors, "
-                "sage green and powder blue background accents, "
-                "no Middle Eastern architecture, "
-                "no mosque, "
-                "no Arabic text"
+                "no Middle Eastern architecture, no mosque, no Arabic text"
             )
 
         return (
             f"{image_prompt_base.strip().rstrip('.')}, "
-            f"main character: one adorable {breed_name}, "
+            f"main character: one adorable {breed_name}{(' ' + breed_hint) if breed_hint else ''}, "
             f"personality in expression: {personality}, "
             f"{age_style}, "
             f"{(age_appearance + ', ') if age_appearance else ''}"
             f"{fur_color_rule}, "
+            f"{subject_priority_rules}, "
             f"{face_rules}, "
-            f"{all_characters_face_rules}, "
-            f"{expression_rules}, "
+            f"{human_rules}, "
+            f"{image_emotion_rule}, emotion matches diary mood exactly, "
             f"{composition_rules}, "
             f"{quality_rules}, "
             f"{texture_rules}, "
-            f"{mood_rules}, "
             f"{location_suffix}, "
-            f"all humans are East Asian in appearance if humans appear"
+            f"all humans are East Asian with black or dark brown eyes if humans appear, "
+            f"{(guardian_gender_hint + ', ') if guardian_gender_hint else ''}"
+            f"no visible text or letters anywhere in the image"
         )
 
     # ── private 메서드 ────────────────────────────────────
@@ -385,38 +320,16 @@ class DiaryPromptBuilder(BasePromptBuilder):
 
     def _get_age_based_art_style(self, birth_date_str: str | None) -> str:
         age_months = self._get_pet_age_months(birth_date_str)
-
         base = (
             "high-quality storybook illustration, "
-            "premium children's book art, "
-            "cute character design with refined rendering, "
-            "simple rounded face, "
-            "clean silhouette, "
-            "readable facial features, "
-            "small clear eyes, "
-            "one small clear nose, "
-            "tiny readable mouth, "
-            "symmetrical facial features, "
+            "premium children's picture book art, "
             "soft gouache and colored pencil texture, "
             "matte hand-painted feeling, "
-            "delicate grain texture, "
-            "clean layered color blocking, "
-            "calm pastel palette, "
-            "soft sage green, misty green, powder blue, airy sky blue, ivory white, soft neutral beige, "
-            "natural soft daylight, "
-            "peaceful and comfortable atmosphere, "
-            "airy and fresh mood, "
-            "emotionally gentle, "
-            "polished illustration finish, "
-            "not realistic, "
-            "not photorealistic, "
-            "avoid strong yellow cast, "
-            "avoid sepia tone, "
-            "avoid orange lighting, "
-            "avoid overly warm color grading, "
-            "prefer neutral and clean whites"
+            "calm pastel palette — soft sage green, powder blue, ivory white, soft neutral beige, "
+            "emotionally gentle and warm, "
+            "not realistic, not photorealistic, "
+            "avoid strong yellow cast, avoid sepia tone, avoid orange lighting"
         )
-
         if age_months is None:
             return base
         if age_months <= 5:
@@ -425,19 +338,26 @@ class DiaryPromptBuilder(BasePromptBuilder):
             return base + ", young puppy energy, bright but calm, slightly puffy proportions"
         if age_months <= 35:
             return base + ", balanced youthful proportions, storybook polish, gentle simplified details"
-        return base + ", slightly calmer and more refined, emotionally gentle, soft mature storybook quality"
+        return base + ", slightly calmer and more refined, soft mature storybook quality"
 
     def _get_age_appearance_hint(self, birth_date_str: str | None) -> str:
         age_months = self._get_pet_age_months(birth_date_str)
         if age_months is None:
             return ""
         if age_months <= 11:
-            return "playful bouncy pose, curious and excited energy, innocent baby-like expression"
+            return "small compact puppy body, playful bouncy pose, curious excited energy, innocent baby-like expression"
         if age_months <= 35:
             return "lively energetic posture, youthful active movement, bright curious expression"
         if age_months <= 71:
-            return "calm composed posture, relaxed confident stance, gentle mature expression"
-        return "slow calm relaxed posture, peaceful serene expression, gentle dignified and wise mood"
+            return "calm composed posture, fully grown adult-sized body, relaxed confident stance"
+        return (
+            "clearly a fully grown adult dog — NOT a puppy, "
+            "heavier and fuller body shape, slow calm relaxed posture, peaceful dignified expression"
+        )
+
+    def _detect_time_of_day(self, texts: list[str]) -> str:
+        full = " ".join(texts)
+        return "night" if any(kw in full for kw in self.NIGHT_KEYWORDS) else "day"
 
     def _detect_overseas(self, answers: list[str]) -> str | None:
         full_text = " ".join(answers)
@@ -448,30 +368,35 @@ class DiaryPromptBuilder(BasePromptBuilder):
 
     def _infer_scene_hint(self, conversation_summary: str) -> str:
         text = conversation_summary or ""
+        if any(kw in text for kw in ["동물병원", "병원", "수의사", "검진", "진료", "주사"]):
+            return "Scene: inside a warm veterinary clinic — examination table or cozy waiting area."
         if any(kw in text for kw in ["바다", "해변", "파도", "모래", "부산"]):
-            return "The main scene should show the dog experiencing the seaside, with shallow waves, beach, sea breeze, and a curious or delighted reaction."
+            return "Scene: dog at the seaside — shallow waves, beach, sea breeze, curious reaction."
         if any(kw in text for kw in ["공원", "잔디", "풀", "산책", "벚꽃"]):
-            return "The main scene should show the dog outdoors in a park or on a walk, with grass, breeze, and visible movement or interest in the surroundings."
+            return "Scene: dog outdoors in park or on a walk — grass, breeze, movement and interest."
         if any(kw in text for kw in ["소파", "집", "거실", "기대", "옆에", "안겨", "무릎"]):
-            return "The main scene should show a cozy indoor moment with the dog near the guardian, with closeness, comfort, and emotional bonding."
+            return "Scene: cozy indoor moment — dog near the guardian, closeness and emotional bonding."
         if any(kw in text for kw in ["카페", "여행", "기차", "전철", "버스", "외출"]):
-            return "The main scene should show a special outing or travel moment, with environmental storytelling and a memorable but calm atmosphere."
-        return "The main scene should clearly match the most vivid emotional moment from the diary, showing the dog's action, mood, and surroundings in a narrative way."
+            return "Scene: special outing or travel — environmental storytelling, memorable calm atmosphere."
+        return "Scene: the most vivid emotional moment from the diary — dog's action, mood, and surroundings."
 
     def _get_fur_color_rule(self, breed: str, image_prompt_base: str, all_answers: list[str]) -> str:
         text = " ".join([breed or "", image_prompt_base or "", *all_answers]).lower()
         white_keywords = [
-            "white", "ivory", "cream", "white dog", "bichon", "maltese", "spitz", "samoyed",
-            "비숑", "말티즈", "스피츠", "사모예드", "흰", "하얀", "백색"
+            "white", "ivory", "cream", "bichon", "maltese", "spitz", "samoyed",
+            "비숑", "말티즈", "스피츠", "사모예드", "흰", "하얀", "백색",
         ]
         if any(kw in text for kw in white_keywords):
             return (
-                "fur color must remain clearly white, "
-                "clean neutral white fur, "
-                "soft ivory white highlights only, "
-                "no yellow fur tint, "
-                "no beige fur cast, "
-                "no cream-colored body unless explicitly described, "
-                "preserve bright white character readability"
+                "fur must remain clearly white, clean neutral white fur, "
+                "no yellow or beige fur tint, preserve bright white character readability"
             )
-        return "natural fur color, clean readable coat color, avoid muddy color cast"
+        return "natural fur color, clean readable coat, avoid muddy color cast"
+
+    def _get_breed_en(self, breed: str, breed_en: str | None) -> str:
+        if breed_en and breed_en.strip():
+            return breed_en.strip()
+        return self.BREED_EN_MAP.get(breed, breed)
+
+    def _get_breed_visual_hint(self, breed_en: str) -> str:
+        return self.BREED_VISUAL_HINTS.get(breed_en, "")
