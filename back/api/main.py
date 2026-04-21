@@ -267,8 +267,9 @@ app = FastAPI(
     title="withDOG API",
     description="반려견 동반 여행 및 AI 그림일기 서비스 withDOG 백엔드 API",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
     lifespan=lifespan,
 )
 
@@ -301,6 +302,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # 각 도메인 라우터는 구현 완료 후 주석을 해제하세요.
 # =============================================================================
 
+from fastapi.routing import APIRouter
 from routers import (
     admin_router,
     auth_router,
@@ -315,42 +317,47 @@ from routers import (
     places_router,
 )
 
+# /api prefix로 묶어 nginx proxy_pass 경로와 일치시킴
+_api_router = APIRouter(prefix="/api")
+
 # 관리자 (영구 토큰 발급)
-app.include_router(admin_router.router,         prefix="/admin",      tags=["Admin"])
+_api_router.include_router(admin_router.router,         prefix="/admin",      tags=["Admin"])
 
 # 인증 (소셜 로그인)
-app.include_router(auth_router.router,          prefix="/auth",       tags=["Auth"])
+_api_router.include_router(auth_router.router,          prefix="/auth",       tags=["Auth"])
 
 # 사용자 (4순위) — /me 가 /{user_id} 보다 먼저 매칭되도록 순서 보장
-app.include_router(users_router.router,         prefix="/users",      tags=["Users"])
+_api_router.include_router(users_router.router,         prefix="/users",      tags=["Users"])
 
 # 반려견 (5순위)
-app.include_router(pets_router.router,          prefix="/pets",       tags=["Pets"])
+_api_router.include_router(pets_router.router,          prefix="/pets",       tags=["Pets"])
 
 # 채팅방 + 채팅 메시지 (6순위) — 같은 prefix 공유
-app.include_router(chat_rooms_router.router,    prefix="/chat-rooms", tags=["ChatRooms"])
-app.include_router(chat_messages_router.router, prefix="/chat-rooms", tags=["ChatMessages"])
+_api_router.include_router(chat_rooms_router.router,    prefix="/chat-rooms", tags=["ChatRooms"])
+_api_router.include_router(chat_messages_router.router, prefix="/chat-rooms", tags=["ChatMessages"])
 
 # 다이어리 (7순위)
-app.include_router(diaries_router.router,       prefix="/diaries",    tags=["Diaries"])
+_api_router.include_router(diaries_router.router,       prefix="/diaries",    tags=["Diaries"])
 
 # 이미지 (2순위)
-app.include_router(images_router.router,        prefix="/images",     tags=["Images"])
+_api_router.include_router(images_router.router,        prefix="/images",     tags=["Images"])
 
 # 견종 (3순위)
-app.include_router(breeds_router.router,        prefix="/breeds",     tags=["Breeds"])
+_api_router.include_router(breeds_router.router,        prefix="/breeds",     tags=["Breeds"])
 
 # 키워드 (온보딩 태그)
-app.include_router(keywords_router.router,      prefix="/keywords",   tags=["Keywords"])
+_api_router.include_router(keywords_router.router,      prefix="/keywords",   tags=["Keywords"])
 
 # 장소 검색 (Places)
-app.include_router(places_router.router,       prefix="/places",       tags=["Places"])
+_api_router.include_router(places_router.router,        prefix="/places",     tags=["Places"])
+
+app.include_router(_api_router)
 
 # =============================================================================
 # 헬스체크 엔드포인트
 # =============================================================================
 
-@app.get("/health", tags=["Health"], summary="서버 상태 확인")
+@app.get("/api/health", tags=["Health"], summary="서버 상태 확인")
 async def health_check() -> dict:
     """서버 및 DB 연결 상태를 반환합니다."""
 

@@ -1,0 +1,44 @@
+services:
+
+  # ── 백엔드 (FastAPI + uvicorn) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    image: withdog-backend:local
+    container_name: withdog-backend
+    env_file:
+      - ../../.env
+    volumes:
+      - ~/.ssh/withDOG.pem:/run/secrets/withdog.pem:ro
+    # 직접 디버깅이 필요할 때 아래 주석을 해제
+    # ports:
+    #   - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - withdog-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  # ── Nginx (정적 파일 서빙 + API 리버스 프록시) ─────────────────────────────
+  nginx:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.nginx
+    image: withdog-nginx:local
+    container_name: withdog-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - withdog-net
+
+networks:
+  withdog-net:
+    driver: bridge
