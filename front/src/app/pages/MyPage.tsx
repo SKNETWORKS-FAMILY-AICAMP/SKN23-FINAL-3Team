@@ -16,6 +16,7 @@ import {
 import { getMe, type UserProfile } from "../services/userService";
 import { getPets, type Pet } from "../services/petService";
 import { getAllBreeds, type Breed } from "../services/breedService";
+import { getImage } from "../services/imageService";
 import { useNavigate } from "react-router";
 
 // ── 마이페이지 전용 타입 ──────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ function toAgeLabel(age: number | null | undefined): string {
 
 // ── 상세보기 모달 ─────────────────────────────────────────────────────────────
 
-function PetDetailModal({ pet, onClose }: { pet: PetCard | null; onClose: () => void }) {
+function PetDetailModal({ pet, onClose, petPhotos }: { pet: PetCard | null; onClose: () => void; petPhotos: Record<number, string> }) {
   if (!pet) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/40 p-6" onClick={onClose}>
@@ -53,8 +54,8 @@ function PetDetailModal({ pet, onClose }: { pet: PetCard | null; onClose: () => 
       >
         <div className="flex items-start gap-5">
           <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
-            {localStorage.getItem(`pet_photo_${pet.id}`) ? (
-              <img src={localStorage.getItem(`pet_photo_${pet.id}`)!} alt={pet.name} className="h-full w-full object-cover" />
+            {petPhotos[pet.id] ? (
+              <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
             ) : (
               <Dog className="h-10 w-10 text-orange-500" />
             )}
@@ -116,6 +117,7 @@ export default function MyPage() {
   const [pets, setPets] = useState<PetCard[]>([]);
   const [rawPets, setRawPets] = useState<Pet[]>([]);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [petPhotos, setPetPhotos] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [selectedPetId, setSelectedPetId] = useState<number | null>(
     () => Number(localStorage.getItem('selected_pet_id')) || null
@@ -168,6 +170,28 @@ export default function MyPage() {
           const initialPet = savedId ? cards.find((c) => c.id === savedId) : null;
           setSelectedPetId(initialPet?.id ?? cards[0].id);
         }
+
+        // localStorage 우선, 없으면 profile_id로 백엔드에서 가져와 캐시
+        const photos: Record<number, string> = {};
+        let backendUrl: string | null = null;
+        for (const p of fetchedPets) {
+          const cached = localStorage.getItem(`pet_photo_${p.id}`);
+          if (cached) {
+            photos[p.id] = cached;
+          } else {
+            if (backendUrl === null && me.profile_id) {
+              try {
+                const img = await getImage(me.profile_id);
+                backendUrl = img.url;
+              } catch { backendUrl = ''; }
+            }
+            if (backendUrl) {
+              localStorage.setItem(`pet_photo_${p.id}`, backendUrl);
+              photos[p.id] = backendUrl;
+            }
+          }
+        }
+        setPetPhotos(photos);
       } catch (err) {
         console.error("마이페이지 로드 실패", err);
         // 401로 인해 token이 이미 삭제된 경우 isLoggedIn이 false로 바뀌므로 별도 처리 불필요
@@ -178,13 +202,15 @@ export default function MyPage() {
     load();
   }, [isLoggedIn]);
 
-  // 저장 버튼 클릭 → localStorage 갱신 + 전체 컴포넌트 동기화
-  const handleSavePet = (pet: PetCard, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSavedPetId(pet.id);
-    setSelectedPetId(pet.id);
-    localStorage.setItem('selected_pet_id', String(pet.id));
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // 외부 저장 버튼 클릭 → localStorage 갱신 + 전체 컴포넌트 동기화
+  const handleSavePet = () => {
+    if (!selectedPetId) return;
+    setSavedPetId(selectedPetId);
+    localStorage.setItem('selected_pet_id', String(selectedPetId));
     window.dispatchEvent(new Event('pet-select-change'));
+    setSaveSuccess(true);
   };
 
   const selectedPet = useMemo(
@@ -294,8 +320,7 @@ export default function MyPage() {
               <div className="relative shrink-0">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
                   {(() => {
-                    const petPhoto = selectedPetId ? localStorage.getItem(`pet_photo_${selectedPetId}`) : null;
-                    const photo = petPhoto ?? profilePhoto;
+                    const photo = (selectedPetId ? petPhotos[selectedPetId] : null) ?? profilePhoto;
                     return photo ? (
                       <img src={photo} alt="프로필" className="h-full w-full object-cover" />
                     ) : (
@@ -402,6 +427,7 @@ export default function MyPage() {
                 </button>
               </div>
             ) : (
+              <>
               <div className="-mx-1 overflow-x-auto pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex w-max gap-5 px-1">
                   {pets.map((pet) => {
@@ -410,7 +436,7 @@ export default function MyPage() {
                       <button
                         key={pet.id}
                         type="button"
-                        onClick={() => setSelectedPetId(pet.id)}
+                        onClick={() => { setSelectedPetId(pet.id); setSaveSuccess(false); }}
                         className={`w-[320px] shrink-0 overflow-hidden rounded-[28px] border p-5 text-left transition ${
                           selected
                             ? "border-orange-300 bg-orange-50/40 shadow-md"
@@ -419,8 +445,8 @@ export default function MyPage() {
                       >
                         <div className="flex items-start gap-4">
                           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
-                            {localStorage.getItem(`pet_photo_${pet.id}`) ? (
-                              <img src={localStorage.getItem(`pet_photo_${pet.id}`)!} alt={pet.name} className="h-full w-full object-cover" />
+                            {petPhotos[pet.id] ? (
+                              <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
                             ) : (
                               <Dog className="h-8 w-8 text-orange-500" />
                             )}
@@ -451,7 +477,7 @@ export default function MyPage() {
                           </div>
                         </div>
 
-                        <div className="mt-5 grid grid-cols-3 gap-2">
+                        <div className="mt-5 grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -492,24 +518,32 @@ export default function MyPage() {
                             <Eye className="h-4 w-4" />
                             상세보기
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => handleSavePet(pet, e)}
-                            className={`inline-flex items-center justify-center gap-1.5 rounded-2xl px-3 py-3 text-sm font-semibold transition ${
-                              pet.id === savedPetId
-                                ? "bg-emerald-500 text-white"
-                                : "bg-slate-900 text-white hover:bg-slate-700"
-                            }`}
-                          >
-                            <Save className="h-4 w-4" />
-                            {pet.id === savedPetId ? "저장됨" : "저장"}
-                          </button>
                         </div>
                       </button>
                     );
                   })}
                 </div>
               </div>
+
+              {/* 외부 저장 버튼 */}
+              {pets.length > 0 && (
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSavePet}
+                    disabled={saveSuccess && selectedPetId === savedPetId}
+                    className={`inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-semibold transition ${
+                      saveSuccess && selectedPetId === savedPetId
+                        ? "bg-emerald-500 text-white"
+                        : "bg-slate-900 text-white hover:bg-slate-700"
+                    }`}
+                  >
+                    <Save className="h-4 w-4" />
+                    {saveSuccess && selectedPetId === savedPetId ? "저장 완료" : "저장"}
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </motion.section>
 
@@ -592,7 +626,7 @@ export default function MyPage() {
         </div>
       </div>
 
-      <PetDetailModal pet={detailPet} onClose={() => setDetailPet(null)} />
+      <PetDetailModal pet={detailPet} onClose={() => setDetailPet(null)} petPhotos={petPhotos} />
     </div>
   );
 }

@@ -54,6 +54,8 @@ export type ChatbotAction =
   | { type: 'RESTART_DIARY' }
   | { type: 'REGENERATE' }
   | { type: 'RESET' }
+  | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
+  | { type: 'RECEIVE_BOT_MESSAGE'; text: string }
 
 // ── 헬퍼 ─────────────────────────────────────────────
 let _counter = 0
@@ -235,6 +237,22 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       }
     }
 
+    case 'SUBMIT_WELCOME_CHAT': {
+      return {
+        ...state,
+        isGenerating: true,
+        messages: [...state.messages, userMsg(action.text)],
+      }
+    }
+
+    case 'RECEIVE_BOT_MESSAGE': {
+      return {
+        ...state,
+        isGenerating: false,
+        messages: [...state.messages, botMsg(action.text)],
+      }
+    }
+
     case 'UPDATE_PET':
       return { ...state, pet: action.pet }
 
@@ -398,6 +416,8 @@ export function useChatbot(pet: Pet) {
     restartDiary: useCallback(() => dispatch({ type: 'RESTART_DIARY' }), []),
     regenerate: useCallback(() => dispatch({ type: 'REGENERATE' }), []),
     reset: useCallback(() => dispatch({ type: 'RESET' }), []),
+    submitWelcomeChat: useCallback((text: string) => dispatch({ type: 'SUBMIT_WELCOME_CHAT', text }), []),
+    receiveBotMessage: useCallback((text: string) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text }), []),
   }
 
   return { state, actions }

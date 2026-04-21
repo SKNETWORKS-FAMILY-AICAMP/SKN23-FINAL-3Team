@@ -12,6 +12,12 @@ class DiaryPromptBuilder(BasePromptBuilder):
         "😴": "나른하고 졸린 톤. 담백하고 느릿한 문장. 하루 마무리 느낌.",
         "😟": "살짝 걱정되고 세심한 톤. 조심스럽지만 부드럽게 마무리.",
         "🤍": "다정하고 애틋한 톤. 보호자에 대한 사랑이 자연스럽게 묻어남.",
+        "😂": "신나고 과장되게 즐거운 톤. 참을 수 없이 웃긴 상황. 유쾌하고 활달한 문장.",
+        "😅": "살짝 민망하고 쑥스러운 톤. 웃기지만 어색한 상황. 귀엽게 당황한 느낌.",
+        "🥰": "두근두근 설레고 사랑스러운 톤. 심장이 녹는 것 같은 달달한 문장.",
+        "😄": "밝고 환한 톤. 활기차고 기분 좋은 하루. 에너지 넘치는 문장.",
+        "🙂": "잔잔하고 만족스러운 톤. 별거 아닌 것 같지만 충분히 행복한 느낌.",
+        "😆": "신나고 장난기 넘치는 톤. 못 참고 터지는 웃음. 유쾌하고 통통 튀는 문장.",
     }
 
     # ── 일기 유형 → 강조 포인트 ────────────────────────
@@ -82,6 +88,12 @@ class DiaryPromptBuilder(BasePromptBuilder):
         "😴": "sleepy relaxed expression, soft droopy eyes, restful cozy energy",
         "😟": "slightly cautious but gentle expression, soft concerned mood, calm tender atmosphere",
         "🤍": "affectionate loving expression, gentle warm eyes, deeply tender peaceful mood",
+        "😂": "overjoyed laughing expression, wide sparkling excited eyes, huge grin, bursting joyful energy",
+        "😅": "sheepish embarrassed expression, nervous gentle smile, slightly flustered but endearing mood",
+        "🥰": "deeply loving glowing expression, heart-filled sparkling eyes, warm tender affectionate mood",
+        "😄": "bright wide cheerful smile, happy beaming eyes, warm sunny joyful energy",
+        "🙂": "gentle content expression, soft calm satisfied eyes, quiet peaceful happy mood",
+        "😆": "playful mischievous laughing expression, lively twinkling eyes, energetic fun-filled mood",
     }
 
     # ── BasePromptBuilder 필수 구현 ──────────────────────

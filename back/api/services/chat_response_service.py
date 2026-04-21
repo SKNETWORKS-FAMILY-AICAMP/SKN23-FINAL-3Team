@@ -70,6 +70,81 @@ class DispatchContext:
     """
     user_id: int | None = None
     db: AsyncSession | None = None
+    room_id: int | None = None  # 이전 대화 맥락 조회용
+
+
+# ── 다이어리 의도 세부 키워드 분류 ──────────────────────────────────────────
+_GUIDE_WRITE_KEYWORDS = [
+    "어떻게", "방법", "어떡해", "알려줘", "알려주세요", "사용법", "처음",
+    "어떻게 써", "어떻게 쓰", "어떻게 만들", "가이드", "도움말", "how",
+    "모르겠", "모르겠어", "모르는데", "어떡해야", "어떻게 해야",
+]
+_GUIDE_ALBUM_KEYWORDS = [
+    "앨범", "모아보기", "저장된", "쓴 일기", "다 쓴", "완성된", "기록",
+    "어디서 봐", "어디에서 봐", "어디서 볼", "볼 수 있", "어디 있",
+    "어디서 확인", "어디에서 확인", "찾을 수", "보관",
+]
+_GUIDE_CALENDAR_KEYWORDS = [
+    "캘린더", "달력", "날짜별", "월별", "날짜로",
+]
+
+# 이전 봇 메시지에서 추가질문 요청 여부 감지
+_FOLLOW_UP_MARKERS = [
+    "더 이야기해주시면", "어디에 갔나요", "조금 더 알려주시면",
+    "무슨 일이 있었나요", "특별히 기억에 남는",
+]
+
+
+def _detect_diary_sub_intent(query: str) -> str:
+    """
+    '다이어리 작성' 의도의 세부 분류.
+    Returns: 'guide_write' | 'guide_album' | 'guide_calendar' | 'write'
+    """
+    q = query
+    if any(kw in q for kw in _GUIDE_CALENDAR_KEYWORDS):
+        return "guide_calendar"
+    if any(kw in q for kw in _GUIDE_ALBUM_KEYWORDS):
+        return "guide_album"
+    if any(kw in q for kw in _GUIDE_WRITE_KEYWORDS):
+        return "guide_write"
+    return "write"
+
+
+# ── 안내 응답 (정적, GPT 호출 없음) ─────────────────────────────────────────
+_RESPONSE_GUIDE_WRITE = """\
+그림일기는 두 가지 방법으로 쓸 수 있어요! ✍️
+
+**방법 1 · 대화로 바로 쓰기**
+여기 채팅창에 오늘 있었던 일을 말씀해주세요.
+예) "오늘 강아지랑 한강 공원 산책했어요"
+→ 제가 바로 그림일기를 만들어드려요!
+
+**방법 2 · 단계별로 쓰기**
+왼쪽 [강아지 일기장] 메뉴 → [새 그림일기 쓰기]를 누르면
+일기 유형 선택 → 질문 답변 → 감정 선택 순서로
+조금 더 자세하고 예쁜 일기를 만들 수 있어요 🐾
+
+오늘 어떤 하루를 보내셨나요?"""
+
+_RESPONSE_GUIDE_ALBUM = """\
+다 쓴 일기는 두 곳에서 확인할 수 있어요! 📂
+
+**📸 앨범** — [강아지 일기장] → [일기 모아보기]
+날짜별로 그림일기를 모아서 볼 수 있어요.
+일기를 누르면 그림과 내용을 크게 볼 수 있고, 수정도 가능해요.
+
+**📅 캘린더** — 상단 메뉴 [캘린더]
+캘린더 형식으로 날짜마다 기록을 확인할 수 있어요.
+
+오늘 새 일기를 써드릴까요? 😊"""
+
+_RESPONSE_GUIDE_CALENDAR = """\
+📅 **캘린더**는 상단 메뉴의 [캘린더]에서 볼 수 있어요!
+
+한 달치 기록을 달력 형식으로 한눈에 볼 수 있고,
+날짜를 누르면 그날 쓴 그림일기를 바로 확인할 수 있어요 🐾
+
+오늘 일기도 써드릴까요?"""
 
 
 # ── 시스템 프롬프트 ──────────────────────────────────────────────────────────
@@ -383,6 +458,41 @@ async def _handle_fallback(query: str) -> str:
     return await _chat_completion(_FALLBACK_SYSTEM_PROMPT, query)
 
 
+async def _handle_diary_mini_flow(query: str, ctx: DispatchContext) -> str:
+    """
+    실제 일기 작성 의도일 때:
+    - 이전 봇 메시지가 추가 질문이었으면 → 그 답변으로 일기 생성
+    - 입력이 충분히 길면 (20자 이상) → 바로 생성
+    - 짧으면 → 추가 질문 1개로 컨텍스트 보강 요청
+    """
+    # 이전 봇 메시지가 추가질문 요청이었는지 확인 (채팅방 히스토리)
+    if ctx.db is not None and ctx.room_id is not None:
+        try:
+            from services.chat_message_service import list_messages
+            recent = await list_messages(ctx.room_id, ctx.db, last_n=4)
+            bot_messages = [m for m in recent if m.role == "assistant"]
+            if bot_messages:
+                last_bot = bot_messages[-1].content
+                if any(marker in last_bot for marker in _FOLLOW_UP_MARKERS):
+                    logger.info("[DiaryMiniFlow] 이전 추가질문 → 현재 메시지로 일기 생성")
+                    return await _handle_diary(query, ctx)
+        except Exception as e:
+            logger.warning(f"[DiaryMiniFlow] 히스토리 조회 실패: {e}")
+
+    # 입력이 충분히 구체적이면 바로 생성
+    if len(query.strip()) >= 20:
+        return await _handle_diary(query, ctx)
+
+    # 짧은 입력 → 추가 질문으로 컨텍스트 보강
+    pet_ctx = await _load_pet_context(ctx)
+    pet_name = pet_ctx.get("pet_name", "우리 아이")
+    return (
+        f"{pet_name}와 함께한 오늘 하루를 일기로 만들어드릴게요! ✍️\n\n"
+        "조금 더 알려주시면 더 예쁜 일기를 쓸 수 있어요 😊\n\n"
+        "어디에 갔나요? 무슨 일이 있었나요? 특별히 기억에 남는 순간이 있었나요?"
+    )
+
+
 # ── 공개 디스패처 ────────────────────────────────────────────────────────────
 async def dispatch(
     intent_result: IntentResult,
@@ -393,25 +503,30 @@ async def dispatch(
     """
         의도 분류 결과에 따라 적절한 핸들러로 라우팅하고 assistant 응답 텍스트를 반환합니다.
 
-        Args:
-                intent_result: intent_service.classify_intent_async() 결과
-                query        : 사용자 입력 텍스트
-                ctx          : DispatchContext(user_id, db) — 다이어리 핸들러에서 사용
-
-        Returns:
-                assistant 응답 문자열 (항상 비어있지 않음)
+        '다이어리 작성' 의도는 키워드 후처리로 세분화됩니다:
+            - guide_write    → 일기 쓰는 방법 안내 (정적 응답)
+            - guide_album    → 앨범/캘린더 위치 안내 (정적 응답)
+            - guide_calendar → 캘린더 위치 안내 (정적 응답)
+            - write          → 미니 플로우 (컨텍스트 부족 시 추가 질문 → 일기 생성)
     """
     if ctx is None:
         ctx = DispatchContext()
 
     intent = intent_result.intent
-
     logger.info(f"[ChatResponse] 의도: {intent}")
-
     top_k = int(intent_result.strategy.get("top_k", 5))
 
     if intent == "다이어리 작성":
-        return await _handle_diary(query, ctx)
+        sub = _detect_diary_sub_intent(query)
+        logger.info(f"[ChatResponse] 다이어리 세부 의도: {sub}")
+        if sub == "guide_write":
+            return _RESPONSE_GUIDE_WRITE
+        if sub == "guide_album":
+            return _RESPONSE_GUIDE_ALBUM
+        if sub == "guide_calendar":
+            return _RESPONSE_GUIDE_CALENDAR
+        return await _handle_diary_mini_flow(query, ctx)
+
     if intent == "장소추천":
         return await _handle_places(query, ctx, top_k=top_k, request=request)
     if intent == "시설정보":

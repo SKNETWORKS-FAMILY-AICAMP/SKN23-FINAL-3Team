@@ -217,12 +217,32 @@ function DiaryAlbum({
   diaries,
   onBack,
   onDelete,
+  onUpdate,
 }: {
   diaries: DiaryEntry[];
   onBack: () => void;
   onDelete: (id: string) => void;
+  onUpdate?: (id: string, title: string, body: string) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<DiaryEntry | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  const handleSaveAlbumEdit = async () => {
+    if (!selected || !onUpdate) return;
+    setEditSaving(true);
+    try {
+      await onUpdate(selected.id, editTitle, editBody);
+      setSelected({ ...selected, title: editTitle, body: editBody });
+      setIsEditing(false);
+    } catch {
+      alert('수정에 실패했어요. 다시 시도해주세요.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   if (selected) {
     return (
@@ -230,12 +250,39 @@ function DiaryAlbum({
         <div className="mx-auto w-full max-w-[720px]">
           <div className="mb-4 flex items-center gap-3">
             <button
-              onClick={() => setSelected(null)}
+              onClick={() => { setSelected(null); setIsEditing(false); }}
               className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
             >
               ← 목록으로
             </button>
             <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+            <div className="ml-auto flex items-center gap-2">
+              {!isEditing && onUpdate && (
+                <button
+                  onClick={() => { setEditTitle(selected.title); setEditBody(selected.body || ''); setIsEditing(true); }}
+                  className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                >
+                  ✏️ 수정
+                </button>
+              )}
+              {isEditing && (
+                <>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-400 transition hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSaveAlbumEdit}
+                    disabled={editSaving}
+                    className="rounded-full bg-[#F4845F] px-3 py-1.5 text-xs text-white transition hover:bg-[#e0724e] disabled:opacity-50"
+                  >
+                    {editSaving ? '저장 중...' : '저장'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
@@ -246,7 +293,15 @@ function DiaryAlbum({
             {/* 제목/요약 */}
             <div className="mb-6 text-center">
               <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-              <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">{selected.title}</h3>
+              {isEditing ? (
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
+                />
+              ) : (
+                <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">{selected.title}</h3>
+              )}
               {selected.summary && (
                 <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
                   ✨ {selected.summary}
@@ -264,14 +319,24 @@ function DiaryAlbum({
             </div>
 
             {/* 일기 본문 - 줄 있는 노트 */}
-            <div
-              className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-              style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-            >
-              <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
-                {selected.body || '내용이 없어요.'}
-              </p>
-            </div>
+            {isEditing ? (
+              <textarea
+                value={editBody}
+                onChange={(e) => setEditBody(e.target.value)}
+                rows={10}
+                className="w-full rounded-[20px] border border-[#F4845F] bg-[#FFFCF8] px-5 py-5 text-[15px] leading-[31px] text-[#3D2B1F] outline-none resize-none"
+                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
+              />
+            ) : (
+              <div
+                className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
+                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
+              >
+                <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+                  {selected.body || '내용이 없어요.'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -294,6 +359,23 @@ function DiaryAlbum({
     );
   }
 
+  // 날짜별 그룹핑 (최신 날짜 먼저)
+  const grouped = [...diaries].reduce<{ date: string; entries: DiaryEntry[] }[]>((acc, entry) => {
+    const existing = acc.find((g) => g.date === entry.date);
+    if (existing) {
+      existing.entries.push(entry);
+    } else {
+      acc.push({ date: entry.date, entries: [entry] });
+    }
+    return acc;
+  }, []);
+
+  const formatDateHeader = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
       <div className="mx-auto w-full max-w-[720px]">
@@ -308,40 +390,46 @@ function DiaryAlbum({
           <span className="ml-auto text-xs text-[#B08B7A]">{diaries.length}개의 일기</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          {[...diaries].reverse().map((entry) => (
-            <div
-              key={entry.id}
-              className="group relative cursor-pointer overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
-              onClick={() => setSelected(entry)}
-            >
-              {/* 삭제 버튼 */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm('이 일기를 삭제할까요?')) onDelete(entry.id);
-                }}
-                className="absolute right-2 top-2 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-red-500 group-hover:flex"
-              >
-                ✕
-              </button>
-              {entry.imageUrl ? (
-                <img
-                  src={entry.imageUrl}
-                  alt={entry.title}
-                  className="h-36 w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-36 w-full items-center justify-center bg-[#FFF0E6] text-4xl">
-                  🐾
-                </div>
-              )}
-              <div className="p-3">
-                <p className="truncate text-sm font-bold text-[#3D2B1F]">{entry.title}</p>
-                <p className="mt-0.5 truncate text-[11px] text-[#B08B7A]">{entry.date}</p>
-                {entry.summary && (
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#8B6355]">{entry.summary}</p>
-                )}
+        <div className="flex flex-col gap-8">
+          {grouped.map(({ date, entries }) => (
+            <div key={date}>
+              {/* 날짜 헤더 */}
+              <div className="mb-3 flex items-center gap-3">
+                <span className="text-sm font-bold text-[#3D2B1F]">{formatDateHeader(date)}</span>
+                <div className="flex-1 border-t border-[#E9D9C9]" />
+                <span className="text-xs text-[#B08B7A]">{entries.length}개</span>
+              </div>
+
+              {/* 해당 날짜 카드 그리드 */}
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                {entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="group relative cursor-pointer overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
+                    onClick={() => setSelected(entry)}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('이 일기를 삭제할까요?')) onDelete(entry.id);
+                      }}
+                      className="absolute right-2 top-2 z-10 hidden h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white transition hover:bg-red-500 group-hover:flex"
+                    >
+                      ✕
+                    </button>
+                    {entry.imageUrl ? (
+                      <img src={entry.imageUrl} alt={entry.title} className="h-36 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-36 w-full items-center justify-center bg-[#FFF0E6] text-4xl">🐾</div>
+                    )}
+                    <div className="p-3">
+                      <p className="truncate text-sm font-bold text-[#3D2B1F]">{entry.title}</p>
+                      {entry.summary && (
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#8B6355]">{entry.summary}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
@@ -489,6 +577,11 @@ export default function HomePage({
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [savedDiaryId, setSavedDiaryId] = useState<number | null>(null);
+  const [isEditingDiary, setIsEditingDiary] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -527,12 +620,14 @@ export default function HomePage({
 
   // URL ?tab= 파라미터 변경 시 탭 동기화
   useEffect(() => {
-    const t = new URLSearchParams(location.search).get('tab');
+    const params = new URLSearchParams(location.search);
+    const t = params.get('tab');
+    const album = params.get('album');
     if (t === 'diary' || t === 'map') {
       setTab(t);
       setShowDiaryEditor(false);
       setShowMapSearch(false);
-      setShowAlbum(false);
+      setShowAlbum(album === 'true');
     }
   }, [location.search]);
 
@@ -633,6 +728,8 @@ export default function HomePage({
     if (!petId) return;
 
     setAutoSaveState('saving');
+    setSavedDiaryId(null);
+    setIsEditingDiary(false);
     (async () => {
       try {
         const saved = await createDiary({
@@ -642,6 +739,7 @@ export default function HomePage({
           summary: diaryResult.diary.summary ?? '',
           emotion: diaryResult.diary.emotion ?? '',
         });
+        setSavedDiaryId(saved.id);
         try {
           const blob = await fetch(diaryResult.imageUrl).then((r) => r.blob());
           const file = new File([blob], 'diary.png', { type: 'image/png' });
@@ -666,6 +764,25 @@ export default function HomePage({
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaryResult]);
+
+  const handleSaveEdit = async () => {
+    if (!savedDiaryId) return;
+    setEditSaving(true);
+    try {
+      await updateDiary(savedDiaryId, { title: editTitle, content: editBody });
+      setDiaryResult((prev) =>
+        prev ? { ...prev, diary: { ...prev.diary, title: editTitle, content: editBody } } : prev
+      );
+      setAlbumDiaries((prev) =>
+        prev.map((d) => d.id === String(savedDiaryId) ? { ...d, title: editTitle, body: editBody } : d)
+      );
+      setIsEditingDiary(false);
+    } catch {
+      alert('수정에 실패했어요. 다시 시도해주세요.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   return (
     <div className="h-screen bg-[#f8f8f6] pt-16">
@@ -730,6 +847,12 @@ export default function HomePage({
                       alert('삭제에 실패했어요.');
                     }
                   }}
+                  onUpdate={async (id, title, body) => {
+                    await updateDiary(Number(id), { title, content: body });
+                    setAlbumDiaries((prev) =>
+                      prev.map((d) => d.id === id ? { ...d, title, body } : d)
+                    );
+                  }}
                 />
               )}
 
@@ -754,16 +877,42 @@ export default function HomePage({
             setDiaryResult(null);
             setShowDiaryEditor(false);
             setShowAlbum(true);
+            setIsEditingDiary(false);
           }}
           className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
         >
           ← 뒤로
         </button>
         <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
-        <div className="ml-auto text-xs font-medium">
+        <div className="ml-auto flex items-center gap-2 text-xs font-medium">
           {autoSaveState === 'saving' && <span className="text-[#B08B7A]">저장 중...</span>}
-          {autoSaveState === 'done' && <span className="text-green-500">✓ 저장 완료</span>}
+          {autoSaveState === 'done' && !isEditingDiary && <span className="text-green-500">✓ 저장 완료</span>}
           {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
+          {savedDiaryId && !isEditingDiary && autoSaveState === 'done' && (
+            <button
+              onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
+              className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
+            >
+              ✏️ 수정
+            </button>
+          )}
+          {isEditingDiary && (
+            <>
+              <button
+                onClick={() => setIsEditingDiary(false)}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-gray-400 transition hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSaving}
+                className="rounded-full bg-[#F4845F] px-3 py-1.5 text-white transition hover:bg-[#e0724e] disabled:opacity-50"
+              >
+                {editSaving ? '저장 중...' : '저장'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -776,9 +925,17 @@ export default function HomePage({
         {/* 제목/요약 */}
         <div className="mb-6 text-center">
           <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-          <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
-            {diaryResult.diary.title}
-          </h3>
+          {isEditingDiary ? (
+            <input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
+            />
+          ) : (
+            <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
+              {diaryResult.diary.title}
+            </h3>
+          )}
           {diaryResult.diary.summary && (
             <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
               ✨ {diaryResult.diary.summary}
@@ -796,17 +953,24 @@ export default function HomePage({
         </div>
 
         {/* 일기 본문 - 줄 있는 노트 느낌 */}
-        <div
-          className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)',
-          }}
-        >
-          <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
-            {diaryResult.diary.content}
-          </p>
-        </div>
+        {isEditingDiary ? (
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={10}
+            className="w-full rounded-[20px] border border-[#F4845F] bg-[#FFFCF8] px-5 py-5 text-[15px] leading-[31px] text-[#3D2B1F] outline-none resize-none"
+            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
+          />
+        ) : (
+          <div
+            className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
+            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
+          >
+            <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+              {diaryResult.diary.content}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   </div>

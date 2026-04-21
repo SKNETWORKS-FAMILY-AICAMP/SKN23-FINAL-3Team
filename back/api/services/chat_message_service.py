@@ -168,7 +168,7 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
         )
 
-    ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db)
+    ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
     assistant_text = await chat_response_service.dispatch(intent_result, data.content, ctx)
     if not assistant_text:
         assistant_text = "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
