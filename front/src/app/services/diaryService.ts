@@ -28,7 +28,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 export async function generateDiary(input: DiaryGenerationInput): Promise<GeneratedDiary> {
   try {
-    const res = await fetch(`${API_BASE}/api/diary/generate`, {
+    const res = await fetch(`${API_BASE}/diary/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -66,7 +66,7 @@ export async function generateDiary(input: DiaryGenerationInput): Promise<Genera
 }
 
 export async function generateDiaryImage(imagePrompt: string, sessionId?: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/diary/generate-image`, {
+  const res = await fetch(`${API_BASE}/diary/generate-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ image_prompt: imagePrompt, session_id: sessionId ?? '' }),
