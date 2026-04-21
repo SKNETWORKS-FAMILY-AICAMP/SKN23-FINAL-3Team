@@ -1,8 +1,9 @@
-import { useReducer, useEffect, useCallback } from 'react'
+import { useReducer, useEffect, useCallback, useRef } from 'react'
 import type { Pet } from '../types'
 import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
+import { createChatRoom, saveMessage } from '../services/chatService'
 
 // ── 메시지 타입 ──────────────────────────────────────
 export interface Message {
@@ -288,11 +289,65 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
 export function useChatbot(pet: Pet) {
   const [state, dispatch] = useReducer(reducer, pet, makeInitialState)
 
+  // 대화 저장용 ref
+  const chatRoomIdRef = useRef<number | null>(null)
+  const lastSavedCountRef = useRef(0)
+  const isSavingRef = useRef(false)
+
   // pet prop이 바뀌면 내부 state.pet도 동기화
   useEffect(() => {
     dispatch({ type: 'UPDATE_PET', pet })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pet.name, pet.breed, pet.ownerName, pet.birthDate])
+
+  // 메시지가 초기화되면(RESET/FORCE_START) 저장 상태도 초기화
+  useEffect(() => {
+    if (state.messages.length <= 1) {
+      chatRoomIdRef.current = null
+      lastSavedCountRef.current = 0
+    }
+  }, [state.messages.length])
+
+  // 새 메시지 백엔드 저장
+  useEffect(() => {
+    const token = localStorage.getItem('access_token')
+    if (!token) return
+
+    // 유저 메시지가 하나라도 생긴 뒤부터 저장 시작
+    const hasUserMessage = state.messages.some((m) => m.role === 'user')
+    if (!hasUserMessage) return
+
+    const unsaved = state.messages.slice(lastSavedCountRef.current)
+    if (unsaved.length === 0 || isSavingRef.current) return
+
+    const persist = async () => {
+      isSavingRef.current = true
+      try {
+        // 채팅방 없으면 생성
+        if (chatRoomIdRef.current === null) {
+          const firstUser = state.messages.find((m) => m.role === 'user')
+          const title = (firstUser?.content ?? '챗봇 대화').slice(0, 30)
+          const room = await createChatRoom(title)
+          chatRoomIdRef.current = room.id
+        }
+        const roomId = chatRoomIdRef.current!
+        // 백엔드가 role='user'만 허용하므로 유저 메시지만 저장
+        for (const msg of state.messages.slice(lastSavedCountRef.current)) {
+          if (msg.role === 'user') {
+            await saveMessage(roomId, 'user', msg.content)
+          }
+          lastSavedCountRef.current++
+        }
+      } catch (e) {
+        console.warn('[useChatbot] 메시지 저장 실패:', e)
+      } finally {
+        isSavingRef.current = false
+      }
+    }
+
+    persist()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.messages])
 
   useEffect(() => {
     if (!state.isGenerating || !state.selectedDiaryType || !state.selectedEmotionEmoji) return
@@ -306,6 +361,7 @@ export function useChatbot(pet: Pet) {
       birthDate: state.pet.birthDate,
       personalities: state.pet.personality,
       ownerName: state.pet.ownerName,
+      ownerGender: state.pet.ownerGender,
       diaryType: state.selectedDiaryType,
       typeFocus: dt.typeFocus,
       mainAnswers: state.mainAnswers,

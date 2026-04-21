@@ -66,7 +66,7 @@ numpy>=1.24.0
 tqdm                # 학습 진행률 표시 (transformers 의존성이지만 명시적 고정)
 
 # docker 빌드
-paramiko==2.12.0
+# paramiko==2.12.0
 sshtunnel==0.4.0
 
 # 데이터 수집
