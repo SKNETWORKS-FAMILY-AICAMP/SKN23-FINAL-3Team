@@ -53,7 +53,7 @@ export default function MapView({ onUsePlace }: Props) {
 
   const searchPlaces = async (query: string) => {
     if (!query.trim()) return;
-    const res = await fetch(`http://localhost:8000/api/places/search?query=${encodeURIComponent(query)}`);
+    const res = await fetch(`/api/places/search?query=${encodeURIComponent(query)}`);
     const data = await res.json();
     setPlaces(data.places);
     markersRef.current.forEach((m) => m.setMap(null));
