@@ -44,20 +44,20 @@ class DiaryPromptBuilder(BasePromptBuilder):
         "Shih Tzu": "with very flat face, long flowing silky coat, and large round dark eyes",
         "Dachshund": "with distinctively very long body, very short legs, and long floppy ears",
         "Pekingese": "with flat wrinkled face, thick lion-like mane coat, small compact body",
-        "Samoyed": "with thick fluffy white double coat, black eyes and nose, gentle smile",
+        "Samoyed": "with thick fluffy white double coat, black eyes and nose, gentle smile — maintain realistic dog proportions, avoid overly chibi",
         "Siberian Husky": "with striking bi-color or blue eyes, thick coat, wolf-like facial markings",
         "Border Collie": "with black and white coat, alert intelligent expression, medium build",
         "Welsh Corgi Pembroke": "with short legs, long body, large upright ears, fluffy hindquarters",
         "Bichon Frise": "with round fluffy white coat, dark eyes and nose, small compact body",
         "Maltese": "with long silky white straight coat, tiny delicate build",
         "Jindo": "with medium build, wedge-shaped face, erect ears, curled tail, often white or tan coat",
-        "Cocker Spaniel": "with long wavy silky ears, medium-length wavy coat, gentle round eyes",
-        "German Shepherd": "with tan and black saddle coat, large upright pointed ears, confident athletic build",
-        "French Bulldog": "with very flat wrinkled face, large upright bat-like ears, compact muscular body",
-        "Yorkshire Terrier": "with fine silky steel-blue and tan coat, small delicate build",
-        "Miniature Schnauzer": "with distinctive bushy eyebrows and beard, salt-and-pepper wiry coat",
-        "Dalmatian": "with white short coat covered in clearly defined black spots, athletic build",
-        "Sapsali": "with very long thick shaggy coat covering face and body, gentle calm expression",
+        "Cocker Spaniel": "with long wavy silky ears, medium-length wavy coat, gentle round eyes, compact soft body",
+        "German Shepherd": "with tan and black saddle coat, large upright pointed ears, confident athletic medium-large build, alert intelligent expression",
+        "French Bulldog": "with very flat wrinkled face, large upright bat-like ears, compact muscular body, short smooth coat",
+        "Yorkshire Terrier": "with fine silky steel-blue and tan coat, small delicate build, confident perky expression, small erect V-shaped ears",
+        "Miniature Schnauzer": "with distinctive bushy eyebrows and beard, salt-and-pepper wiry coat, compact sturdy rectangular build",
+        "Dalmatian": "with white short coat covered in clearly defined black spots, athletic medium-large build, alert lively expression",
+        "Sapsali": "with very long thick shaggy coat covering face and body, medium-large sturdy build, gentle calm expression — long straight flowing fur",
     }
 
     # ── 야간 키워드 ──────────────────────────────────
@@ -140,9 +140,11 @@ class DiaryPromptBuilder(BasePromptBuilder):
 - 화자는 {pet_name}(강아지)이며, 사람은 절대 강아지처럼 표현하지 않는다
 - 등장하는 강아지는 {pet_name} 한 마리뿐이다
 - 보호자 호칭은 "{owner_label}" 그대로 사용하고 이름 자체를 변형하지 않는다
+  예) 이름이 "노랑"이면: 노랑은/노랑이/노랑을 (O), 노랑랑/노랑이랑 (X)
 - "멍!"은 정확히 한 번만 사용한다
 - 사실에 없는 사건, 장소, 음식, 행동, 감정은 지어내지 않는다
 - 병, 상처, 위험, 공격성 같은 내용은 대화에 있을 때만 반영한다
+- 견종, 나이, 성격 정보가 있으면 자연스럽게 반영하되 과장하지 않는다
 
 [문체]
 - 어린아이가 쓴 일기처럼 맑고 귀엽고 솔직한 말투
@@ -162,6 +164,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
 - 기승전결이 느껴지는 자연스러운 흐름
 - 감각 묘사 2개 이상 포함 (냄새/촉감/소리/움직임 중)
 - 마지막 문장은 포근하고 사랑스럽게 마무리
+- 하루 전체를 나열하기보다 가장 기억에 남는 순간 중심으로 쓴다
 
 [강아지 정보]
 이름: {pet_name} | 나이: {age_text} | 견종: {breed or "강아지"} | 성격: {personality_text}
@@ -174,19 +177,31 @@ class DiaryPromptBuilder(BasePromptBuilder):
 표정/감정: {image_emotion_rule}
 
 [image_prompt_base 생성 규칙]
-- 반드시 영어로 작성, 90단어 이내
+- 반드시 영어로 작성
+- 90단어 이내
+- 하루 전체 요약 금지
 - 가장 선명한 하나의 순간만 묘사
-- {time_hint}full-page picture book illustration 느낌
+- 정적 정면샷 금지
+- 행동과 상황이 보이는 서사적 장면으로 작성
+- 위치, 행동, 감정, 분위기를 포함
+- {time_hint}full-page picture book illustration 느낌으로 작성
 - one cute dog as the main character
-- one single frozen moment, one camera view
-- no multi-panel, no split screen, no comic strip
+- one continuous moment from one camera view
+- one single full-bleed illustration
+- CRITICAL: pick ONE single frozen moment — do NOT illustrate before/after or two separate locations
+- CRITICAL: exactly one dog appears — do NOT show the same dog twice in different poses
+- no multi-panel, no split screen, no comic strip, no manga layout
+- no frames, no borders, no panel dividers, no grid layout
+- do not divide the page into multiple scenes
+- never depict mirror reflections or window reflections of the dog
+- if a guardian appears, the guardian is secondary and should not dominate the scene
 
 [출력 형식 - 반드시 JSON만]
 {{
   "title": "귀엽고 짧은 제목 (15자 이내, 강아지 말투)",
   "content": "일기 본문 (300자 이상, 강아지 1인칭)",
   "summary": "한줄요약 (30자 이내, 귀엽게)",
-  "image_prompt_base": "English only. One single storybook scene within 90 words."
+  "image_prompt_base": "English only. One single storybook scene within 90 words. One cute dog as the main character. Narrative single moment, not a static portrait, not a collage, not multiple scenes."
 }}
 """
 
@@ -223,55 +238,83 @@ class DiaryPromptBuilder(BasePromptBuilder):
             "PRIORITY ORDER: first the main dog's face and body readability, "
             "second the dog's action and emotion, "
             "third the immediate environment, "
-            "fourth any human or background details"
+            "fourth any human or background details, "
+            "the dog must remain the clear visual focal point of the entire image, "
+            "if humans appear, they must stay secondary and visually simpler than the dog"
         )
 
         face_rules = (
-            "PRIORITY: the dog's face must be the clearest element, "
-            "simple rounded storybook dog face, two clear symmetrical eyes, "
-            "one small clear nose, one tiny readable mouth, "
-            "no blurry face, no distorted features, no duplicated eyes"
+            "PRIORITY: the dog's face must be the clearest and most carefully rendered element in the image, "
+            "simple rounded storybook dog face with fully distinct readable features, "
+            "two clear symmetrical eyes, one small clear nose, one tiny readable mouth, "
+            "clean muzzle shape, clean ear shapes, clear facial silhouette, "
+            "no blurry face, no smudged face, no melted face, no distorted or asymmetrical features, "
+            "no duplicated eyes, no extra nose, no extra ears, no extra limbs, "
+            "avoid extreme chibi or super-deformed proportions, keep believable dog proportions"
         )
 
         human_rules = (
-            "all humans MUST use soft storybook illustration style, "
-            "no photorealistic human faces, "
-            "simple rounded storybook faces, small clear dot eyes, tiny curved smile, "
-            "all humans are East Asian with black or dark brown eyes"
+            "all humans MUST use the same soft storybook illustration style as the dog, "
+            "absolutely no photorealistic human faces, "
+            "human faces should be simple rounded storybook faces — visible and readable but not realistic, "
+            "small clear dot eyes, tiny curved smile, soft oval face shape, "
+            "all humans are East Asian with black or dark brown eyes — no blue or green eyes, "
+            "background humans may be slightly smaller but must still have a clear readable storybook face — NOT silhouette, NOT blurred, "
+            "human faces must be clean and distinguishable even in the background, "
+            "if a human is very far in the background show them from the side or back rather than blurring the face, "
+            "human hands should be simplified, soft, partially hidden if needed, "
+            "avoid detailed fingers, avoid complex hand poses, avoid hands close to the camera"
         )
 
         composition_rules = (
-            "ABSOLUTE: one single frozen moment — never show two locations or time periods, "
-            "ABSOLUTE: EXACTLY ONE dog in the entire image, "
+            "ABSOLUTE: one single frozen moment in time — never show two locations or two time periods in one image, "
+            "ABSOLUTE: EXACTLY ONE dog in the entire image — do NOT show the same dog twice in different poses or moments, "
             "single scene only, single panel only, "
-            "no comic strip, no multi-panel, no split screen, "
-            "no frames, no borders, no panel dividers"
+            "one continuous full-page illustration from a single camera view, "
+            "no comic strip, no multi-panel, no split screen, no manga layout, "
+            "no collage, no storyboard, no sequence of moments, "
+            "no frames, no borders, no panel dividers, no boxed sections, no grid layout, "
+            "do not divide the page into multiple scenes, "
+            "background must belong to the same single moment, not separate mini-scenes, "
+            "narrative single moment over static portrait, "
+            "balanced picture-book composition, "
+            "full body of the main dog preferably visible unless a closer crop is needed for face clarity, "
+            "no body parts awkwardly cropped, "
+            "no extra dogs or animals unless explicitly mentioned in the story, "
+            "render any mirror as blank or facing away — never show the dog reflected in a mirror or window, "
+            "no ghost images, no duplicated character, no reflection animal"
         )
 
         quality_rules = (
             "premium polished children's picture book illustration, "
-            "clean readable outlines, clear character silhouette, "
-            "not photorealistic, not 3D render"
+            "clean readable outlines, readable props and objects, "
+            "clear character silhouette, "
+            "finished professional composition, "
+            "soft hand-painted texture, "
+            "not photorealistic, not 3D render, not plastic, not hyper-detailed realism"
         )
 
         if time_of_day == "night":
             texture_rules = (
                 "STYLE: Korean-Japanese soft picture book illustration, "
-                "soft gouache and colored pencil texture, "
-                "nighttime palette — deep navy, dusty indigo, muted lavender, warm ivory glow, "
-                "avoid bright daylight, avoid orange cast, avoid sepia tone"
+                "soft gouache and colored pencil texture, matte hand-painted finish, "
+                "nighttime palette — deep navy, dusty indigo, muted lavender, soft charcoal, warm ivory glow, "
+                "gentle indoor lamp light or soft moonlight, cozy calm dim atmosphere, "
+                "avoid bright daylight, avoid orange cast, avoid sepia tone, avoid harsh contrast, avoid Western cartoon style"
             )
         else:
             texture_rules = (
                 "STYLE: Korean-Japanese soft picture book illustration, "
-                "soft gouache and colored pencil texture, "
+                "soft gouache and colored pencil texture, matte hand-painted finish, "
                 "calm pastel palette — sage green, powder blue, ivory white, soft neutral beige, "
-                "soft natural daylight, avoid yellow cast, avoid sepia tone"
+                "soft natural daylight, gentle warm-neutral tone, "
+                "avoid vivid saturation, avoid yellow cast, avoid sepia tone, avoid harsh contrast, avoid Western cartoon style"
             )
 
         if overseas_location:
             location_suffix = (
-                f"setting inspired by {overseas_location}, authentic local scenery, travel diary feeling"
+                f"setting inspired by {overseas_location}, authentic local scenery, "
+                "travel diary feeling, calm balanced colors"
             )
         else:
             location_suffix = (
@@ -296,7 +339,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
             f"{location_suffix}, "
             f"all humans are East Asian with black or dark brown eyes if humans appear, "
             f"{(guardian_gender_hint + ', ') if guardian_gender_hint else ''}"
-            f"no visible text or letters anywhere in the image"
+            f"no visible text or letters anywhere in the image — no text on food, objects, props, or backgrounds"
         )
 
     # ── private 메서드 ────────────────────────────────────
@@ -325,10 +368,11 @@ class DiaryPromptBuilder(BasePromptBuilder):
             "premium children's picture book art, "
             "soft gouache and colored pencil texture, "
             "matte hand-painted feeling, "
+            "delicate grain texture, "
             "calm pastel palette — soft sage green, powder blue, ivory white, soft neutral beige, "
             "emotionally gentle and warm, "
             "not realistic, not photorealistic, "
-            "avoid strong yellow cast, avoid sepia tone, avoid orange lighting"
+            "avoid strong yellow cast, avoid sepia tone, avoid orange lighting, avoid plastic 3D look"
         )
         if age_months is None:
             return base
@@ -347,12 +391,14 @@ class DiaryPromptBuilder(BasePromptBuilder):
         if age_months <= 11:
             return "small compact puppy body, playful bouncy pose, curious excited energy, innocent baby-like expression"
         if age_months <= 35:
-            return "lively energetic posture, youthful active movement, bright curious expression"
+            return "lively energetic posture, youthful active movement, bright curious expression, lean athletic build"
         if age_months <= 71:
-            return "calm composed posture, fully grown adult-sized body, relaxed confident stance"
+            return "calm composed posture, fully grown adult-sized body, relaxed confident stance, gentle mature expression"
         return (
-            "clearly a fully grown adult dog — NOT a puppy, "
-            "heavier and fuller body shape, slow calm relaxed posture, peaceful dignified expression"
+            "clearly a fully grown adult dog — NOT a puppy, do NOT draw as small or young, "
+            "heavier and fuller body shape typical of an older dog, "
+            "slow calm relaxed posture, peaceful dignified expression, gentle wise mood, "
+            "muzzle and eyebrows may show faint grey or white hairs — visible signs of seniority even in small breeds"
         )
 
     def _detect_time_of_day(self, texts: list[str]) -> str:
@@ -369,7 +415,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
     def _infer_scene_hint(self, conversation_summary: str) -> str:
         text = conversation_summary or ""
         if any(kw in text for kw in ["동물병원", "병원", "수의사", "검진", "진료", "주사"]):
-            return "Scene: inside a warm veterinary clinic — examination table or cozy waiting area."
+            return "Scene: inside a warm veterinary clinic — examination table or cozy waiting area, calm and clinical but gentle atmosphere."
         if any(kw in text for kw in ["바다", "해변", "파도", "모래", "부산"]):
             return "Scene: dog at the seaside — shallow waves, beach, sea breeze, curious reaction."
         if any(kw in text for kw in ["공원", "잔디", "풀", "산책", "벚꽃"]):

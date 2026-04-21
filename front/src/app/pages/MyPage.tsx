@@ -11,6 +11,7 @@ import {
   BadgeCheck,
   Lock,
   LogIn,
+  Save,
 } from "lucide-react";
 import { getMe, type UserProfile } from "../services/userService";
 import { getPets, type Pet } from "../services/petService";
@@ -116,8 +117,13 @@ export default function MyPage() {
   const [rawPets, setRawPets] = useState<Pet[]>([]);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
+  const [selectedPetId, setSelectedPetId] = useState<number | null>(
+    () => Number(localStorage.getItem('selected_pet_id')) || null
+  );
   const [detailPet, setDetailPet] = useState<PetCard | null>(null);
+  const [savedPetId, setSavedPetId] = useState<number | null>(
+    () => Number(localStorage.getItem('selected_pet_id')) || null
+  );
 
   // auth-change 이벤트(토큰 만료/로그아웃) 감지
   useEffect(() => {
@@ -157,7 +163,11 @@ export default function MyPage() {
           birthDate: p.birth_date ?? null,
         }));
         setPets(cards);
-        if (cards.length) setSelectedPetId(cards[0].id);
+        if (cards.length) {
+          const savedId = Number(localStorage.getItem('selected_pet_id')) || null;
+          const initialPet = savedId ? cards.find((c) => c.id === savedId) : null;
+          setSelectedPetId(initialPet?.id ?? cards[0].id);
+        }
       } catch (err) {
         console.error("마이페이지 로드 실패", err);
         // 401로 인해 token이 이미 삭제된 경우 isLoggedIn이 false로 바뀌므로 별도 처리 불필요
@@ -168,13 +178,14 @@ export default function MyPage() {
     load();
   }, [isLoggedIn]);
 
-  // 선택된 반려견 ID를 localStorage에 저장 → Navbar 프로필 사진 연동
-  useEffect(() => {
-    if (selectedPetId !== null) {
-      localStorage.setItem('selected_pet_id', String(selectedPetId));
-      window.dispatchEvent(new Event('pet-select-change'));
-    }
-  }, [selectedPetId]);
+  // 저장 버튼 클릭 → localStorage 갱신 + 전체 컴포넌트 동기화
+  const handleSavePet = (pet: PetCard, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSavedPetId(pet.id);
+    setSelectedPetId(pet.id);
+    localStorage.setItem('selected_pet_id', String(pet.id));
+    window.dispatchEvent(new Event('pet-select-change'));
+  };
 
   const selectedPet = useMemo(
     () => pets.find((p) => p.id === selectedPetId) ?? pets[0] ?? null,
@@ -440,7 +451,7 @@ export default function MyPage() {
                           </div>
                         </div>
 
-                        <div className="mt-5 grid grid-cols-2 gap-3">
+                        <div className="mt-5 grid grid-cols-3 gap-2">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -468,7 +479,7 @@ export default function MyPage() {
                                 },
                               });
                             }}
-                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-white px-3 py-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
                           >
                             <Pencil className="h-4 w-4" />
                             수정
@@ -476,10 +487,22 @@ export default function MyPage() {
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setDetailPet(pet); }}
-                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-orange-500 px-3 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
                           >
                             <Eye className="h-4 w-4" />
                             상세보기
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleSavePet(pet, e)}
+                            className={`inline-flex items-center justify-center gap-1.5 rounded-2xl px-3 py-3 text-sm font-semibold transition ${
+                              pet.id === savedPetId
+                                ? "bg-emerald-500 text-white"
+                                : "bg-slate-900 text-white hover:bg-slate-700"
+                            }`}
+                          >
+                            <Save className="h-4 w-4" />
+                            {pet.id === savedPetId ? "저장됨" : "저장"}
                           </button>
                         </div>
                       </button>
