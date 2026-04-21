@@ -548,3 +548,6 @@ front/.vite/
 withdog_venv/
 
 # ========== 개인 ==============
+.claude/
+SKN23_FINAL_3TEAM/
+학습.txt
