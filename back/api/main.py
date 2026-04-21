@@ -238,10 +238,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # AIContainer 초기화 (ChromaDB + 임베딩 모델)
     try:
         from ai.container import AIContainer
+        from services import chat_response_service as _crs
         app.state.ai_container = AIContainer(
             openai_api_key=settings.OPENAI_API_KEY
         )
-        logger.info("[AI] AIContainer 초기화 완료")
+        _crs.set_ai_container(app.state.ai_container)
+        logger.info("[AI] AIContainer 초기화 완료 — RAG 경로 활성화")
     except Exception as e:
         logger.warning(f"[AI] AIContainer 초기화 실패 (무시): {e}")
         app.state.ai_container = None

@@ -117,6 +117,8 @@ class DiaryPromptBuilder(BasePromptBuilder):
         conversation_summary: str,
         owner_name: str = "",
         owner_gender: str = "",
+        breed_context_text: str = "",
+        past_diaries_text: str = "",
         **kwargs,
     ) -> str:
         age_years = self._get_pet_age_years(birth_date)
@@ -141,6 +143,17 @@ class DiaryPromptBuilder(BasePromptBuilder):
             owner_label = "보호자 엄마"
         else:
             owner_label = "보호자"
+
+        _breed_hint = (
+            "[견종 참고 정보 - 가볍게 참고만 할 것]\n"
+            "오늘 대화에 없는 내용은 절대 추가하지 마라. 대화 내용이 충분하면 무시해도 된다.\n"
+            f"{breed_context_text}\n\n"
+        ) if breed_context_text else ""
+        _diary_hint = (
+            "[이전 일기 참고 - 문체·감성 패턴만 참고]\n"
+            "아래 일기의 내용을 그대로 쓰지 마라. 말투와 분위기만 가볍게 참고해라.\n"
+            f"{past_diaries_text}\n\n"
+        ) if past_diaries_text else ""
 
         return f"""
 너는 강아지의 하루를 대신 써주는 프리미엄 그림일기 작가다.
@@ -184,7 +197,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
 [오늘의 대화 내용]
 {conversation_summary}
 
-[이미지 힌트]
+{_breed_hint}{_diary_hint}[이미지 힌트]
 {scene_hint}
 표정/감정: {image_emotion_rule}
 

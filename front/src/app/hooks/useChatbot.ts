@@ -10,6 +10,7 @@ export interface Message {
   id: string
   role: 'bot' | 'user'
   content: string
+  action?: 'start_diary'
 }
 
 // ── 챗봇 단계 ────────────────────────────────────────
@@ -55,7 +56,7 @@ export type ChatbotAction =
   | { type: 'REGENERATE' }
   | { type: 'RESET' }
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
-  | { type: 'RECEIVE_BOT_MESSAGE'; text: string }
+  | { type: 'RECEIVE_BOT_MESSAGE'; text: string; action?: 'start_diary' }
 
 // ── 헬퍼 ─────────────────────────────────────────────
 let _counter = 0
@@ -246,10 +247,12 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
     }
 
     case 'RECEIVE_BOT_MESSAGE': {
+      const msg: Message = { id: nextId(), role: 'bot', content: action.text }
+      if (action.action) msg.action = action.action
       return {
         ...state,
         isGenerating: false,
-        messages: [...state.messages, botMsg(action.text)],
+        messages: [...state.messages, msg],
       }
     }
 
@@ -417,7 +420,7 @@ export function useChatbot(pet: Pet) {
     regenerate: useCallback(() => dispatch({ type: 'REGENERATE' }), []),
     reset: useCallback(() => dispatch({ type: 'RESET' }), []),
     submitWelcomeChat: useCallback((text: string) => dispatch({ type: 'SUBMIT_WELCOME_CHAT', text }), []),
-    receiveBotMessage: useCallback((text: string) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text }), []),
+    receiveBotMessage: useCallback((text: string, action?: 'start_diary') => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action }), []),
   }
 
   return { state, actions }

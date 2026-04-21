@@ -68,15 +68,21 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
+      const DIARY_BUTTON_MARKER = '##DIARY_BUTTON##'
       const result = await sendMessageWithResponse(roomId, text)
       const intent = result.intent.intent
-      const botText = result.assistant_message.content
+      const rawText = result.assistant_message.content
+      const hasDiaryButton = rawText.includes(DIARY_BUTTON_MARKER)
+      const botText = rawText.replace(DIARY_BUTTON_MARKER, '').trim()
 
       if (intent === '다이어리 작성') {
-        actions.receiveBotMessage(botText)
         const parsed = parseDiaryFromResponse(botText)
         if (parsed?.imageUrl) {
+          // 일기 생성 완료 응답 — 다이어리 뷰로 전달
+          actions.receiveBotMessage(botText)
           onDiaryReady?.(parsed.diary, parsed.imageUrl)
+        } else {
+          actions.receiveBotMessage(botText, hasDiaryButton ? 'start_diary' : undefined)
         }
       } else if (intent === '장소추천' || intent === '시설정보') {
         actions.receiveBotMessage(botText)
@@ -143,15 +149,24 @@ export default function ChatBot({
       {/* 메시지 목록 */}
       <div className="flex-1 overflow-y-auto space-y-3 p-3">
         {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
-              msg.role === 'bot'
-                ? 'bg-white text-[#3D2B1F] shadow-sm'
-                : 'ml-auto bg-[#F4845F] text-white'
-            }`}
-          >
-            {msg.content}
+          <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+            <div
+              className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
+                msg.role === 'bot'
+                  ? 'bg-white text-[#3D2B1F] shadow-sm'
+                  : 'bg-[#F4845F] text-white'
+              }`}
+            >
+              {msg.content}
+            </div>
+            {msg.action === 'start_diary' && (
+              <button
+                onClick={() => { actions.startDiary(); onNavigateToDiary?.() }}
+                className="mt-2 flex items-center gap-1.5 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+              >
+                📝 그림일기 시작하기
+              </button>
+            )}
           </div>
         ))}
 
