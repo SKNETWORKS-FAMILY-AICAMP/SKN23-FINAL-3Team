@@ -40,6 +40,8 @@ from services.intent_service import IntentResult, RAG_STRATEGY_MAP
 from services.place_service import search_places_from_db
 from fastapi import Request
 
+# from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
+
 from ai.prompts.diary_prompt_builder import DiaryPromptBuilder
 _diary_prompt_builder = DiaryPromptBuilder()
 
@@ -218,8 +220,8 @@ async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
     conversation_summary = f"보호자: {query.strip()}"
-
     prompt = _diary_prompt_builder.build_diary_prompt(
+    # prompt = build_diary_prompt(
         pet_name=pet_ctx["pet_name"],
         breed=pet_ctx["breed"],
         birth_date=pet_ctx["birth_date"],
@@ -259,8 +261,8 @@ async def _generate_and_store_image(
         build_final_image_prompt → OpenAI 이미지 생성 → S3 업로드 → images 테이블 저장.
         실패 시 None 을 반환하고 호출 측에서 이미지 없이 응답합니다.
     """
-
     image_prompt = _diary_prompt_builder.build_final_image_prompt(
+    # image_prompt = build_final_image_prompt(
         image_prompt_base=diary_data.get("image_prompt_base", ""),
         breed=pet_ctx["breed"],
         breed_en=pet_ctx["breed_en"],
