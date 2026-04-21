@@ -5,7 +5,7 @@ interface LogItem {
   id: string;
   label: string;
   checked: boolean;
-  weight?: number;
+  weight: number;
 }
 
 export function DailyLogCard() {
