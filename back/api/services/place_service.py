@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import Request
 
+from core.type.place import PlaceType
+
 logger = logging.getLogger(__name__)
+
+_place_type = PlaceType()
 
 
 async def search_places_from_db(
@@ -14,26 +18,33 @@ async def search_places_from_db(
     db: AsyncSession,
     n_results: int = 5,
     category: str = None,
-    city: str = None, 
+    city: str = None,
     request: Request = None,
 ) -> list[dict]:
     """하이브리드 장소 검색 (ChromaDB 벡터 검색 + RDB 상세 조회)
 
-    1. ChromaDB에서 의미 기반 유사 장소 검색 → content_id 추출
-    2. content_id로 RDB에서 상세 정보 조회 + 점수 계산
-    3. ChromaDB 실패 시 RDB LIKE 검색으로 폴백
+    1. 쿼리에서 지역명 자동 추출 (강남 → 강남구, 서울 → 서울특별시)
+    2. ChromaDB에서 의미 기반 유사 장소 검색 → content_id 추출
+    3. content_id로 RDB에서 상세 정보 조회 + 점수 계산
+    4. ChromaDB 실패 시 RDB LIKE 검색으로 폴백
 
     Args:
-        query: 검색 쿼리 (예: "한강이랑 비슷한 분위기 장소")
+        query: 검색 쿼리 (예: "강남 놀이터", "한강이랑 비슷한 분위기 장소")
         db: 비동기 DB 세션
         n_results: 반환할 최대 결과 수
         category: 카테고리 필터 (선택)
-        city: 도시 필터 (선택)
+        city: 도시 필터 (선택, 쿼리에서 자동 추출되지 않은 경우 사용)
         request: FastAPI Request 객체 (AIContainer 접근용, 선택)
 
     Returns:
         장소 정보 dict 리스트. 예외 발생 시 빈 리스트 반환.
     """
+    # ── 쿼리에서 지역명 자동 추출 ─────────────────────────
+    location = _place_type.extract_location(query)
+    if not city and location.get("city"):
+        city = location["city"]
+    district = location.get("district")
+
     # ── 1. ChromaDB 벡터 검색 ──────────────────────────────
     vector_results = []
     try:
@@ -44,6 +55,7 @@ async def search_places_from_db(
                 n_results=n_results,
                 category=category,
                 city=city,
+                district=district,
             )
     except Exception as e:
         logger.warning(f"[PlaceService] ChromaDB 검색 실패, RDB 검색으로 전환: {e}")
@@ -101,7 +113,20 @@ async def search_places_from_db(
         logger.warning(f"[PlaceService] DB 장소 검색 실패: {e}")
         return []
 
+
 def _calc_rule_score(place: PlaceModel) -> float:
+    """규칙 기반 점수 계산
+
+    반려견 동반 조건과 장소 특성을 기반으로 0~1 사이의 점수를 계산한다.
+    - 전구역 동반 가능: +0.3
+    - 실내외 정보 있음: +0.2
+
+    Args:
+        place: PlaceModel 인스턴스
+
+    Returns:
+        0.0 ~ 1.0 사이의 규칙 점수
+    """
     score = 0.5
     if place.acmpy_type_cd and "전구역" in place.acmpy_type_cd:
         score += 0.3
@@ -109,22 +134,31 @@ def _calc_rule_score(place: PlaceModel) -> float:
         score += 0.2
     return round(min(score, 1.0), 4)
 
+
 def _to_dict(place: PlaceModel) -> dict:
+    """PlaceModel → dict 변환
+
+    Args:
+        place: PlaceModel 인스턴스
+
+    Returns:
+        프론트엔드에 전달할 장소 정보 dict
+    """
     return {
-        "name": place.name or "",
-        "address": place.address or "",
-        "category": place.content_type_id or "",
-        "content_id":  place.content_id or "",  
-        "lat": float(place.latitude) if place.latitude else 0.0,
-        "lng": float(place.longitude) if place.longitude else 0.0,
-        "tel": place.tel or "",
-        "conditions": place.acmpy_need_mtr or "",
-        "indoor": "Y" if place.is_indoor else "N",
-        "outdoor": "N" if place.is_indoor else "Y",
+        "name":        place.name or "",
+        "address":     place.address or "",
+        "category":    _place_type.get_type(place.content_type_id),
+        "content_id":  place.content_id or "",
+        "lat":         float(place.latitude) if place.latitude else 0.0,
+        "lng":         float(place.longitude) if place.longitude else 0.0,
+        "tel":         place.tel or "",
+        "conditions":  place.acmpy_need_mtr or "",
+        "indoor":      "Y" if place.is_indoor else "N",
+        "outdoor":     "N" if place.is_indoor else "Y",
         "description": place.description or "",
-        "firstimage": place.firstimage or "",
-        "similarity": 1.0,
-        "rag_score":   0.0,                
-        "rule_score":  0.0,             
-        "final_score": 0.0,          
+        "firstimage":  place.firstimage or "",
+        "similarity":  1.0,
+        "rag_score":   0.0,
+        "rule_score":  0.0,
+        "final_score": 0.0,
     }
