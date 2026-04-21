@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, MapPin, Phone, Navigation } from 'lucide-react';
 
-declare const kakao: any;
+declare global {
+  interface Window {
+    kakao: any;
+  }
+}
 
 const MAP_TAGS = ['#공원', '#산책', '#애견카페', '#카페', '#반려견 친화'];
 
@@ -18,32 +22,47 @@ export default function MapView({ onUsePlace }: Props) {
   const mapInstanceRef = useRef<any>(null);
 
   useEffect(() => {
-    kakao.maps.load(() => {
-      const options = {
-        center: new kakao.maps.LatLng(37.5665, 126.9780),
-        level: 3,
-      };
-      mapInstanceRef.current = new kakao.maps.Map(mapRef.current, options);
-      const marker = new kakao.maps.Marker({
-        map: mapInstanceRef.current,
-        position: new kakao.maps.LatLng(37.5665, 126.9780),
+    const waitForKakao = () => {
+      if (!window.kakao || !window.kakao.maps) {
+        setTimeout(waitForKakao, 100);
+        return;
+      }
+
+      window.kakao.maps.load(() => {
+        const options = {
+          center: new window.kakao.maps.LatLng(37.5665, 126.9780),
+          level: 3,
+        };
+
+        mapInstanceRef.current = new window.kakao.maps.Map(
+          mapRef.current,
+          options
+        );
+
+        const marker = new window.kakao.maps.Marker({
+          map: mapInstanceRef.current,
+          position: new window.kakao.maps.LatLng(37.5665, 126.9780),
+        });
+
+        markersRef.current.push(marker);
       });
-      markersRef.current.push(marker);
-    });
+    };
+
+    waitForKakao();
   }, []);
 
   const searchPlaces = async (query: string) => {
     if (!query.trim()) return;
-    const res = await fetch(`http://localhost:8000/places/search?query=${encodeURIComponent(query)}`);
+    const res = await fetch(`http://localhost:8000/api/places/search?query=${encodeURIComponent(query)}`);
     const data = await res.json();
     setPlaces(data.places);
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
     if (data.places.length === 0) return;
-    const bounds = new kakao.maps.LatLngBounds();
+    const bounds = new window.kakao.maps.LatLngBounds();
     data.places.forEach((place: any) => {
-      const position = new kakao.maps.LatLng(place.lat, place.lng);
-      const marker = new kakao.maps.Marker({
+      const position = new window.kakao.maps.LatLng(place.lat, place.lng);
+      const marker = new window.kakao.maps.Marker({
         map: mapInstanceRef.current,
         position,
       });
@@ -70,11 +89,11 @@ export default function MapView({ onUsePlace }: Props) {
     setSelectedPlaceId(placeName);
     const place = places.find((p) => p.name === placeName);
     if (place && mapInstanceRef.current) {
-      const moveLatLon = new kakao.maps.LatLng(place.lat, place.lng);
+      const moveLatLon = new window.kakao.maps.LatLng(place.lat, place.lng);
       mapInstanceRef.current.setCenter(moveLatLon);
       markersRef.current.forEach((m) => m.setMap(null));
       markersRef.current = [];
-      const marker = new kakao.maps.Marker({
+      const marker = new window.kakao.maps.Marker({
         map: mapInstanceRef.current,
         position: moveLatLon,
       });
