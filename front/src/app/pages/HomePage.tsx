@@ -490,15 +490,17 @@ export default function HomePage({
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
 
-  // 로그인된 유저의 첫 번째 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴
+  // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
-    getMe()
-      .then(async (me) => {
-        const pets = await getPets(me.id);
-        if (pets.length === 0) return;
-        const p = pets[0];
+    const fetchPetData = async () => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const me = await getMe();
+        const allPets = await getPets(me.id);
+        if (allPets.length === 0) return;
+        const savedId = Number(localStorage.getItem('selected_pet_id')) || null;
+        const p = (savedId ? allPets.find((pet) => pet.id === savedId) : null) ?? allPets[0];
         setFetchedPetId(p.id);
         let breedName = '강아지';
         try {
@@ -513,9 +515,14 @@ export default function HomePage({
           gender: p.gender ?? undefined,
           ownerName: me.nickname ?? undefined,
           ownerGender: me.gender ?? undefined,
+          personality: Array.isArray(p.selected_tags) ? p.selected_tags : [],
         });
-      })
-      .catch(() => {/* 로그인 안 된 경우 무시 */});
+      } catch { /* 로그인 안 된 경우 무시 */ }
+    };
+
+    fetchPetData();
+    window.addEventListener('pet-select-change', fetchPetData);
+    return () => window.removeEventListener('pet-select-change', fetchPetData);
   }, []);
 
   // URL ?tab= 파라미터 변경 시 탭 동기화

@@ -6,6 +6,7 @@ sentence-transformers
 
 # API 호출 (The Dog API, Dog CEO API, 한국관광공사 OpenAPI)
 httpx
+requests
 
 # 공공데이터 CSV 파싱
 pandas

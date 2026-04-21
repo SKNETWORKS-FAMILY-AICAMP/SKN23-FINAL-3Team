@@ -34,7 +34,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
+from ai.prompts.diary_prompt_builder import DiaryPromptBuilder
+
+_diary_prompt_builder = DiaryPromptBuilder()
 from ai.eval.evaluator import create_diary_session, complete_image_eval, print_eval_summary
 
 app = FastAPI(title="AI Diary Test Server", version="1.0.0")
@@ -99,7 +101,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     if not conversation_summary:
         raise HTTPException(status_code=400, detail="답변 내용이 없습니다.")
 
-    prompt = build_diary_prompt(
+    prompt = _diary_prompt_builder.build_diary_prompt(
         pet_name=req.pet_name,
         breed=req.breed,
         birth_date=req.birth_date,
@@ -127,7 +129,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail=f"LLM 응답 파싱 실패: {raw[:200]}")
 
-    image_prompt = build_final_image_prompt(
+    image_prompt = _diary_prompt_builder.build_final_image_prompt(
         image_prompt_base=data.get("image_prompt_base", ""),
         breed=req.breed,
         breed_en=req.breed_en,
