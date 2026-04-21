@@ -68,6 +68,7 @@ class DiaryChain(BaseChain):
         past_diaries_text = self._diary_retriever.format_context(past_diaries)
 
         # Step 3. 일기 프롬프트 구성
+        breed_context_text = breed_context.get("document", "") if breed_context else ""
         diary_llm_prompt = self._prompt_builder.build_user_prompt(
             pet_name=pet_name,
             breed=breed,
@@ -77,6 +78,8 @@ class DiaryChain(BaseChain):
             emotion=emotion,
             conversation_summary=conversation_summary,
             owner_name=owner_name,
+            breed_context_text=breed_context_text,
+            past_diaries_text=past_diaries_text,
         )
 
         # Step 4. GPT 호출 — 일기 생성

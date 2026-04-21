@@ -60,16 +60,30 @@ export default function CalendarPage() {
     getMe()
       .then((me) => getDiariesByUser(me.id))
       .then((diaries) => {
-        const mapped: DayEmotion[] = diaries
-          .filter((d) => d.emotion)
-          .map((d) => ({
-            date: d.created_at.substring(0, 10),  // 'YYYY-MM-DD'
-            emotion: d.emotion!,
-            diaryId: d.id,
-          }));
+        const pinnedMap: Record<string, number> = (() => {
+          try {
+            const raw = JSON.parse(localStorage.getItem('pinned_diaries') || '{}') as Record<string, string>;
+            return Object.fromEntries(Object.entries(raw).map(([d, id]) => [d, Number(id)]));
+          } catch { return {}; }
+        })();
+
+        // 날짜별 그룹핑 후 pinned 일기 우선, 없으면 첫 번째
+        const byDate: Record<string, typeof diaries> = {};
+        for (const d of diaries.filter((d) => d.emotion)) {
+          const date = d.created_at.substring(0, 10);
+          if (!byDate[date]) byDate[date] = [];
+          byDate[date].push(d);
+        }
+
+        const mapped: DayEmotion[] = Object.entries(byDate).map(([date, entries]) => {
+          const pinnedId = pinnedMap[date];
+          const chosen = (pinnedId ? entries.find((d) => d.id === pinnedId) : null) ?? entries[0];
+          return { date, emotion: chosen.emotion!, diaryId: chosen.id };
+        });
+
         setEmotions(mapped);
       })
-      .catch(() => {/* 로그인 안 된 경우 등 무시 */});
+      .catch(() => {});
   }, []);
 
   const year = currentDate.getFullYear();

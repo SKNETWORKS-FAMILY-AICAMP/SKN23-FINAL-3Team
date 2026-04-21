@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map } from 'lucide-react';
+import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star } from 'lucide-react';
 import type { Pet, DiaryEntry, User } from '../types';
 import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
@@ -229,6 +229,23 @@ function DiaryAlbum({
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [pinnedMap, setPinnedMap] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('pinned_diaries') || '{}'); } catch { return {}; }
+  });
+
+  const handleTogglePin = (e: React.MouseEvent, entry: DiaryEntry) => {
+    e.stopPropagation();
+    setPinnedMap((prev) => {
+      const next = { ...prev };
+      if (next[entry.date] === entry.id) {
+        delete next[entry.date];
+      } else {
+        next[entry.date] = entry.id;
+      }
+      localStorage.setItem('pinned_diaries', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const handleSaveAlbumEdit = async () => {
     if (!selected || !onUpdate) return;
@@ -402,12 +419,26 @@ function DiaryAlbum({
 
               {/* 해당 날짜 카드 그리드 */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                {entries.map((entry) => (
+                {entries.map((entry) => {
+                  const isPinned = pinnedMap[entry.date] === entry.id;
+                  return (
                   <div
                     key={entry.id}
                     className="group relative cursor-pointer overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
                     onClick={() => setSelected(entry)}
                   >
+                    {/* 즐겨찾기 버튼 — 왼쪽 상단, 항상 표시 */}
+                    <button
+                      onClick={(e) => handleTogglePin(e, entry)}
+                      title={isPinned ? '캘린더 대표 해제' : '캘린더 대표로 설정'}
+                      className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm transition hover:bg-black/50"
+                    >
+                      <Star
+                        className="h-3.5 w-3.5"
+                        style={isPinned ? { fill: '#F4845F', color: '#F4845F' } : { fill: 'transparent', color: 'white' }}
+                      />
+                    </button>
+                    {/* 삭제 버튼 — 오른쪽 상단, 호버 시 표시 */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -429,7 +460,8 @@ function DiaryAlbum({
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
