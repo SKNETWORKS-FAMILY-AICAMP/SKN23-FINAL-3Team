@@ -45,6 +45,17 @@ export function deleteChatRoom(id: number): Promise<void> {
 
 // ── 메시지 ────────────────────────────────────────────
 
+export interface ChatTurnResponse {
+  user_message: ChatMessage
+  assistant_message: ChatMessage
+  intent: { intent: string; confidence: number }
+}
+
+/** POST /chat-rooms/{roomId}/messages — 의도분류 + AI 응답 포함 */
+export function sendMessageWithResponse(roomId: number, content: string): Promise<ChatTurnResponse> {
+  return api.post(`/chat-rooms/${roomId}/messages`, { role: 'user', content })
+}
+
 /** POST /chat-rooms/{roomId}/messages */
 export function saveMessage(
   roomId: number,

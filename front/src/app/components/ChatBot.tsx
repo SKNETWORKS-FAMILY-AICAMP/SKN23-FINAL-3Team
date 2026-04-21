@@ -1,11 +1,12 @@
 import { useRef, useEffect, useState } from 'react'
-import { Send, LogIn } from 'lucide-react'
+import { Send, LogIn, Lock } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
 import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
+import { createChatRoom, sendMessageWithResponse } from '../services/chatService'
 
 interface Props {
   pet?: Pet
@@ -33,7 +34,60 @@ export default function ChatBot({
   const { step, messages, isGenerating, generatedDiary } = state
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
+  const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // 백엔드 응답에서 일기 데이터 파싱 (형식: "📖 **제목**\n\n내용\n\n_요약_: 요약\n\n![제목](url)")
+  const parseDiaryFromResponse = (text: string): { diary: GeneratedDiary; imageUrl: string } | null => {
+    const titleM = text.match(/📖 \*\*(.+?)\*\*/)
+    const imageM = text.match(/!\[.*?\]\((https?:\/\/.+?)\)/)
+    const summaryM = text.match(/_요약_:\s*(.+)/)
+    if (!titleM) return null
+    const lines = text.split('\n')
+    const titleIdx = lines.findIndex(l => /📖 \*\*/.test(l))
+    const summaryIdx = summaryM ? lines.findIndex(l => l.includes('_요약_:')) : -1
+    const imageIdx = imageM ? lines.findIndex(l => l.includes('![')) : -1
+    const contentEnd = [summaryIdx, imageIdx].filter(i => i > 0).sort((a, b) => a - b)[0] ?? lines.length
+    const content = lines.slice(titleIdx + 2, contentEnd).join('\n').trim()
+    return {
+      diary: {
+        title: titleM[1],
+        content,
+        summary: summaryM?.[1]?.trim() ?? '',
+      },
+      imageUrl: imageM?.[1] ?? '',
+    }
+  }
+
+  // welcome 스텝에서 백엔드 AI 채팅 호출
+  const sendWelcomeMessage = async (text: string) => {
+    try {
+      let roomId = welcomeChatRoomId
+      if (roomId === null) {
+        const room = await createChatRoom(text.slice(0, 30))
+        roomId = room.id
+        setWelcomeChatRoomId(roomId)
+      }
+      const result = await sendMessageWithResponse(roomId, text)
+      const intent = result.intent.intent
+      const botText = result.assistant_message.content
+
+      if (intent === '다이어리 작성') {
+        actions.receiveBotMessage(botText)
+        const parsed = parseDiaryFromResponse(botText)
+        if (parsed?.imageUrl) {
+          onDiaryReady?.(parsed.diary, parsed.imageUrl)
+        }
+      } else if (intent === '장소추천' || intent === '시설정보') {
+        actions.receiveBotMessage(botText)
+        setTimeout(() => onNavigateToMap?.(), 800)
+      } else {
+        actions.receiveBotMessage(botText)
+      }
+    } catch {
+      actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -51,6 +105,10 @@ export default function ChatBot({
     if (!trimmed) return
     if (step === 'main_questions') actions.submitMainAnswer(trimmed)
     else if (step === 'additional_questions') actions.submitAdditionalAnswer(trimmed)
+    else if (step === 'welcome' && isLoggedIn) {
+      actions.submitWelcomeChat(trimmed)
+      sendWelcomeMessage(trimmed)
+    }
     setInputValue('')
   }
 
@@ -114,7 +172,7 @@ export default function ChatBot({
         )}
 
         {/* 웰컴 버튼: 말풍선 바로 아래 인라인 */}
-        {step === 'welcome' && isLoggedIn && (
+        {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && (
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               onClick={handleStartDiary}
@@ -164,8 +222,26 @@ export default function ChatBot({
         <div ref={bottomRef} />
       </div>
 
-      {/* 하단 패널 — 로그인한 경우에만 표시 */}
-      {isLoggedIn && <div className="border-t border-[#F5D6C8] bg-[#FFF8F3]">
+      {/* 하단 패널 */}
+      <div className="border-t border-[#F5D6C8] bg-[#FFF8F3]">
+
+        {/* 비로그인 잠금 입력창 */}
+        {!isLoggedIn && (
+          <div className="flex items-center gap-2 p-3">
+            <div className="flex flex-1 items-center gap-2 rounded-xl border border-[#F5D6C8] bg-[#F8F5F2] px-3 py-2.5">
+              <Lock className="h-4 w-4 shrink-0 text-[#C4A99A]" />
+              <span className="text-sm text-[#C4A99A]">로그인 후 사용 가능합니다</span>
+            </div>
+            <button
+              onClick={() => navigate('/login')}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F4845F] text-white"
+            >
+              <LogIn className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {isLoggedIn && <>
 
         {/* 일기 유형 선택 */}
         {step === 'type_select' && (
@@ -242,7 +318,8 @@ export default function ChatBot({
             </button>
           </div>
         )}
-      </div>}
+        </>}
+      </div>
     </div>
   )
 }

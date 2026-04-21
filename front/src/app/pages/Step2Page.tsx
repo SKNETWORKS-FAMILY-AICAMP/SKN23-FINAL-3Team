@@ -501,8 +501,8 @@ export default function ProfileSetupPage() {
         petData?.is_neutered === true ? "yes" : petData?.is_neutered === false ? "no" : undefined,
       personality: petData?.selected_tags ?? [],
       // 저장된 프로필 사진 불러오기
-      image: editState.userId
-        ? (localStorage.getItem(`profile_photo_${editState.userId}`) ?? undefined)
+      image: editState.petId
+        ? (localStorage.getItem(`pet_photo_${editState.petId}`) ?? undefined)
         : undefined,
     }));
     if (petData?.breed_id) setSelectedBreedId(petData.breed_id);
@@ -702,7 +702,7 @@ export default function ProfileSetupPage() {
 
       <main className="mx-auto max-w-[780px] px-4 py-10">
         <div className="mx-auto max-w-[520px] space-y-6">
-          {!isPetOnlyMode && <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          {!isPetOnlyMode && !isEditMode && <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <h2 className="text-[16px] font-bold text-[#37322D]">보호자 정보</h2>
 
             <div className="mt-4">
