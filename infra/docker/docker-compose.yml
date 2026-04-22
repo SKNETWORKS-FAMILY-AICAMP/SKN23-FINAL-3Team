@@ -11,6 +11,7 @@ services:
       - ../../.env
     volumes:
       - ~/.ssh/withDOG.pem:/run/secrets/withdog.pem:ro
+      - ../../data/chroma_db:/app/data/chroma_db:ro
     # 직접 디버깅이 필요할 때 아래 주석을 해제
     # ports:
     #   - "8000:8000"
@@ -18,7 +19,6 @@ services:
     networks:
       - withdog-net
     healthcheck:
-      # test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).status == 200 else 1)" ]
       interval: 30s
       timeout: 10s
@@ -34,6 +34,9 @@ services:
     container_name: withdog-nginx
     ports:
       - "80:80"
+    volumes:
+      # NGINX_CONF 환경변수로 conf 파일 선택 (미설정 시 로컬 개발용 nginx.conf)
+      - ../nginx/${NGINX_CONF:-nginx.conf}:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
     restart: unless-stopped
