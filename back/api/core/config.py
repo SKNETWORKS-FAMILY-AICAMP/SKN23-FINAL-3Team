@@ -83,7 +83,6 @@ class Settings(BaseSettings):
     # ── 한국관광공사 / 카카오 ────────────────────────────────────────────────
     TOUR_API_KEY: str = Field(default="")
     KAKAO_REST_API_KEY: str = Field(default="")
-    KAKAO_JAVASCRIPT_API_KEY: str = Field(default="")
 
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]
