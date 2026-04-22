@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 from sqlalchemy import text
-from back.db.database import get_engine
+from core.database import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +43,19 @@ CREATE TABLE IF NOT EXISTS api_costs (
 class OpenAICostTracker:
 
     def __init__(self):
-        self._ensure_table()
+        # AsyncEngine은 sync 컨텍스트에서 호출할 수 없으므로
+        # DDL 실행은 첫 track_* 호출 시점으로 지연한다.
+        self._table_ready = False
 
-    def _ensure_table(self) -> None:
+    async def _ensure_table(self) -> None:
+        if self._table_ready:
+            return
         engine = get_engine()
-        with engine.connect() as conn:
-            conn.execute(text(SCHEMA))
-            conn.commit()
+        async with engine.begin() as conn:
+            await conn.execute(text(SCHEMA))
+        self._table_ready = True
 
-    def _insert(
+    async def _insert(
         self,
         model: str,
         call_type: str,
@@ -62,8 +66,8 @@ class OpenAICostTracker:
         note: str,
     ) -> None:
         engine = get_engine()
-        with engine.connect() as conn:
-            conn.execute(
+        async with engine.begin() as conn:
+            await conn.execute(
                 text("""
                     INSERT INTO api_costs
                     (called_at, model, call_type, prompt_tokens, completion_tokens, total_tokens, cost_usd, note)
@@ -80,10 +84,11 @@ class OpenAICostTracker:
                     "note":              note,
                 }
             )
-            conn.commit()
 
     async def track_chat(self, response, *, note: str = "") -> None:
         """chat.completions.create() 응답을 받아 비용 기록"""
+        await self._ensure_table()
+
         usage = response.usage
         model = response.model
 
@@ -97,7 +102,7 @@ class OpenAICostTracker:
             "[비용] %s | 입력 %d / 출력 %d 토큰 | $%.6f | %s",
             model, usage.prompt_tokens, usage.completion_tokens, cost, note or "-",
         )
-        self._insert(
+        await self._insert(
             model=model,
             call_type="chat",
             prompt_tokens=usage.prompt_tokens,
@@ -109,9 +114,11 @@ class OpenAICostTracker:
 
     async def track_image(self, *, quality: str = "low", note: str = "") -> None:
         """이미지 생성 1회 비용 기록"""
+        await self._ensure_table()
+
         cost = _IMAGE_PRICES.get(quality, _IMAGE_PRICES["low"])
         logger.info("[비용] gpt-image-1 | quality=%s | $%.4f | %s", quality, cost, note or "-")
-        self._insert(
+        await self._insert(
             model="gpt-image-1",
             call_type="image",
             prompt_tokens=0,
@@ -123,19 +130,22 @@ class OpenAICostTracker:
 
     async def get_summary(self) -> dict:
         """누적 비용 요약 반환"""
+        await self._ensure_table()
+
         engine = get_engine()
-        with engine.connect() as conn:
-            rows = conn.execute(
+        async with engine.connect() as conn:
+            result = await conn.execute(
                 text("""
                     SELECT model, call_type, SUM(total_tokens), SUM(cost_usd), COUNT(*)
                     FROM api_costs
                     GROUP BY model, call_type
                 """)
-            ).fetchall()
+            )
+            rows = result.fetchall()
 
-            total = conn.execute(
+            total = (await conn.execute(
                 text("SELECT SUM(cost_usd) FROM api_costs")
-            ).fetchone()[0] or 0.0
+            )).scalar() or 0.0
 
         breakdown = [
             {
