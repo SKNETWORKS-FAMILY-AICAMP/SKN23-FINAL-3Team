@@ -128,7 +128,7 @@ def _calc_rule_score(place: PlaceModel) -> float:
         0.0 ~ 1.0 사이의 규칙 점수
     """
     score = 0.5
-    if place.acmpy_type_cd and "전구역" in place.acmpy_type_cd:
+    if place.pet_zone_type == "전구역":
         score += 0.3
     if place.is_indoor is not None:
         score += 0.2
@@ -152,7 +152,7 @@ def _to_dict(place: PlaceModel) -> dict:
         "lat":         float(place.latitude) if place.latitude else 0.0,
         "lng":         float(place.longitude) if place.longitude else 0.0,
         "tel":         place.tel or "",
-        "conditions":  place.acmpy_need_mtr or "",
+        "conditions":  place.pet_restrictions or "",
         "indoor":      "Y" if place.is_indoor else "N",
         "outdoor":     "N" if place.is_indoor else "Y",
         "description": place.description or "",
