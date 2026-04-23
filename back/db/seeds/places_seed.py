@@ -206,7 +206,7 @@ async def seed() -> None:
                 address = row["주소"]
 
                 # [FIX-5] 해시 인풋에 카테고리 포함해서 충돌 방어
-                raw_id_str = f"{name}_{address}_{row['sub_category']}".encode('utf-8')
+                raw_id_str = f"{name}_{address}".encode('utf-8')
                 content_id_hash = hashlib.md5(raw_id_str).hexdigest()[:20]
 
                 content_type_id = row["content_type_id"]
