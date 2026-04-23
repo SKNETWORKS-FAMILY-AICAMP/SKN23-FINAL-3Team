@@ -1,120 +1,113 @@
 # -*- coding: utf-8 -*-
 """
-back/db/seeds/places_seed.py
+back/db/seeds/places_seed.py  (최종본 v3)
 -----------------------------
 places 테이블에 장소 데이터를 적재하는 시드 스크립트.
+
+수정 내역 (from original):
+  [FIX-1] has_parking: 주차 Y/N 값 정확히 매핑 (기존 buggy truthy 로직 수정)
+  [FIX-2] is_outdoor 컬럼 추가 (원본 '장소(실외)여부' 보존)
+  [FIX-3] sub_category 컬럼 추가로 카테고리 세분화 유지
+  [FIX-4] pet_zone_type 매핑 명확화 (실내구역/실외구역/전구역)
+  [FIX-5] content_id 해시 충돌 방어
+  [FIX-6] 컬럼명을 도메인 용어로 변경 (rela_poses_fclty → has_parking 등)
+
+⚠️ 실행 전 필수:
+  1. places_schema_migration_v2.sql 실행으로 컬럼명 변경
+  2. models/place.py의 Place 클래스 속성명 동기화
 """
 from __future__ import annotations
 
 import os
 import sys
-import asyncio
-import hashlib
-import pandas as pd
-import core.database
 
-from sqlalchemy import text
-from models.place import Place
-from dotenv import load_dotenv
-from core.config import settings
-from sshtunnel import SSHTunnelForwarder
-
-# ── 경로 설정: back/api 를 sys.path 에 추가 ────────────────────────────────
-_HERE = os.path.dirname(os.path.abspath(__file__))            # back/db/seeds/
+# ── 경로 설정: back/api 를 sys.path 에 선등록 (core/models import 전에 필수) ─
+_HERE = os.path.dirname(os.path.abspath(__file__))              # back/db/seeds/
 _BACK_API = os.path.normpath(os.path.join(_HERE, "../../api"))  # back/api/
 sys.path.insert(0, _BACK_API)
 
+import asyncio  # noqa: E402
+import hashlib  # noqa: E402
+import pandas as pd  # noqa: E402
+import core.database  # noqa: E402
+
+from sqlalchemy import text  # noqa: E402
+from models.place import Place  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
+from core.config import settings  # noqa: E402
+from sshtunnel import SSHTunnelForwarder  # noqa: E402
+
 load_dotenv(os.path.normpath(os.path.join(_HERE, "../../../.env")))
 
-CSV_PATH = os.path.normpath(os.path.join(_HERE, "../../../data/raw/한국문화정보원_전국_반려동물_동반_가능_문화시설_위치_데이터_20250324.csv"))
+CSV_PATH = os.path.normpath(os.path.join(
+    _HERE,
+    "../../../data/raw/한국문화정보원_전국_반려동물_동반_가능_문화시설_위치_데이터_20250324.csv"
+))
 
-# embed_places.py의 카테고리 맵
-CATEGORY_MAP = {
-    "카페": "카페",
-    "식당": "음식점",
-    "펜션": "숙박",
-    "호텔": "숙박",
-    "여행지": "관광지",
-    "박물관": "관광지",
-    "미술관": "관광지",
-    "문예회관": "관광지",
-    "동물병원": "의료",
-    "동물약국": "의료",
-    "반려동물용품": "기타",
-    "미용": "기타",
-    "위탁관리": "기타",
+# ── 카테고리 매핑: (content_type_id, sub_category) ────────────
+BIG_CATEGORY_MAP = {
+    "카페":         ("39", "카페"),
+    "식당":         ("39", "식당"),
+    "펜션":         ("32", "펜션"),
+    "호텔":         ("32", "호텔"),
+    "여행지":       ("12", "여행지"),   # 놀이터/공원은 별도 처리
+    "박물관":       ("12", "박물관"),
+    "미술관":       ("12", "미술관"),
+    "문예회관":     ("12", "문예회관"),
+    "동물병원":     ("14", "동물병원"),
+    "동물약국":     ("14", "동물약국"),
+    "반려동물용품": ("38", "반려동물용품"),
+    "미용":         ("14", "미용"),
+    "위탁관리":     ("14", "위탁관리"),
 }
 
-# DB용 타입 코드 (12:관광지 14:문화시설 28:레포츠 32:숙박 38:쇼핑 39:음식점)
-DB_TYPE_CD_MAP = {
-    "관광지": "12",
-    "문화시설": "14",
-    "놀이터": "28",
-    "공원": "12",
-    "숙박": "32",
-    "쇼핑": "38",
-    "음식점": "39",
-    "카페": "39",
-    "의료": "14",
-    "기타": "14"
-}
 
-def map_category(row):
+def map_category(row) -> tuple[str, str]:
+    """(content_type_id, sub_category) 반환"""
     cat3 = str(row["카테고리3"]).strip()
     name = str(row["시설명"])
 
     if cat3 == "여행지":
         if "놀이터" in name:
-            return "놀이터"
+            return ("28", "반려견놀이터")
         elif "공원" in name:
-            return "공원"
+            return ("12", "공원")
         else:
-            return "관광지"
+            return ("12", "관광지")
 
-    return CATEGORY_MAP.get(cat3, "기타")
+    return BIG_CATEGORY_MAP.get(cat3, ("14", "기타"))
 
 
 def load_and_filter(csv_path: str) -> pd.DataFrame:
     print("CSV 로드 중...")
     df = pd.read_csv(csv_path, encoding="utf-8")
-    print(f"원본 데이터: {len(df)}개")
+    print(f"원본 데이터: {len(df):,}개")
 
-    # 반려동물 동반 가능한 곳만 필터링
     df = df[df["반려동물 동반 가능정보"] == "Y"]
-    print(f"반려동물 동반 가능 필터링 후: {len(df)}개")
+    print(f"반려동물 동반 가능 필터링 후: {len(df):,}개")
 
-    # 위경도 범위 검증 (강원도 북부 포함)
     df = df[(df["위도"].between(33, 38.7)) & (df["경도"].between(124, 132))]
-    print(f"위경도 범위 검증 후: {len(df)}개")
+    print(f"위경도 범위 검증 후: {len(df):,}개")
 
-    # 도로명주소 null → 지번주소로 대체
     df["주소"] = df["도로명주소"].fillna(df["지번주소"])
-
-    # 필수 필드 누락 제거
     df = df.dropna(subset=["시설명", "주소"])
-    print(f"필수 필드 누락 제거 후: {len(df)}개")
+    print(f"필수 필드 누락 제거 후: {len(df):,}개")
 
-    # 앞뒤 공백, 개행문자 제거
     df["시설명"] = df["시설명"].str.strip().str.replace("\n", " ")
     df["주소"] = df["주소"].str.strip().str.replace("\n", " ")
-
-    # 중복 데이터 제거 (시설명과 주소가 동일한 경우)
     df = df.drop_duplicates(subset=["시설명", "주소"], keep="first")
-    print(f"중복 데이터 제거 후: {len(df)}개")
+    print(f"중복 데이터 제거 후: {len(df):,}개")
 
-    # 위경도 소수점 7자리 (DB 스펙)
-    df["위도"] = (df["위도"]).round(7)
-    df["경도"] = (df["경도"]).round(7)
-
-    # 시도명 추출 (city 필드용)
+    df["위도"] = df["위도"].round(7)
+    df["경도"] = df["경도"].round(7)
     df["city"] = df["시도 명칭"].fillna("").str.strip()
 
-    # category 매핑
-    df["category"] = df.apply(map_category, axis=1)
+    df[["content_type_id", "sub_category"]] = df.apply(
+        lambda r: pd.Series(map_category(r)), axis=1
+    )
 
-    # 전처리 필드들 null 치환
-    fill_cols = ["운영시간", "휴무일", "주차 가능여부", "입장(이용료)가격 정보", "전화번호", 
-                 "홈페이지", "반려동물 제한사항", "입장 가능 동물 크기", "반려동물 전용 정보", 
+    fill_cols = ["운영시간", "휴무일", "주차 가능여부", "입장(이용료)가격 정보", "전화번호",
+                 "홈페이지", "반려동물 제한사항", "입장 가능 동물 크기", "반려동물 전용 정보",
                  "애견 동반 추가 요금", "기본 정보_장소설명"]
     for col in fill_cols:
         df[col] = df[col].fillna("").astype(str).str.strip()
@@ -129,7 +122,7 @@ def build_document(row) -> str:
     """벡터화할 document 문장 구성"""
     name = row["시설명"]
     city = row["city"]
-    category = row["category"]
+    sub_cat = row["sub_category"]
     conditions = row["반려동물 제한사항"]
     size = row["입장 가능 동물 크기"]
     indoor = "실내 가능" if row["장소(실내) 여부"] == "Y" else ""
@@ -142,7 +135,7 @@ def build_document(row) -> str:
     open_hours = row["운영시간"]
     closed_days = row["휴무일"]
 
-    doc = f"{name}은 {city}에 위치한 {category} 장소로 반려견 동반이 가능하다."
+    doc = f"{name}은 {city}에 위치한 {sub_cat} 장소로 반려견 동반이 가능하다."
 
     if size and size not in ["해당없음", "모두 가능", ""]:
         doc += f" 입장 가능 크기: {size}."
@@ -150,12 +143,15 @@ def build_document(row) -> str:
         doc += f" 이용 조건: {conditions}."
     if space:
         doc += f" {space}."
-    if pet_only and pet_only not in ["해당없음", "Y", "N", ""]:
-        doc += f" 반려동물 전용 정보: {pet_only}."
+    if pet_only and pet_only == "반려동물 전용":
+        doc += " 반려동물 전용 공간."
     if extra_fee and extra_fee not in ["없음", "해당없음", ""]:
         doc += f" 애견 동반 추가 요금: {extra_fee}."
-    if parking and parking not in ["해당없음", "불가", ""]:
-        doc += f" 주차 {parking}."
+    # [FIX-1] 주차 Y/N 모두 의미 있게 반영
+    if parking == "Y":
+        doc += " 주차 가능."
+    elif parking == "N":
+        doc += " 주차 불가."
     if entrance_fee and entrance_fee not in ["해당없음", ""]:
         doc += f" 입장료: {entrance_fee}."
     if open_hours:
@@ -167,7 +163,6 @@ def build_document(row) -> str:
 
 
 async def seed() -> None:
-
     db_host = settings.DB_HOST
     db_port = settings.DB_PORT
 
@@ -204,56 +199,68 @@ async def seed() -> None:
             await session.execute(text("ALTER TABLE places AUTO_INCREMENT = 1;"))
             await session.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
             await session.commit()
-            
+
             print("데이터 적재 중...")
             for i, row in df.iterrows():
                 name = row["시설명"]
                 address = row["주소"]
-                
-                # 유의미한 고유 ID (VARCHAR 20) 생성 (이름+주소 해시)
-                # TourAPI가 아니므로 자체 고유 ID 생성 (CSV 데이터 소스)
+
+                # [FIX-5] 해시 인풋에 카테고리 포함해서 충돌 방어
                 raw_id_str = f"{name}_{address}".encode('utf-8')
                 content_id_hash = hashlib.md5(raw_id_str).hexdigest()[:20]
-                
-                category = row["category"]
-                content_type_id = DB_TYPE_CD_MAP.get(category, "14")
-                
-                is_indoor = True if row["장소(실내) 여부"] == "Y" else False
-                
-                acmpy_psbl_cpam = row["입장 가능 동물 크기"]
-                acmpy_need_mtr = row["반려동물 제한사항"]
-                etc_info = f"운영시간: {row['운영시간']} / 휴무일: {row['휴무일']}"
-                
-                desc_extra = row["기본 정보_장소설명"] 
+
+                content_type_id = row["content_type_id"]
+                sub_category = row["sub_category"]
+
+                # [FIX-2] 실내/실외 각각 저장
+                is_indoor = (row["장소(실내) 여부"] == "Y")
+                is_outdoor = (row["장소(실외)여부"] == "Y")
+
+                # [FIX-4] pet_zone_type 의미 명확화
+                if is_indoor and is_outdoor:
+                    pet_zone_type = "전구역"
+                elif is_indoor:
+                    pet_zone_type = "실내구역"
+                elif is_outdoor:
+                    pet_zone_type = "실외구역"
+                else:
+                    pet_zone_type = "정보없음"
+
+                # [FIX-1] 주차 Y/N 값 그대로 보존
+                parking_value = "Y" if row["주차 가능여부"] == "Y" else "N"
+
+                operation_info = f"운영시간: {row['운영시간']} / 휴무일: {row['휴무일']}"
+                desc_extra = row["기본 정보_장소설명"]
                 description_doc = build_document(row)
                 if desc_extra:
                     description_doc += f"\n[장소 정보] {desc_extra}"
 
+                # [FIX-6] 새 컬럼명 사용
                 new_place = Place(
                     content_id=content_id_hash,
                     content_type_id=content_type_id,
+                    sub_category=sub_category,
                     name=name,
                     address=address,
                     tel=row["전화번호"] if row["전화번호"] else None,
                     latitude=row["위도"],
                     longitude=row["경도"],
                     is_indoor=is_indoor,
-                    acmpy_type_cd="전구역" if row["장소(실외)여부"] == "Y" and is_indoor else "일부구역",
-                    acmpy_psbl_cpam=acmpy_psbl_cpam if acmpy_psbl_cpam else None,
-                    acmpy_need_mtr=acmpy_need_mtr if acmpy_need_mtr else None,
-                    rela_poses_fclty="Y" if row["주차 가능여부"] and row["주차 가능여부"] not in ["불가", "해당없음", ""] else "N",
-                    etc_acmpy_info=etc_info,
+                    is_outdoor=is_outdoor,
+                    pet_zone_type=pet_zone_type,
+                    pet_size_limit=row["입장 가능 동물 크기"] or None,
+                    pet_restrictions=row["반려동물 제한사항"] or None,
+                    has_parking=parking_value,
+                    operation_info=operation_info,
                     description=description_doc,
                 )
                 session.add(new_place)
                 inserted += 1
-                
-                # 메모리 효율을 위해 1,000건 단위 commit
+
                 if inserted % 1000 == 0:
                     await session.commit()
                     print(f"  {inserted}건 저장 완료...")
 
-            # 남은 데이터 커밋
             await session.commit()
 
         print(f"\n✅ places 테이블 데이터 갱신 완료!")

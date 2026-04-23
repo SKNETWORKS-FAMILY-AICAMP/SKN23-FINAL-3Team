@@ -49,12 +49,14 @@ class Place(Base):
     firstimage2: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="대표 이미지 썸네일 URL (약 150x100, 목록 화면용)")
     
     is_indoor: Mapped[bool | None] = mapped_column(TINYINT(1), nullable=True, comment="실내 여부 (NULL=미확인)")
-    
-    acmpy_type_cd: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="동반유형 (예: 전구역 동반가능 / 일부구역 동반가능)")
-    acmpy_psbl_cpam: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="동반가능동물 설명 (예: 전 견종 가능, 맹견 입마개 필수)")
-    acmpy_need_mtr: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="동반 시 필요사항 (예: 목줄 착용)")
-    rela_poses_fclty: Mapped[YNEnum | None] = mapped_column(SAEnum(YNEnum), nullable=True, comment="반려견 관련 구비 시설 (Y/N)")
-    etc_acmpy_info: Mapped[str | None] = mapped_column(Text, nullable=True, comment="기타 동반 정보 (상세 안내 텍스트)")
+    is_outdoor: Mapped[bool | None] = mapped_column(TINYINT(1), nullable=True, comment="실외 여부 (NULL=미확인)")
+
+    sub_category: Mapped[str | None] = mapped_column(String(30), nullable=True, comment="원본 세부 카테고리 (카페/박물관/동물병원 등)")
+    pet_zone_type: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="반려동물 동반 가능 구역 유형 (실내구역/실외구역/전구역)")
+    pet_size_limit: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="입장 가능 반려동물 크기/종류")
+    pet_restrictions: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="반려동물 동반 시 제한사항")
+    has_parking: Mapped[YNEnum | None] = mapped_column(SAEnum(YNEnum), nullable=True, comment="주차 가능 여부 (Y/N)")
+    operation_info: Mapped[str | None] = mapped_column(Text, nullable=True, comment="운영시간 및 휴무일 정보")
     description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="장소 통합 설명 텍스트 (VectorDB ChromaDB 임베딩 소스)")
     
     modified_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="한국관광공사 원본 데이터 최종 수정일")
