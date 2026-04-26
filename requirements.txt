@@ -69,5 +69,14 @@ python-multipart
 torch>=2.0.0
 transformers>=4.35.0
 numpy>=1.24.0
+tqdm                # 학습 진행률 표시 (transformers 의존성이지만 명시적 고정)
+
+# 데이터 수집
+beautifulsoup4
+
+# 평가셋
+openpyxl
+pytest
+
 pandas              # 간접 의존 (chromadb 등) — 명시적 고정
 tqdm                # transformers 진행 표시 — 간접 의존이지만 명시적 고정

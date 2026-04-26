@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 
 from typing import Sequence
+from fastapi import Request
 from sqlalchemy import select
 from core.utils import kst_now
 from models.chat_message import ChatMessage
@@ -32,8 +33,46 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.chat_room_service import get_room
 from services.intent_service import IntentResult
 from services import chat_response_service, intent_service
+from services.place_service import _parse_query_with_llm
 
 logger = logging.getLogger(__name__)
+
+_PLACE_LIKE_KEYWORDS = (
+    "추천",
+    "알려줘",
+    "알려주세요",
+    "근처",
+    "주변",
+    "숙소",
+    "호텔",
+    "펜션",
+    "카페",
+    "식당",
+    "공원",
+    "놀이터",
+    "가볼만한",
+    "갈만한",
+)
+
+
+async def _should_reroute_to_place(query: str) -> bool:
+    text = query or ""
+    if any(keyword in text for keyword in _PLACE_LIKE_KEYWORDS):
+        return True
+
+    try:
+        parsed = await _parse_query_with_llm(text)
+        return any(
+            [
+                parsed.objective.get("city"),
+                parsed.objective.get("district"),
+                parsed.objective.get("sub_category"),
+                parsed.landmark,
+            ]
+        )
+    except Exception as e:
+        logger.warning(f"[ChatMessage] place reroute check failed: {e}")
+        return False
 
 
 async def create_message(
@@ -97,6 +136,7 @@ async def create_message_with_response(
     data: MessageCreate,
     db: AsyncSession,
     current_user_id: int,
+    request: Request | None = None,
 ) -> tuple[ChatMessage, ChatMessage, IntentResult]:
     """
         사용자 메시지를 저장하고, 의도분류 → 도메인 서비스 디스패치를 거쳐
@@ -159,6 +199,13 @@ async def create_message_with_response(
     # 2) 의도 분류 → 도메인 서비스 디스패치
     try:
         intent_result = await intent_service.classify_intent_async(data.content)
+        if intent_result.intent == "기타" and await _should_reroute_to_place(data.content):
+            logger.info("[ChatMessage] 기타 -> 장소추천 후처리 재라우팅")
+            intent_result = IntentResult(
+                intent="장소추천",
+                confidence=intent_result.confidence,
+                strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
+            )
     except Exception as e:
         logger.error(f"[ChatMessage] 의도 분류 실패: {e}")
         # fallback: 기본 의도(장소추천)로 처리 — dispatch 가 fallback 로직 내장
@@ -169,7 +216,12 @@ async def create_message_with_response(
         )
 
     ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
-    assistant_text = await chat_response_service.dispatch(intent_result, data.content, ctx)
+    assistant_text = await chat_response_service.dispatch(
+        intent_result,
+        data.content,
+        ctx,
+        request=request,
+    )
     if not assistant_text:
         assistant_text = "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
 

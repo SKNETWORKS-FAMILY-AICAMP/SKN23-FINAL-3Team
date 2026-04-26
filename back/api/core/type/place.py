@@ -47,11 +47,19 @@ class PlaceType:
         return self.types.get(type_id, "")
 
     def extract_location(self, query: str) -> dict:
-        """쿼리에서 지역명 추출 → city 또는 district 반환"""
-        for keyword, district in self.district_keywords.items():
-            if keyword in query:
-                return {"district": district}
+        """쿼리에서 지역명 추출 → city + district 동시 반환 가능"""
+        result = {}
+        
+        # city 먼저 추출
         for keyword, city in self.city_keywords.items():
             if keyword in query:
-                return {"city": city}
-        return {}
+                result["city"] = city
+                break
+        
+        # district 추출 (city와 독립적으로)
+        for keyword, district in self.district_keywords.items():
+            if keyword in query:
+                result["district"] = district
+                break
+        
+        return result

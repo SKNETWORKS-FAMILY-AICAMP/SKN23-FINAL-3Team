@@ -547,4 +547,15 @@ front/.vite/
 # Python 가상환경
 withdog_venv/
 
+# pytest 임시 캐시 폴더
+pytest-cache-files-*/
+
+# evaluation 임시 출력 파일
+temp_*.txt
+
+# evaluation 결과/로그 (로컬 실행 산출물)
+evaluation/results/
+evaluation/logs/
+data/eval/backup/
+
 # ========== 개인 ==============
