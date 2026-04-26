@@ -554,8 +554,14 @@ pytest-cache-files-*/
 temp_*.txt
 
 # evaluation 결과/로그 (로컬 실행 산출물)
-evaluation/results/
-evaluation/logs/
+ai/evaluation/results/
+ai/evaluation/logs/
 data/eval/backup/
+
+# 평가용 eval 데이터 (로컬 실행 산출물)
+ai/eval_data/
+
+# 평가셋 엑셀 (용량 초과)
+data/eval/*.xlsx
 
 # ========== 개인 ==============
