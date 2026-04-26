@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent
 
 DEFAULT_EVAL_PATH = ROOT_DIR / "data" / "eval" / "withDOG 평가셋 .xlsx"
-DEFAULT_OUTPUT_DIR = ROOT_DIR / "evaluation" / "results"
+DEFAULT_OUTPUT_DIR = ROOT_DIR / "ai" / "evaluation" / "results"
 
 BASE_URL = os.getenv("EVAL_BASE_URL", "http://localhost:8000")
 SEARCH_ENDPOINT = f"{BASE_URL}/api/places/search"
