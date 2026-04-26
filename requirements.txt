@@ -1,24 +1,30 @@
+# ─────────────────────────────────────────────────────────────────
+#  운영(추론) 의존성
+#  - Docker 운영 이미지는 이 파일만 설치한다.
+#  - 학습/개발 전용 패키지(datasets, accelerate, scikit-learn, pandas,
+#    ipykernel 등)는 requirements-dev.txt 에서 관리한다.
+#  - torch 는 Dockerfile 에서 CPU-only wheel 로 선설치한다.
+#    로컬 개발 시 CUDA 버전이 필요하면 requirements-dev.txt 참조.
+# ─────────────────────────────────────────────────────────────────
+
 # Vector DB
 chromadb
 
 # 한국어 임베딩 모델
 sentence-transformers
 
-# API 호출 (The Dog API, Dog CEO API, 한국관광공사 OpenAPI)
+# 외부 API 호출 (The Dog API, Dog CEO API, 한국관광공사 OpenAPI)
 httpx
 requests
 
-# 공공데이터 CSV 파싱
-pandas
+# 공공데이터 파싱/수집 (현재 직접 사용처 없음 — dead dep 후보, 추후 제거 검토)
+beautifulsoup4
 
 # .env 파일 로드 (API 키 관리)
 python-dotenv
 
 # OpenAI API 클라이언트
 openai
-
-# Jupyter 노트북 커널
-ipykernel
 
 # FastAPI 백엔드
 fastapi
@@ -28,7 +34,7 @@ uvicorn[standard]
 ultralytics
 pillow
 
-# 비동기 SQLite (cost_tracker)
+# 비동기 SQLite (cost_tracker 레거시 — dead dep 후보)
 aiosqlite
 
 # DB 연결 (AWS RDS MySQL)
@@ -57,12 +63,11 @@ apscheduler
 # multipart/form-data 파일 업로드
 python-multipart
 
-# 모델 학습 및 추론
+# 추론 스택
+#   torch 는 Dockerfile 에서 CPU-only wheel 로 선설치 → 여기서는 범위만 선언.
+#   (pip 가 이미 설치된 CPU wheel 을 재사용하므로 CUDA wheel 로 덮어쓰지 않음.)
 torch>=2.0.0
 transformers>=4.35.0
-datasets>=2.14.0
-accelerate>=0.21.0  # transformers 모델 로드/추론 시 필요
-scikit-learn>=1.3.0
 numpy>=1.24.0
 tqdm                # 학습 진행률 표시 (transformers 의존성이지만 명시적 고정)
 
@@ -72,3 +77,6 @@ beautifulsoup4
 # 평가셋
 openpyxl
 pytest
+
+pandas              # 간접 의존 (chromadb 등) — 명시적 고정
+tqdm                # transformers 진행 표시 — 간접 의존이지만 명시적 고정
