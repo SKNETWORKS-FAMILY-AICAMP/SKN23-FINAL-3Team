@@ -7,10 +7,105 @@ import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
 import { createChatRoom, sendMessageWithResponse } from '../services/chatService'
+import { searchPlaces, type PlaceResult } from '../services/placeService'
+
+function splitPlaceMessage(text: string) {
+  return text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+}
+
+function buildFallbackPlaceReason(place: {
+  category: string
+  sub_category: string
+  indoor: string
+  outdoor: string
+  has_parking: string
+}) {
+  const labels = [place.sub_category, place.category].filter(Boolean)
+  const labelText = labels.length > 0 ? `${labels.join(', ')} 장소라서` : '반려견과 함께 방문하기에'
+
+  if (place.indoor === 'Y' && place.outdoor === 'Y') {
+    return `${labelText} 실내외 모두 이용할 수 있어 상황에 맞게 방문하기 좋아요.`
+  }
+
+  if (place.indoor === 'Y' && place.has_parking === 'Y') {
+    return `${labelText} 실내 이용이 가능하고 주차도 가능해 편하게 들르기 좋아요.`
+  }
+
+  if (place.indoor === 'Y') {
+    return `${labelText} 실내 이용이 가능해 날씨 영향이 적어요.`
+  }
+
+  if (place.outdoor === 'Y' && place.has_parking === 'Y') {
+    return `${labelText} 야외 활동이 가능하고 주차도 편해서 방문하기 좋아요.`
+  }
+
+  if (place.outdoor === 'Y') {
+    return `${labelText} 바깥 활동과 함께 들르기 좋아요.`
+  }
+
+  if (place.has_parking === 'Y') {
+    return `${labelText} 주차가 가능해서 이동 부담이 적어요.`
+  }
+
+  return `${labelText} 가볍게 방문해보기 좋아요.`
+}
+
+function renderPlaceMessage(
+  text: string,
+  places?: Array<{
+    name: string
+    address: string
+    category: string
+    sub_category: string
+    indoor: string
+    outdoor: string
+    has_parking: string
+    reason?: string
+  }>,
+) {
+  const blocks = splitPlaceMessage(text)
+  const fallbackIntro = blocks[0]
+  const fallbackOutro = blocks.slice(1)
+
+  return (
+    <div className="space-y-3 text-[14px] leading-7 text-[#3D2B1F]">
+      {places && places.length > 0 ? (
+        <>
+          <p>반려견과 함께 가보기 좋은 장소를 정리했어요.</p>
+          <div className="space-y-3">
+          {places.map((place, index) => {
+            return (
+              <div key={`${place.name}-${index}`} className="space-y-1">
+                <p className="font-semibold text-[#2F241D]">
+                  {index + 1}. {place.name}
+                </p>
+                <p>- 주소: {place.address}</p>
+                <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
+              </div>
+            )
+          })}
+          </div>
+          <p>세부 정보는 아래 지도와 장소 카드에서 함께 확인해보세요.</p>
+        </>
+      ) : (
+        <>
+          {fallbackIntro && <p>{fallbackIntro}</p>}
+          {fallbackOutro.map((line, index) => (
+            <p key={`${line}-${index}`}>{line}</p>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   pet?: Pet
   onSelectPlace?: (place: string) => void
+  onPlacesFound?: (places: PlaceResult[]) => void
   onNavigateToMap?: () => void
   onNavigateToDiary?: () => void
   onDiaryReady?: (diary: GeneratedDiary, imageUrl: string) => void
@@ -22,6 +117,7 @@ const DEFAULT_PET: Pet = { name: '우리 아이', breed: '강아지' }
 export default function ChatBot({
   pet = DEFAULT_PET,
   onSelectPlace: _onSelectPlace,
+  onPlacesFound,
   onNavigateToMap,
   onNavigateToDiary,
   onDiaryReady,
@@ -85,7 +181,28 @@ export default function ChatBot({
           actions.receiveBotMessage(botText, hasDiaryButton ? 'start_diary' : undefined)
         }
       } else if (intent === '장소추천' || intent === '시설정보') {
-        actions.receiveBotMessage(botText)
+        let places: PlaceResult[] = []
+        try {
+          places = await searchPlaces({ query: text })
+          onPlacesFound?.(places)
+        } catch {
+          onPlacesFound?.([])
+        }
+        actions.receiveBotMessage(
+          botText,
+          undefined,
+          'place',
+          places.map((place) => ({
+            name: place.name,
+            address: place.address,
+            category: place.category,
+            sub_category: place.sub_category,
+            indoor: place.indoor,
+            outdoor: place.outdoor,
+            has_parking: place.has_parking,
+            reason: place.reason,
+          })),
+        )
         setTimeout(() => onNavigateToMap?.(), 800)
       } else {
         actions.receiveBotMessage(botText)
@@ -157,7 +274,7 @@ export default function ChatBot({
                   : 'bg-[#F4845F] text-white'
               }`}
             >
-              {msg.content}
+              {msg.variant === 'place' ? renderPlaceMessage(msg.content, msg.places) : msg.content}
             </div>
             {msg.action === 'start_diary' && (
               <button

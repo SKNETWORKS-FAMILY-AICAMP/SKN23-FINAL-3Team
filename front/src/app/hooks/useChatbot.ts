@@ -11,6 +11,17 @@ export interface Message {
   role: 'bot' | 'user'
   content: string
   action?: 'start_diary'
+  variant?: 'place'
+  places?: Array<{
+    name: string
+    address: string
+    category: string
+    sub_category: string
+    indoor: string
+    outdoor: string
+    has_parking: string
+    reason?: string
+  }>
 }
 
 // ── 챗봇 단계 ────────────────────────────────────────
@@ -56,7 +67,22 @@ export type ChatbotAction =
   | { type: 'REGENERATE' }
   | { type: 'RESET' }
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
-  | { type: 'RECEIVE_BOT_MESSAGE'; text: string; action?: 'start_diary' }
+  | {
+      type: 'RECEIVE_BOT_MESSAGE'
+      text: string
+      action?: 'start_diary'
+      variant?: 'place'
+      places?: Array<{
+        name: string
+        address: string
+        category: string
+        sub_category: string
+        indoor: string
+        outdoor: string
+        has_parking: string
+        reason?: string
+      }>
+    }
 
 // ── 헬퍼 ─────────────────────────────────────────────
 let _counter = 0
@@ -249,6 +275,8 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
     case 'RECEIVE_BOT_MESSAGE': {
       const msg: Message = { id: nextId(), role: 'bot', content: action.text }
       if (action.action) msg.action = action.action
+      if (action.variant) msg.variant = action.variant
+      if (action.places) msg.places = action.places
       return {
         ...state,
         isGenerating: false,
@@ -420,7 +448,24 @@ export function useChatbot(pet: Pet) {
     regenerate: useCallback(() => dispatch({ type: 'REGENERATE' }), []),
     reset: useCallback(() => dispatch({ type: 'RESET' }), []),
     submitWelcomeChat: useCallback((text: string) => dispatch({ type: 'SUBMIT_WELCOME_CHAT', text }), []),
-    receiveBotMessage: useCallback((text: string, action?: 'start_diary') => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action }), []),
+    receiveBotMessage: useCallback(
+      (
+        text: string,
+        action?: 'start_diary',
+        variant?: 'place',
+        places?: Array<{
+          name: string
+          address: string
+          category: string
+          sub_category: string
+          indoor: string
+          outdoor: string
+          has_parking: string
+          reason?: string
+        }>,
+      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
+      [],
+    ),
   }
 
   return { state, actions }

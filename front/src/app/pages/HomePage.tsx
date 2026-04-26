@@ -7,6 +7,7 @@ import MapView from '../components/MapView';
 import ChatBot from '../components/ChatBot';
 import ChatHistory from '../components/ChatHistory';
 import type { GeneratedDiary } from '../services/diaryService';
+import type { PlaceResult } from '../services/placeService';
 import { createDiary, updateDiary, deleteDiary } from '../services/dbDiaryService';
 import { uploadImage } from '../services/imageService';
 import { getMe } from '../services/userService';
@@ -601,6 +602,7 @@ export default function HomePage({
   const [autoPlace, setAutoPlace] = useState('');
   const [showDiaryEditor, setShowDiaryEditor] = useState(false);
   const [showMapSearch, setShowMapSearch] = useState(false);
+  const [mapPlaces, setMapPlaces] = useState<PlaceResult[]>([]);
   const [diaryResult, setDiaryResult] = useState<{ diary: GeneratedDiary; imageUrl: string } | null>(null);
   const [diaryTrigger, setDiaryTrigger] = useState(0);
   const [showAlbum, setShowAlbum] = useState(false);
@@ -692,7 +694,7 @@ export default function HomePage({
 
   const handleOpenMapTab = () => {
     setTab('map');
-    setShowMapSearch(false);
+    setShowMapSearch(true);
   };
 
   const handleUsePlace = (place: string) => {
@@ -700,6 +702,12 @@ export default function HomePage({
     setTab('diary');
     setDiaryResult(null);
     setDiaryTrigger((prev) => prev + 1);
+  };
+
+  const handlePlacesFound = (places: PlaceResult[]) => {
+    setMapPlaces(places);
+    setTab('map');
+    setShowMapSearch(true);
   };
 
   const handleGoMypage = () => {
@@ -1013,7 +1021,7 @@ export default function HomePage({
               )}
 
               {tab === 'map' && showMapSearch && (
-                <MapView onUsePlace={handleUsePlace} />
+                <MapView places={mapPlaces} onUsePlace={handleUsePlace} />
               )}
             </div>
           </div>
@@ -1063,6 +1071,7 @@ export default function HomePage({
                     <ChatBot
                       pet={currentPet}
                       onSelectPlace={handleUsePlace}
+                      onPlacesFound={handlePlacesFound}
                       onNavigateToDiary={handleOpenDiaryTab}
                       onNavigateToMap={handleOpenMapTab}
                       onDiaryReady={handleDiaryReady}

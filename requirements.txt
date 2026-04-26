@@ -68,3 +68,7 @@ tqdm                # 학습 진행률 표시 (transformers 의존성이지만 �
 
 # 데이터 수집
 beautifulsoup4
+
+# 평가셋
+openpyxl
+pytest

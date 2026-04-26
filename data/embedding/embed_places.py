@@ -37,7 +37,7 @@ from tqdm import tqdm
 # ── 경로 설정 ─────────────────────────────────────────────
 # embedding/ 폴더에서 실행하므로 한 단계 위(vector/)를 BASE_DIR로 설정
 BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH    = os.path.join(BASE_DIR, "data", "processed", "반려동물_동반가능_장소_완성.csv")
+CSV_PATH    = os.path.join(BASE_DIR, "processed", "반려동물_동반가능_장소_완성.csv")
 CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
 
 # ── ChromaDB 설정 ─────────────────────────────────────────
@@ -167,6 +167,8 @@ def build_metadata(row: pd.Series) -> dict:
         "open_hours":   safe_str(row.get("운영시간")),
         "closed_days":  safe_str(row.get("휴무일")),
         "parking":      safe_str(row.get("주차 가능여부")),
+        "entrance_fee": safe_str(row.get("입장(이용료)가격 정보")),
+        "extra_fee":    safe_str(row.get("애견 동반 추가 요금")),
         "tel":          safe_str(row.get("전화번호")),
         "space_size":   safe_str(row.get("공간크기")),
         "vibe":         safe_str(row.get("분위기")),

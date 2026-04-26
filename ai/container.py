@@ -10,6 +10,7 @@ from ai.infrastructure.cost_tracker import OpenAICostTracker
 from ai.retrievers.places_retriever import PlacesRetriever
 from ai.retrievers.breed_retriever import BreedRetriever
 from ai.retrievers.diary_retriever import DiaryRetriever
+from ai.retrievers.query_parser import QueryParser
 
 from ai.scorers.dog_scorer import DogScorer
 from ai.scorers.owner_scorer import OwnerScorer
@@ -45,6 +46,7 @@ class AIContainer:
         self._breed_retriever  = BreedRetriever(self._vector_store, self._embedder)
         self._diary_retriever  = DiaryRetriever(self._vector_store, self._embedder)
         self._places_retriever = PlacesRetriever(self._vector_store, self._embedder)
+        self._query_parser     = QueryParser(llm_client=self._llm)
 
         # ── 3. Scorers ─────────────────────────────────────
         self._dog_scorer   = DogScorer()

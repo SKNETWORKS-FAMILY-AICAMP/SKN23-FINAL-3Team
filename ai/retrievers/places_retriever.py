@@ -69,7 +69,7 @@ class PlacesRetriever(BaseRetriever):
                     "size_limit":   metadata.get("size_limit", "모두 가능"),
                     "indoor":       metadata.get("indoor", "N"),
                     "outdoor":      metadata.get("outdoor", "N"),
-                    "extra_fee":    metadata.get("extra_fee", "없음"),
+                    "extra_fee":    metadata.get("extra_fee", ""),
                     "source":       metadata.get("source", ""),
                     "content_id":   metadata.get("content_id", ""),
                     "similarity":   round(1 - result["distances"][0][i], 4),

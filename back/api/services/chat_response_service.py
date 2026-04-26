@@ -37,7 +37,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.image_service import _upload_to_s3
 from services.intent_service import IntentResult, RAG_STRATEGY_MAP
-from services.place_service import search_places_from_db
+from services.place_service import SEOUL, _parse_query_with_llm, search_places_from_db
 from fastapi import Request
 
 # from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 _openai_client: AsyncOpenAI | None = None
 _GPT_MODEL = settings.GPT_MODEL
 _IMAGE_MODEL = settings.DIARY_IMAGE_MODEL
+_OUT_OF_SERVICE_AREA_MESSAGE = "현재 서비스는 서울 지역만 지원하고 있습니다."
 
 
 def _get_openai_client() -> AsyncOpenAI:
@@ -157,7 +158,9 @@ _RESPONSE_GUIDE_CALENDAR = """\
 _PLACES_SYSTEM_PROMPT = (
     "너는 반려견 동반 가능 장소를 추천하는 큐레이터야. "
     "검색된 장소 목록을 참고해 사용자에게 자연스러운 한국어로 2~3곳을 추천하되 "
-    "각 장소의 특징(카테고리/위치/실내외 여부 등)을 간결하게 곁들여줘."
+    "각 장소의 특징(카테고리/위치/실내외 여부 등)을 간결하게 곁들여줘. "
+    "만약 '[검색 결과 없음]'이 표시되면, 조건에 맞는 장소를 찾지 못했다고 안내하고 "
+    "현재 서비스는 서울 지역만 지원하므로 다른 지역 요청인 경우 그 점을 친절하게 알려줘."
 )
 
 _FACILITY_SYSTEM_PROMPT = (
@@ -172,6 +175,17 @@ _FALLBACK_SYSTEM_PROMPT = (
 
 
 
+_PLACE_REASON_SYSTEM_PROMPT = (
+    "당신은 반려견 동반 장소를 추천하는 도우미입니다. "
+    "사용자 질문과 후보 장소 정보를 보고 각 장소마다 질문 맥락에 맞는 추천 이유를 1문장으로 작성하세요. "
+    "운영시간, 실내/실외 여부, 주차, 카테고리, 설명 중 실제로 주어진 정보만 활용하고 추측은 하지 마세요. "
+    "비용, 입장료, 추가요금 관련 질문일 때는 entrance_fee와 extra_fee 필드가 실제로 있을 때만 그 정보를 근거로 설명하세요. "
+    "주차 가능 여부만으로 비용이 없다고 말하거나, 비용 정보를 추측해서 말하지 마세요. "
+    "모든 장소의 reason은 서로 다르게 쓰고, 질문에 나온 조건이 반영되도록 자연스럽게 설명하세요. "
+    '반드시 JSON만 반환하세요. 형식은 {"places":[{"name":"장소명","reason":"추천 이유"}]} 입니다.'
+)
+
+
 def _format_places_brief(places: Sequence[dict]) -> str:
     """검색된 장소를 프롬프트에 넣을 간단한 텍스트로 포맷."""
     if not places:
@@ -180,15 +194,44 @@ def _format_places_brief(places: Sequence[dict]) -> str:
     for p in places:
         parts = [
             f"- {p.get('name', '이름미상')}",
-            f"({p.get('category', '')}, {p.get('city', '')})",
+            f"({p.get('category', '')}, {p.get('sub_category', '')})",
         ]
         if p.get("address"):
             parts.append(f"주소: {p['address']}")
-        if p.get("open_hours"):
-            parts.append(f"운영: {p['open_hours']}")
-        if p.get("parking"):
-            parts.append(f"주차: {p['parking']}")
+        if p.get("operation"):
+            parts.append(f"운영: {p['operation']}")
+        if p.get("has_parking"):
+            parts.append(f"주차: {p['has_parking']}")
+        if p.get("conditions"):
+            parts.append(f"이용조건: {p['conditions']}")
         lines.append(" · ".join(parts))
+    return "\n".join(lines)
+
+
+def _format_place_list_response(places: Sequence[dict]) -> str:
+    """Render a stable place response without a second LLM pass."""
+    if not places:
+        return (
+            "조건에 맞는 장소를 찾지 못했어요. "
+            "원하시는 지역이나 조건을 조금 바꿔서 다시 말씀해 주세요."
+        )
+
+    lines = ["반려견과 함께 가보기 좋은 장소를 정리했어요.", ""]
+    for idx, place in enumerate(places, start=1):
+        name = place.get("name", "이름 미상")
+        address = place.get("address", "")
+        reason = (place.get("reason") or "").strip()
+
+        lines.append(f"{idx}. {name}")
+        lines.append("")
+        if address:
+            lines.append(f"- 주소: {address}")
+            lines.append("")
+        if reason:
+            lines.append(f"- 추천 이유: {reason}")
+            lines.append("")
+
+    lines.append("세부 정보는 아래 지도와 장소 카드에서 함께 확인해보세요.")
     return "\n".join(lines)
 
 
@@ -218,6 +261,87 @@ async def _chat_completion(
 
 
 # ── 다이어리 헬퍼 ────────────────────────────────────────────────────────────
+def _format_places_for_reasoning(places: Sequence[dict]) -> str:
+    if not places:
+        return "[]"
+
+    lines: list[str] = []
+    for place in places:
+        attrs = [
+            f"name={place.get('name', '')}",
+            f"category={place.get('category', '')}",
+            f"sub_category={place.get('sub_category', '')}",
+            f"address={place.get('address', '')}",
+            f"operation={place.get('operation', '')}",
+            f"indoor={place.get('indoor', '')}",
+            f"outdoor={place.get('outdoor', '')}",
+            f"has_parking={place.get('has_parking', '')}",
+            f"conditions={place.get('conditions', '')}",
+            f"restriction_tags={','.join(place.get('restriction_tags', []))}",
+            f"entrance_fee={place.get('entrance_fee', '')}",
+            f"extra_fee={place.get('extra_fee', '')}",
+            f"description={place.get('description', '')}",
+        ]
+        lines.append(" | ".join(attrs))
+    return "\n".join(lines)
+
+
+async def generate_place_reasons(query: str, places: Sequence[dict]) -> dict[str, str]:
+    """질문 맥락을 반영한 장소별 추천 이유를 LLM으로 생성한다."""
+    if not places:
+        return {}
+
+    user_prompt = (
+        f"사용자 질문:\n{query}\n\n"
+        f"[후보 장소]\n{_format_places_for_reasoning(places)}\n\n"
+        "모든 후보 장소에 대해 reason을 작성해 주세요."
+    )
+
+    user_prompt += (
+        "\n\n[reason rules]\n"
+        "- Use only details that directly match the user's request.\n"
+        "- If the question is not about fees or cost, do not use entrance_fee or extra_fee in the reason.\n"
+        "- If the question mentions waste bags, poop bags, or supplies, prioritize conditions/restrictions details over fee details.\n"
+        "- If the question mentions leash, waste bags, supplies, or other restrictions, use conditions or restriction_tags as the main evidence.\n"
+        "- Do not infer that a place is restriction-free just because conditions are empty.\n"
+        "- Do not say a place allows off-leash or no-supplies-needed unless conditions or restriction_tags support that claim.\n"
+        "- Do not explain why a place does not match. Explain only why the returned place matches.\n"
+        "- Each place reason must be meaningfully different from the others.\n"
+        "- Do not repeat the same sentence pattern for multiple places.\n"
+        "- Use one distinctive trait per place, chosen from category, operation hours, indoor/outdoor, parking, description, or conditions.\n"
+        "- If conditions are empty for many places, do not repeat 'no restrictions' for all of them; use another concrete trait instead.\n"
+    )
+
+    raw = await _chat_completion(
+        _PLACE_REASON_SYSTEM_PROMPT,
+        user_prompt,
+        max_tokens=700,
+    )
+
+    try:
+        clean = raw.replace("```json", "").replace("```", "").strip()
+        data = json.loads(clean)
+        return {
+            item["name"]: item["reason"]
+            for item in data.get("places", [])
+            if item.get("name") and item.get("reason")
+        }
+    except Exception as e:
+        logger.warning(f"[ChatResponse] place reason parse failed: {e}")
+        return {}
+
+
+async def _is_out_of_service_area(query: str, request: Request | None = None) -> bool:
+    """서울 외 지역 질문이면 True를 반환한다."""
+    try:
+        parsed = await _parse_query_with_llm(query, request=request)
+        city = (parsed.objective.get("city") or "").strip()
+        return bool(city and city != SEOUL)
+    except Exception as e:
+        logger.warning(f"[ChatResponse] service-area check failed: {e}")
+        return False
+
+
 _DEFAULT_DIARY_PET = {
     "pet_name": "우리 아이",
     "breed": "강아지",
@@ -472,6 +596,9 @@ async def _handle_diary(query: str, ctx: DispatchContext) -> str:
 
 
 async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, request: Request = None) -> str:
+    if await _is_out_of_service_area(query, request=request):
+        return _OUT_OF_SERVICE_AREA_MESSAGE
+
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
@@ -480,16 +607,21 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, reque
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
 
+    if places:
+        return _format_place_list_response(places)
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
     return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
 
 
-async def _handle_facility(query: str, ctx: DispatchContext) -> str:
+async def _handle_facility(query: str, ctx: DispatchContext, request: Request = None) -> str:
+    if await _is_out_of_service_area(query, request=request):
+        return _OUT_OF_SERVICE_AREA_MESSAGE
+
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=1)
     elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=1)
+        places = await search_places_from_db(query, ctx.db, n_results=1, request=request)
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 시설 검색 불가")
         places = []
@@ -787,7 +919,7 @@ async def dispatch(
     if intent == "장소추천":
         return await _handle_places(query, ctx, top_k=top_k, request=request)
     if intent == "시설정보":
-        return await _handle_facility(query, ctx)
+        return await _handle_facility(query, ctx, request=request)
     if intent == "기타" or intent not in RAG_STRATEGY_MAP:
         logger.info("[Dispatch] 기타 분기 처리")
         return await _handle_fallback(query)
