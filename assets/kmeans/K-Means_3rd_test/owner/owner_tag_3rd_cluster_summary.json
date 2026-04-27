@@ -1,0 +1,90 @@
+{
+  "0": {
+    "cluster_id": 0,
+    "cluster_label": "힐링·일상",
+    "label_source": "keyword_auto",
+    "total_count": 2,
+    "tag_names": [
+      "느긋하게 쉬어가기",
+      "일상 충전"
+    ],
+    "representative_tags": [
+      "느긋하게 쉬어가기",
+      "일상 충전"
+    ],
+    "note": "cluster_id는 KMeans 실행마다 달라질 수 있으므로 최종 라벨은 클러스터별 포함 태그를 보고 재검토해야 합니다."
+  },
+  "1": {
+    "cluster_id": 1,
+    "cluster_label": "도시·핫플",
+    "label_source": "keyword_auto",
+    "total_count": 6,
+    "tag_names": [
+      "도시 구경",
+      "핫플 인증",
+      "새로운 곳 구경",
+      "동네 골목 탐방",
+      "계획 없이 떠나기",
+      "감성 충만"
+    ],
+    "representative_tags": [
+      "도시 구경",
+      "핫플 인증",
+      "새로운 곳 구경"
+    ],
+    "note": "cluster_id는 KMeans 실행마다 달라질 수 있으므로 최종 라벨은 클러스터별 포함 태그를 보고 재검토해야 합니다."
+  },
+  "2": {
+    "cluster_id": 2,
+    "cluster_label": "감성·먹거리",
+    "label_source": "keyword_auto",
+    "total_count": 4,
+    "tag_names": [
+      "카페 투어",
+      "사진 건지러",
+      "전시 관람",
+      "맛있는 거 먹으러"
+    ],
+    "representative_tags": [
+      "카페 투어",
+      "사진 건지러",
+      "전시 관람"
+    ],
+    "note": "cluster_id는 KMeans 실행마다 달라질 수 있으므로 최종 라벨은 클러스터별 포함 태그를 보고 재검토해야 합니다."
+  },
+  "3": {
+    "cluster_id": 3,
+    "cluster_label": "자연선호",
+    "label_source": "keyword_auto",
+    "total_count": 4,
+    "tag_names": [
+      "자연 속으로",
+      "산",
+      "숲",
+      "계곡"
+    ],
+    "representative_tags": [
+      "자연 속으로",
+      "산",
+      "숲"
+    ],
+    "note": "cluster_id는 KMeans 실행마다 달라질 수 있으므로 최종 라벨은 클러스터별 포함 태그를 보고 재검토해야 합니다."
+  },
+  "4": {
+    "cluster_id": 4,
+    "cluster_label": "활동·모험",
+    "label_source": "keyword_auto",
+    "total_count": 3,
+    "tag_names": [
+      "바다",
+      "신나게 뛰어놀기",
+      "공원 산책"
+    ],
+    "representative_tags": [
+      "바다",
+      "신나게 뛰어놀기",
+      "공원 산책"
+    ],
+    "note": "cluster_id는 KMeans 실행마다 달라질 수 있으므로 최종 라벨은 클러스터별 포함 태그를 보고 재검토해야 합니다."
+  }
+}
