@@ -1,16 +1,15 @@
 import requests
 
-from core.config import settings
 from core.deps import get_db
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.place_service import search_places_from_db
 from services.chat_response_service import generate_place_reasons
 
-router = APIRouter()
+router = APIRouter(tags=["places"])
 
-TOUR_API_KEY = settings.TOUR_API_KEY
-KAKAO_REST_API_KEY = settings.KAKAO_REST_API_KEY
+TOUR_API_KEY = os.getenv("TOUR_API_KEY")
+KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY")
 BASE_URL = "https://apis.data.go.kr/B551011/KorPetTourService2"
 
 

@@ -43,7 +43,7 @@ sqlalchemy[asyncio]
 aiomysql
 
 # SSH 터널링 (로컬 환경에서 RDS 접근)
-sshtunnel==0.4.0
+sshtunnel
 paramiko<3.4.0     # 3.4.0부터 DSSKey 제거 → sshtunnel 호환 불가
 cryptography       # SSH PEM 키 파싱에 필요
 
@@ -71,12 +71,13 @@ transformers>=4.35.0
 numpy>=1.24.0
 tqdm                # 학습 진행률 표시 (transformers 의존성이지만 명시적 고정)
 
-# 데이터 수집
-beautifulsoup4
+# KMeans 유저 세그먼트 군집화 (ai/eval/train_kmeans.py)
+joblib
+matplotlib
 
-# 평가셋
+# 그림일기 이미지 자동 평가 / 평가셋 Excel 출력
+# openai, pillow, python-dotenv 는 위에서 이미 선언
 openpyxl
 pytest
 
 pandas              # 간접 의존 (chromadb 등) — 명시적 고정
-tqdm                # transformers 진행 표시 — 간접 의존이지만 명시적 고정

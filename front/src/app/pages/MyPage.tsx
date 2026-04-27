@@ -209,6 +209,10 @@ export default function MyPage() {
     if (!selectedPetId) return;
     setSavedPetId(selectedPetId);
     localStorage.setItem('selected_pet_id', String(selectedPetId));
+    const currentPhoto = petPhotos[selectedPetId];
+    if (currentPhoto) {
+      localStorage.setItem(`pet_photo_${selectedPetId}`, currentPhoto);
+    }
     window.dispatchEvent(new Event('pet-select-change'));
     setSaveSuccess(true);
   };
@@ -433,11 +437,13 @@ export default function MyPage() {
                   {pets.map((pet) => {
                     const selected = pet.id === selectedPetId;
                     return (
-                      <button
+                      <div
                         key={pet.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => { setSelectedPetId(pet.id); setSaveSuccess(false); }}
-                        className={`w-[320px] shrink-0 overflow-hidden rounded-[28px] border p-5 text-left transition ${
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedPetId(pet.id); setSaveSuccess(false); } }}
+                        className={`w-[320px] shrink-0 cursor-pointer overflow-hidden rounded-[28px] border p-5 text-left transition ${
                           selected
                             ? "border-orange-300 bg-orange-50/40 shadow-md"
                             : "border-slate-100 bg-white hover:border-orange-200 hover:shadow-sm"
@@ -519,7 +525,7 @@ export default function MyPage() {
                             상세보기
                           </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

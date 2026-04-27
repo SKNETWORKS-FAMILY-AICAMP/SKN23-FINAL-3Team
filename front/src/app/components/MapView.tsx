@@ -2,11 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Navigation, Phone } from 'lucide-react';
 import type { PlaceResult } from '../services/placeService';
 
-declare global {
-  interface Window {
-    kakao: any;
-  }
-}
+declare const kakao: any;
 
 interface Props {
   places: PlaceResult[];
@@ -124,9 +120,8 @@ export default function MapView({ places, onUsePlace }: Props) {
 
         renderMarkers();
       });
-    };
-
-    waitForKakao();
+      markersRef.current.push(marker);
+    });
   }, []);
 
   useEffect(() => {

@@ -67,6 +67,7 @@ export type ChatbotAction =
   | { type: 'REGENERATE' }
   | { type: 'RESET' }
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
+  | { type: 'TRIGGER_DIARY_FLOW' }
   | {
       type: 'RECEIVE_BOT_MESSAGE'
       text: string
@@ -94,14 +95,15 @@ const ACKS = ['그렇군요 😊', '아, 그랬군요!', '좋아요 🐾', '잘 
 const randomAck = () => ACKS[Math.floor(Math.random() * ACKS.length)]
 
 // ── 초기 상태 ────────────────────────────────────────
-function makeInitialState(pet: Pet): ChatbotState {
+function makeInitialState(pet: Pet, welcomeOverride?: string): ChatbotState {
+  const welcome = welcomeOverride ?? `안녕하세요! 저는 ${pet.name}의 반짝이는 하루와\n소중한 추억을 차곡차곡 담아드리는 AI 멍봇이에요 🐾\n\n추억을 함께 기록하고,\n어울리는 장소도 추천해드릴게요.\n\n오늘은 어떤 하루를 남겨볼까요?`
   return {
     step: 'welcome',
     pet,
     selectedDiaryType: null,
     currentQuestionIndex: 0,
     messages: [
-      botMsg(`안녕하세요! 저는 ${pet.name}의 반짝이는 하루와\n소중한 추억을 차곡차곡 담아드리는 AI 멍봇이에요 🐾\n\n추억을 함께 기록하고,\n어울리는 장소도 추천해드릴게요.\n\n오늘은 어떤 하루를 남겨볼까요?`),
+      botMsg(welcome),
     ],
     mainAnswers: [],
     additionalPerspectiveAccepted: null,
@@ -280,7 +282,19 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       return {
         ...state,
         isGenerating: false,
-        messages: [...state.messages, msg],
+        messages: [...state.messages, botMsg(action.text)],
+      }
+    }
+
+    case 'TRIGGER_DIARY_FLOW': {
+      return {
+        ...state,
+        isGenerating: false,
+        step: 'type_select',
+        messages: [
+          ...state.messages,
+          botMsg(`${petName}의 오늘 하루를 어떤 유형으로 기록할까요? 🐾`),
+        ],
       }
     }
 
@@ -335,8 +349,8 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
 }
 
 // ── Hook ─────────────────────────────────────────────
-export function useChatbot(pet: Pet) {
-  const [state, dispatch] = useReducer(reducer, pet, makeInitialState)
+export function useChatbot(pet: Pet, welcomeOverride?: string) {
+  const [state, dispatch] = useReducer(reducer, undefined, () => makeInitialState(pet, welcomeOverride))
 
   // 대화 저장용 ref
   const chatRoomIdRef = useRef<number | null>(null)
@@ -439,6 +453,7 @@ export function useChatbot(pet: Pet) {
   const actions = {
     startDiary: useCallback(() => dispatch({ type: 'START_DIARY' }), []),
     forceStartDiary: useCallback(() => dispatch({ type: 'FORCE_START_DIARY' }), []),
+    triggerDiaryFlow: useCallback(() => dispatch({ type: 'TRIGGER_DIARY_FLOW' }), []),
     selectDiaryType: useCallback((id: DiaryTypeId) => dispatch({ type: 'SELECT_DIARY_TYPE', id }), []),
     submitMainAnswer: useCallback((answer: string) => dispatch({ type: 'SUBMIT_MAIN_ANSWER', answer }), []),
     respondToPerspective: useCallback((accepted: boolean) => dispatch({ type: 'RESPOND_TO_PERSPECTIVE', accepted }), []),

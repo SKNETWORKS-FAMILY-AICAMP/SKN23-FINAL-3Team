@@ -60,30 +60,16 @@ export default function CalendarPage() {
     getMe()
       .then((me) => getDiariesByUser(me.id))
       .then((diaries) => {
-        const pinnedMap: Record<string, number> = (() => {
-          try {
-            const raw = JSON.parse(localStorage.getItem('pinned_diaries') || '{}') as Record<string, string>;
-            return Object.fromEntries(Object.entries(raw).map(([d, id]) => [d, Number(id)]));
-          } catch { return {}; }
-        })();
-
-        // 날짜별 그룹핑 후 pinned 일기 우선, 없으면 첫 번째
-        const byDate: Record<string, typeof diaries> = {};
-        for (const d of diaries.filter((d) => d.emotion)) {
-          const date = d.created_at.substring(0, 10);
-          if (!byDate[date]) byDate[date] = [];
-          byDate[date].push(d);
-        }
-
-        const mapped: DayEmotion[] = Object.entries(byDate).map(([date, entries]) => {
-          const pinnedId = pinnedMap[date];
-          const chosen = (pinnedId ? entries.find((d) => d.id === pinnedId) : null) ?? entries[0];
-          return { date, emotion: chosen.emotion!, diaryId: chosen.id };
-        });
-
+        const mapped: DayEmotion[] = diaries
+          .filter((d) => d.emotion)
+          .map((d) => ({
+            date: d.created_at.substring(0, 10),  // 'YYYY-MM-DD'
+            emotion: d.emotion!,
+            diaryId: d.id,
+          }));
         setEmotions(mapped);
       })
-      .catch(() => {});
+      .catch(() => {/* 로그인 안 된 경우 등 무시 */});
   }, []);
 
   const year = currentDate.getFullYear();
@@ -150,51 +136,61 @@ export default function CalendarPage() {
   /* ── 일기 상세 뷰 ─────────────────────────────────── */
   if (selectedDiary || diaryLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
-        <div className="max-w-2xl mx-auto">
-          <button
-            onClick={() => { setSelectedDiary(null); setSelectedImageUrl(null); }}
-            className="mb-6 flex items-center gap-2 rounded-full border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-500 shadow-sm transition hover:bg-orange-50"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            캘린더로 돌아가기
-          </button>
+      <div className="min-h-screen bg-[#F6F1EA] pt-20 px-4 pb-8">
+        <div className="mx-auto w-full max-w-[720px]">
+          {/* 헤더 */}
+          <div className="mb-4 flex items-center gap-3">
+            <button
+              onClick={() => { setSelectedDiary(null); setSelectedImageUrl(null); }}
+              className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+            >
+              ← 캘린더로 돌아가기
+            </button>
+            <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+          </div>
 
           {diaryLoading ? (
-            <div className="flex h-60 items-center justify-center rounded-[32px] bg-white shadow-lg">
-              <span className="text-sm text-gray-400">불러오는 중...</span>
+            <div className="flex h-60 items-center justify-center rounded-[28px] bg-[#FFFDF8] border border-[#E9D9C9] shadow-[0_8px_24px_rgba(61,43,31,0.08)]">
+              <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
             </div>
           ) : selectedDiary && (
-            <div className="rounded-[32px] bg-white shadow-lg border border-orange-100 overflow-hidden">
-              {/* 그림일기 이미지 */}
-              {selectedImageUrl ? (
-                <img
-                  src={selectedImageUrl}
-                  alt="그림일기"
-                  className="w-full object-cover max-h-80"
-                />
-              ) : (
-                <div className="flex h-40 items-center justify-center bg-orange-50 text-5xl">🐾</div>
-              )}
+            <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
+              {/* 마스킹 테이프 */}
+              <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
+              <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
 
-              {/* 헤더 */}
-              <div className="px-8 pt-6 pb-2 flex items-center gap-3">
-                <span className="text-4xl">{selectedDiary.emotion ?? '🐾'}</span>
-                <div>
-                  <p className="text-xs text-orange-400 font-semibold">
-                    {new Date(selectedDiary.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </p>
-                  <h2 className="text-xl font-bold text-[#3D2B1F] mt-0.5">{selectedDiary.title ?? '오늘의 일기'}</h2>
-                </div>
+              {/* 제목/요약 */}
+              <div className="mb-6 text-center">
+                <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
+                <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
+                  {selectedDiary.title ?? '오늘의 일기'}
+                </h3>
+                {selectedDiary.summary && (
+                  <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+                    ✨ {selectedDiary.summary}
+                  </div>
+                )}
               </div>
 
-              <div className="px-8 py-6 space-y-4">
-                {selectedDiary.summary && (
-                  <p className="rounded-xl bg-orange-50 px-4 py-3 text-sm font-medium text-orange-700">
-                    {selectedDiary.summary}
-                  </p>
+              {/* 이미지 */}
+              <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
+                {selectedImageUrl ? (
+                  <img
+                    src={selectedImageUrl}
+                    alt={selectedDiary.title ?? '그림일기'}
+                    className="w-full h-auto rounded-[16px] object-contain"
+                  />
+                ) : (
+                  <div className="flex h-48 items-center justify-center text-5xl">🐾</div>
                 )}
-                <p className="text-[15px] leading-8 text-[#3D2B1F] whitespace-pre-wrap">
+              </div>
+
+              {/* 일기 본문 — 줄 있는 노트 */}
+              <div
+                className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
+                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
+              >
+                <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
                   {selectedDiary.content ?? '내용이 없어요.'}
                 </p>
               </div>
