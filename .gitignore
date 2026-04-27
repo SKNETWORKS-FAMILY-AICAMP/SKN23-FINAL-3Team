@@ -565,3 +565,9 @@ ai/eval_data/
 data/eval/*.xlsx
 
 # ========== 개인 ==============
+.claude/
+학습.txt
+.vscode/launch.json
+CLAUDE.md
+GEMINI.md
+SKN23-FINAL-3TEAM.code-workspace
