@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { Send, LogIn, Lock } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
@@ -8,6 +8,44 @@ import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
 import { createChatRoom, sendMessageWithResponse } from '../services/chatService'
 import { searchPlaces, type PlaceResult } from '../services/placeService'
+
+// 백엔드 응답에서 인라인 버튼을 파싱하는 마커
+const BUTTONS_MARKER = '%%BUTTONS%%'
+
+function parseMessageButtons(content: string): { text: string; buttons: string[] } {
+  const idx = content.indexOf(BUTTONS_MARKER)
+  if (idx === -1) return { text: content, buttons: [] }
+  const text = content.slice(0, idx).trim()
+  const btnPart = content.slice(idx + BUTTONS_MARKER.length)
+  const buttons = btnPart.split('|').map((b) => b.trim()).filter(Boolean)
+  return { text, buttons }
+}
+
+/**
+ * 봇 메시지를 렌더링: 이미지 마크다운·요약 줄 제거, **굵게** → <strong>
+ */
+function renderBotText(content: string): React.ReactNode {
+  const lines = content
+    .split('\n')
+    .filter(line => !/_요약_:/.test(line))
+    .filter(line => !/^!\[.*?\]\(https?:\/\//.test(line.trim()))
+
+  return lines.map((line, lineIdx) => {
+    const boldParts = line.split(/(\*\*[^*]*\*\*)/g)
+    return (
+      <span key={lineIdx}>
+        {lineIdx > 0 && '\n'}
+        {boldParts.map((part, partIdx) =>
+          part.startsWith('**') && part.endsWith('**') ? (
+            <strong key={partIdx}>{part.slice(2, -2)}</strong>
+          ) : (
+            <span key={partIdx}>{part}</span>
+          )
+        )}
+      </span>
+    )
+  })
+}
 
 function splitPlaceMessage(text: string) {
   return text
@@ -282,27 +320,53 @@ export default function ChatBot({
     <div className="flex h-full flex-col rounded-[20px] overflow-hidden bg-[#FFF8F3]">
       {/* 메시지 목록 */}
       <div className="flex-1 overflow-y-auto space-y-3 p-3">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
-            <div
-              className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
-                msg.role === 'bot'
-                  ? 'bg-white text-[#3D2B1F] shadow-sm'
-                  : 'bg-[#F4845F] text-white'
-              }`}
-            >
-              {msg.variant === 'place' ? renderPlaceMessage(msg.content, msg.places) : msg.content}
-            </div>
-            {msg.action === 'start_diary' && (
-              <button
-                onClick={() => { actions.startDiary(); onNavigateToDiary?.() }}
-                className="mt-2 flex items-center gap-1.5 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+        {messages.map((msg) => {
+          const { text: displayText, buttons: inlineButtons } = parseMessageButtons(msg.content)
+          return (
+            <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+              <div
+                className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
+                  msg.role === 'bot'
+                    ? 'bg-white text-[#3D2B1F] shadow-sm'
+                    : 'bg-[#F4845F] text-white'
+                }`}
               >
-                그림일기 작성하기
-              </button>
-            )}
-          </div>
-        ))}
+                {msg.role === 'bot'
+                  ? (msg.variant === 'place' ? renderPlaceMessage(displayText, msg.places) : renderBotText(displayText))
+                  : displayText}
+              </div>
+              {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
+              {inlineButtons.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {inlineButtons.map((btn, btnIdx) => (
+                    <button
+                      key={btn}
+                      onClick={() => {
+                        actions.submitWelcomeChat(btn)
+                        sendWelcomeMessage(btn)
+                      }}
+                      className={
+                        btnIdx === 0
+                          ? 'rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]'
+                          : 'rounded-full border border-[#F5D6C8] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#8B6355] transition hover:bg-[#FFF0E6]'
+                      }
+                    >
+                      {btn}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {msg.action === 'start_diary' && (
+                <button
+                  onClick={() => { actions.startDiary(); onNavigateToDiary?.() }}
+                  className="mt-2 flex items-center gap-1.5 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+                >
+                  그림일기 작성하기
+                </button>
+              )}
+            </div>
+          )
+        })}
 
         {/* 비로그인 안내 말풍선 */}
         {!isLoggedIn && (
