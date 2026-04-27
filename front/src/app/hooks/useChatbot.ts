@@ -282,7 +282,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       return {
         ...state,
         isGenerating: false,
-        messages: [...state.messages, botMsg(action.text)],
+        messages: [...state.messages, msg],
       }
     }
 

@@ -120,8 +120,8 @@ export default function MapView({ places, onUsePlace }: Props) {
 
         renderMarkers();
       });
-      markersRef.current.push(marker);
-    });
+    };
+    waitForKakao();
   }, []);
 
   useEffect(() => {
