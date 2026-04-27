@@ -27,7 +27,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.location.place import Place
 from services.intent_service import IntentResult, RAG_STRATEGY_MAP
-from services.place_service import SEOUL, _parse_query_with_llm, search_places_from_db
+from services.place_service import (
+    SEOUL,
+    _parse_query_with_llm,
+    search_facility_by_name,
+    search_places_from_db,
+)
 from fastapi import Request
 
 # from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
@@ -69,18 +74,159 @@ class DispatchContext:
     room_id: int | None = None
 
 
+@dataclass
+class DispatchResult:
+    """
+        dispatch 결과 컨테이너.
+
+        - text: 챗봇 응답 본문 (assistant 메시지 content 로 저장됨)
+        - facility: 시설정보 의도일 때 단일 시설 카드 페이로드 (그 외 None)
+    """
+    text: str
+    facility: dict | None = None
+
+
 _PLACES_SYSTEM_PROMPT = (
     "너는 반려견 동반 가능 장소를 추천하는 큐레이터야. "
     "검색된 장소 목록을 참고해 사용자에게 자연스러운 한국어로 2~3곳을 추천하되 "
     "각 장소의 특징(카테고리/위치/실내외 여부 등)을 간결하게 곁들여줘. "
     "만약 '[검색 결과 없음]'이 표시되면, 조건에 맞는 장소를 찾지 못했다고 안내하고 "
     "현재 서비스는 서울 지역만 지원하므로 다른 지역 요청인 경우 그 점을 친절하게 알려줘."
+    "데이터에 없는 운영 정책·시설 정보 (목줄 의무, 입장료, 영업 시간, 반려동물 정책 등)를 추측해서 답하지 말 것"
+    "모르는 정보는 '확인이 필요한 정보' 로 안내하고, 사용자가 직접 확인하도록 유도"
+    "조건 완화 제안 시에도 사실로 보이는 부가 도메인 지식을 끼워 넣지 말 것"
 )
 
 _FACILITY_SYSTEM_PROMPT = (
     "너는 반려견 동반 가능 시설의 상세 정보를 안내하는 챗봇이야. "
     "검색된 시설 한 곳의 정보를 바탕으로 운영시간·주소·주차·이용조건을 사용자가 이해하기 쉽게 설명해."
 )
+
+# 시설정보 의도가 묻는 속성 슬롯 — 답변 필드 선택에 사용
+_FACILITY_SLOT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "operation":      ("운영", "영업", "오픈", "열려", "몇시", "몇 시", "휴무", "쉬는날",
+                       "쉬는 날", "마감", "주말", "평일", "공휴일", "연중무휴", "24시간"),
+    "parking":        ("주차",),
+    "fee":            ("입장료", "이용료", "요금", "비용", "추가요금", "추가 요금",
+                       "유료", "무료", "가격", "돈"),
+    "conditions":     ("조건", "제한", "목줄", "배변", "리드줄", "케이지", "안고", "동반"),
+    "location":       ("주소", "위치", "어디", "찾아가", "오시는길", "오는길"),
+    "contact":        ("전화", "연락처", "번호"),
+    "indoor_outdoor": ("실내", "실외", "야외", "테라스"),
+}
+
+_FACILITY_FIELD_LABELS: dict[str, str] = {
+    "operation":      "운영시간",
+    "parking":        "주차",
+    "fee":            "이용 요금",
+    "conditions":     "반려견 동반 조건",
+    "location":       "주소",
+    "contact":        "전화",
+    "indoor_outdoor": "실내/실외",
+}
+
+_FACILITY_NOT_FOUND_MESSAGE = (
+    "찾으시는 시설을 정확히 파악하지 못했어요.\n"
+    "시설 이름을 조금 더 구체적으로 알려주시면 자세히 안내해 드릴게요.\n"
+    "예) \"○○카페 운영시간 알려줘\", \"△△공원 주차 가능해?\""
+)
+
+
+def _detect_facility_slots(query: str) -> list[str]:
+    """질문에서 어떤 속성을 묻는지 키워드 기반으로 추출. 매칭 0개면 기본 6필드 노출."""
+    text = query or ""
+    matched: list[str] = []
+    for slot, keywords in _FACILITY_SLOT_KEYWORDS.items():
+        if any(kw in text for kw in keywords):
+            matched.append(slot)
+    return matched
+
+
+def _facility_field_value(facility: dict, slot: str) -> str | None:
+    """슬롯에 해당하는 표시용 문자열을 반환. 데이터가 비어있으면 None."""
+    if slot == "operation":
+        return (facility.get("operation") or "").strip() or None
+
+    if slot == "parking":
+        v = (facility.get("has_parking") or "").strip()
+        if v == "Y":
+            return "주차 가능"
+        if v == "N":
+            return "주차 불가"
+        return None
+
+    if slot == "fee":
+        ent_amount = facility.get("entrance_fee_amount")
+        ext_amount = facility.get("extra_fee_amount")
+        ent_type = facility.get("entrance_fee_type") or "unknown"
+        ext_type = facility.get("extra_fee_type") or "unknown"
+        parts: list[str] = []
+        if ent_type == "free":
+            parts.append("입장료 무료")
+        elif ent_type == "fixed" and ent_amount:
+            parts.append(f"입장료 {int(ent_amount):,}원")
+        elif ent_type in {"variable", "conditional"}:
+            parts.append("입장료 변동/조건부")
+        if ext_type == "free":
+            parts.append("강아지 추가요금 없음")
+        elif ext_type == "fixed" and ext_amount:
+            parts.append(f"강아지 추가요금 {int(ext_amount):,}원")
+        elif ext_type in {"variable", "conditional"}:
+            parts.append("강아지 추가요금 변동/조건부")
+        return " · ".join(parts) if parts else None
+
+    if slot == "conditions":
+        return (facility.get("conditions") or "").strip() or None
+
+    if slot == "location":
+        return (facility.get("address") or "").strip() or None
+
+    if slot == "contact":
+        return (facility.get("tel") or "").strip() or None
+
+    if slot == "indoor_outdoor":
+        indoor = facility.get("indoor") == "Y"
+        outdoor = facility.get("outdoor") == "Y"
+        if indoor and outdoor:
+            return "실내·실외 모두 이용 가능"
+        if indoor:
+            return "실내 이용 가능"
+        if outdoor:
+            return "실외 이용 가능"
+        return None
+
+    return None
+
+
+def _format_facility_response(facility: dict, slots: list[str]) -> str:
+    """검색된 시설을 바탕으로 결정적(LLM 미사용) 답변 텍스트를 생성한다.
+
+    슬롯이 비어 있으면 7필드 모두 노출하고, 슬롯이 있으면 해당 슬롯 + 위치(주소)를 같이 노출.
+    데이터가 없는 항목은 '정보 없음'으로 명시하여 hallucinate 위험을 차단한다.
+    """
+    name = facility.get("name") or "시설"
+    lines: list[str] = [f"📍 **{name}**"]
+
+    if slots:
+        target_slots = list(slots)
+        if "location" not in target_slots:
+            target_slots.append("location")
+    else:
+        target_slots = list(_FACILITY_FIELD_LABELS.keys())
+
+    for slot in target_slots:
+        label = _FACILITY_FIELD_LABELS.get(slot)
+        if not label:
+            continue
+        value = _facility_field_value(facility, slot)
+        if value:
+            lines.append(f"- {label}: {value}")
+        else:
+            lines.append(f"- {label}: 정보 없음")
+
+    lines.append("")
+    lines.append("아래 지도와 시설 카드에서 위치를 함께 확인해보세요.")
+    return "\n".join(lines)
 
 _FALLBACK_SYSTEM_PROMPT = (
     "너는 반려견 보호자를 돕는 친절한 한국어 챗봇 'withDOG' 이야. "
@@ -457,21 +603,41 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, reque
     return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
 
 
-async def _handle_facility(query: str, ctx: DispatchContext, request: Request = None) -> str:
+async def _handle_facility(
+    query: str,
+    ctx: DispatchContext,
+    request: Request | None = None,
+) -> tuple[str, dict | None]:
+    """
+        시설정보 의도 핸들러 — 단일 시설을 정확히 찾아 결정적 답변 + 카드 페이로드 반환.
+
+        장소추천과 달리 LLM 답변 생성을 사용하지 않는다. 데이터에 있는 필드만
+        고정 형식으로 노출하여 hallucinate 위험을 제거한다.
+
+        Returns:
+                (text, facility_dict)
+                - facility 매칭 실패: ("못 찾음 안내", None)
+                - 서비스 외 지역  : (안내, None)
+                - 정상 매칭        : (필드 요약 텍스트, search_facility_by_name 결과 dict)
+    """
     if await _is_out_of_service_area(query, request=request):
-        return _OUT_OF_SERVICE_AREA_MESSAGE
+        return _OUT_OF_SERVICE_AREA_MESSAGE, None
 
-    if settings.USE_DUMMY_PLACES:
-        places = await Place().find_place(top_k=1)
-    elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=1, request=request)
-    else:
+    if ctx.db is None:
         logger.warning("[ChatResponse] db 세션 없음 — 시설 검색 불가")
-        places = []
+        return _FACILITY_NOT_FOUND_MESSAGE, None
 
-    places_text = _format_places_brief(places)
-    user_prompt = f"사용자 질문: {query}\n\n[검색된 시설]\n{places_text}"
-    return await _chat_completion(_FACILITY_SYSTEM_PROMPT, user_prompt)
+    facility = await search_facility_by_name(query, ctx.db, request=request)
+    if facility is None:
+        return _FACILITY_NOT_FOUND_MESSAGE, None
+
+    slots = _detect_facility_slots(query)
+    text = _format_facility_response(facility, slots)
+    logger.info(
+        f"[FacilityHandler] facility={facility.get('name')!r} "
+        f"slots={slots} confidence={facility.get('match_confidence')}"
+    )
+    return text, facility
 
 
 async def _handle_fallback(query: str) -> str:
@@ -483,20 +649,23 @@ async def dispatch(
     query: str,
     ctx: DispatchContext | None = None,
     request: Request | None = None,
-) -> str:
+) -> DispatchResult:
     """
-    의도 분류 결과에 따라 적절한 핸들러로 라우팅하고 assistant 응답 텍스트를 반환합니다.
+    의도 분류 결과에 따라 적절한 핸들러로 라우팅하고 응답을 반환합니다.
+
+    반환은 항상 `DispatchResult` 로 감싸지며, 시설정보 의도일 때만
+    `facility` 필드에 카드 페이로드가 채워집니다 (그 외 None).
     """
     if ctx is None:
         ctx = DispatchContext()
 
     if is_diary_button_action(query):
         logger.info(f"[Dispatch] diary 버튼 액션 → diary_response_service: {query!r}")
-        return await handle_diary_response(query, ctx)
+        return DispatchResult(text=await handle_diary_response(query, ctx))
 
     if is_diary_confirm_request(query):
         logger.info(f"[Dispatch] diary confirm 요청 → diary_response_service: {query!r}")
-        return await handle_diary_response(query, ctx)
+        return DispatchResult(text=await handle_diary_response(query, ctx))
 
     intent = intent_result.intent
     logger.info(f"[ChatResponse] 의도: {intent}")
@@ -506,17 +675,20 @@ async def dispatch(
         sub = detect_diary_sub_intent(query)
         logger.info(f"[ChatResponse] 다이어리 세부 의도: {sub}")
         if sub in {"guide_write", "guide_album", "guide_calendar"}:
-            return get_diary_guide_response(sub)
-        return await handle_diary_response(query, ctx)
+            return DispatchResult(text=get_diary_guide_response(sub))
+        return DispatchResult(text=await handle_diary_response(query, ctx))
 
     if intent == "장소추천":
-        return await _handle_places(query, ctx, top_k=top_k, request=request)
+        text = await _handle_places(query, ctx, top_k=top_k, request=request)
+        return DispatchResult(text=text)
 
     if intent == "시설정보":
-        return await _handle_facility(query, ctx, request=request)
+        text, facility = await _handle_facility(query, ctx, request=request)
+        return DispatchResult(text=text, facility=facility)
+
     if intent == "기타" or intent not in RAG_STRATEGY_MAP:
         logger.info("[Dispatch] 기타 분기 처리")
-        return await _handle_fallback(query)
+        return DispatchResult(text=await _handle_fallback(query))
 
     logger.warning(f"[ChatResponse] 알 수 없는 의도: {intent} → fallback 처리")
-    return await _handle_fallback(query)
+    return DispatchResult(text=await _handle_fallback(query))

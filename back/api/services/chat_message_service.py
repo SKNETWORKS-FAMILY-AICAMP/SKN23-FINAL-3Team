@@ -138,7 +138,7 @@ async def create_message_with_response(
     db: AsyncSession,
     current_user_id: int,
     request: Request | None = None,
-) -> tuple[ChatMessage, ChatMessage, IntentResult]:
+) -> tuple[ChatMessage, ChatMessage, IntentResult, dict | None]:
     """
         사용자 메시지를 저장하고, 의도분류 → 도메인 서비스 디스패치를 거쳐
         assistant 응답 메시지를 저장한 뒤 세 값을 함께 반환합니다.
@@ -228,14 +228,14 @@ async def create_message_with_response(
         )
 
     ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
-    assistant_text = await chat_response_service.dispatch(
+    dispatch_result = await chat_response_service.dispatch(
         intent_result,
         data.content,
         ctx,
         request=request,
     )
-    if not assistant_text:
-        assistant_text = "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
+    assistant_text = dispatch_result.text or "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
+    facility = dispatch_result.facility
 
     # 3) assistant 메시지 저장
     assistant_message = ChatMessage(
@@ -251,7 +251,7 @@ async def create_message_with_response(
     await db.flush()
     await db.refresh(assistant_message)
 
-    return user_message, assistant_message, intent_result
+    return user_message, assistant_message, intent_result, facility
 
 
 async def list_messages(

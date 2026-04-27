@@ -31,7 +31,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.deps import get_current_user, get_db
 from services import chat_message_service as msg_svc
 from fastapi import APIRouter, Depends, Query, Request, status
-from schemas.chat_message import (ChatTurnResponse, IntentInfo, MessageCreate, MessageResponse)
+from schemas.chat_message import (
+    ChatTurnResponse,
+    FacilityCard,
+    IntentInfo,
+    MessageCreate,
+    MessageResponse,
+)
 
 router = APIRouter(tags=["ChatMessages"])
 
@@ -58,7 +64,7 @@ async def create_message(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChatTurnResponse:
-    user_msg, assistant_msg, intent_result = await msg_svc.create_message_with_response(
+    user_msg, assistant_msg, intent_result, facility = await msg_svc.create_message_with_response(
         room_id, data, db, current_user.id, request=request
     )
     return ChatTurnResponse(
@@ -68,6 +74,7 @@ async def create_message(
             intent=intent_result.intent,
             confidence=intent_result.confidence,
         ),
+        facility=FacilityCard.model_validate(facility) if facility else None,
     )
 
 

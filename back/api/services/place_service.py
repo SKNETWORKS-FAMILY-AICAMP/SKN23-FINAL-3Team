@@ -948,12 +948,137 @@ async def _filter_with_relaxation(
     return [], parsed
 
 
+FACILITY_VECTOR_MIN_SIMILARITY = 0.45
+FACILITY_NAME_CANDIDATE_MAX_LEN = 12
+
+
+async def search_facility_by_name(
+    query: str,
+    db: AsyncSession,
+    request: Request | None = None,
+) -> dict | None:
+    """
+        시설정보 의도 전용 단일 시설 검색.
+
+        장소추천(`search_places_from_db`)이 카테고리·지역·분위기 매칭에 최적화돼 있는 반면,
+        본 함수는 사용자가 지칭한 **단일 시설**을 정확히 찾기 위해 다음 순서를 따른다.
+
+            1. `Place.name LIKE %후보%` 정확 매칭 (서울 한정).
+               후보 = `query_parser`가 뽑은 landmark + 짧은 subjective.
+               여러 건이면 이름이 짧은 것을 우선 (부분 매칭의 오탐 최소화).
+            2. 1)에서 미스면 ChromaDB 의미적 유사도 top-3 → 첫 번째.
+               유사도가 `FACILITY_VECTOR_MIN_SIMILARITY` 미만이면 신뢰 부족으로 None.
+
+        Args:
+                query  : 사용자 발화 원문
+                db     : AsyncSession
+                request: FastAPI Request (AIContainer 접근용)
+
+        Returns:
+                dict 또는 None.
+                반환 dict 는 `_to_dict` 결과 + `match_source`("name_exact" | "vector"),
+                `match_confidence`(0.0 ~ 1.0).
+    """
+    parsed = await _parse_query_with_llm(query, request=request)
+
+    requested_city = (parsed.objective.get("city") or "").strip()
+    if requested_city and requested_city != SEOUL:
+        logger.info(
+            f"[FacilityService] out-of-service area requested: {requested_city} -> None"
+        )
+        return None
+
+    name_candidates: list[str] = []
+    if parsed.landmark:
+        name_candidates.append(parsed.landmark.strip())
+
+    subjective = (parsed.subjective or "").strip()
+    if (
+        2 <= len(subjective) <= FACILITY_NAME_CANDIDATE_MAX_LEN
+        and subjective not in name_candidates
+    ):
+        name_candidates.append(subjective)
+
+    for cand in name_candidates:
+        if not cand:
+            continue
+        stmt = (
+            select(PlaceModel)
+            .where(
+                and_(
+                    PlaceModel.name.like(f"%{cand}%"),
+                    PlaceModel.address.like(f"%{SEOUL}%"),
+                )
+            )
+            .order_by(func.length(PlaceModel.name).asc())
+            .limit(3)
+        )
+        result = await db.execute(stmt)
+        rows = result.scalars().all()
+        if rows:
+            place = rows[0]
+            payload = _to_dict(place)
+            payload["match_source"] = "name_exact"
+            payload["match_confidence"] = 1.0 if len(rows) == 1 else 0.8
+            payload["matched_keyword"] = cand
+            logger.info(
+                f"[FacilityService] name match '{cand}' -> {place.name} "
+                f"(candidates={len(rows)})"
+            )
+            return payload
+
+    try:
+        container = request.app.state.ai_container if request else None
+        if container is None:
+            logger.info("[FacilityService] AIContainer 없음 - 벡터 fallback 스킵")
+            return None
+        vector_results = container._places_retriever.search(
+            query=query,
+            n_results=3,
+            city=SEOUL,
+        )
+    except Exception as e:
+        logger.warning(f"[FacilityService] ChromaDB search failed: {e}")
+        return None
+
+    if not vector_results:
+        return None
+
+    top = vector_results[0]
+    similarity = float(top.get("similarity", 0.0) or 0.0)
+    if similarity < FACILITY_VECTOR_MIN_SIMILARITY:
+        logger.info(
+            f"[FacilityService] top similarity {similarity:.3f} "
+            f"< {FACILITY_VECTOR_MIN_SIMILARITY} -> None"
+        )
+        return None
+
+    cid = top.get("content_id")
+    if not cid:
+        return None
+
+    stmt = select(PlaceModel).where(PlaceModel.content_id == cid)
+    result = await db.execute(stmt)
+    place = result.scalar_one_or_none()
+    if place is None:
+        return None
+
+    payload = _to_dict(place)
+    payload["match_source"] = "vector"
+    payload["match_confidence"] = round(similarity, 4)
+    payload["matched_keyword"] = None
+    logger.info(
+        f"[FacilityService] vector match -> {place.name} (sim={similarity:.3f})"
+    )
+    return payload
+
+
 async def search_places_from_db(
     query: str,
     db: AsyncSession,
     n_results: int = 5,
     category: str = None,
-    city: str = None, 
+    city: str = None,
     request: Request = None,
 ) -> list[dict]:
     """Run the hybrid place-search pipeline."""
