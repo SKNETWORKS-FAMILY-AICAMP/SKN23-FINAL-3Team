@@ -25,7 +25,7 @@ services:
     networks:
       - withdog-net
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).status == 200 else 1)" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -55,9 +55,3 @@ services:
 networks:
   withdog-net:
     driver: bridge
-
-configs:
-  # NGINX_CONF 환경변수로 로컬/운영 conf 선택 (미설정 시 nginx.conf)
-  # bind-mount 대신 configs 로 주입해 WSL2 9P 단일파일 마운트 이슈를 회피.
-  nginx_conf:
-    file: ../nginx/${NGINX_CONF:-nginx.conf}

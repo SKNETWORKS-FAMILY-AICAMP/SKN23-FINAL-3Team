@@ -110,6 +110,7 @@ interface Props {
   onNavigateToDiary?: () => void
   onDiaryReady?: (diary: GeneratedDiary, imageUrl: string) => void
   diaryTrigger?: number
+  initialMessage?: string
 }
 
 const DEFAULT_PET: Pet = { name: '우리 아이', breed: '강아지' }
@@ -122,16 +123,29 @@ export default function ChatBot({
   onNavigateToDiary,
   onDiaryReady,
   diaryTrigger,
+  initialMessage,
 }: Props) {
   const navigate = useNavigate()
   const isLoggedIn = !!localStorage.getItem('access_token')
 
-  const { state, actions } = useChatbot(pet)
+  const { state, actions } = useChatbot(pet, initialMessage)
   const { step, messages, isGenerating, generatedDiary } = state
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // 챗봇 말풍선 표시용 — 마크다운 및 이미지 제거 (왼쪽 패널 데이터는 그대로)
+  const sanitizeForDisplay = (text: string): string => {
+    return text
+      .split('\n')
+      .filter(line => !/_요약_:/.test(line))        // _요약_: 줄 제거
+      .filter(line => !/^!\[.*?\]\(https?:\/\//.test(line.trim())) // ![...](url) 줄 제거
+      .join('\n')
+      .replace(/\*\*(.+?)\*\*/g, '$1')             // **굵게** → 굵게
+      .replace(/_(.+?)_/g, '$1')                   // _기울임_ → 기울임
+      .trim()
+  }
 
   // 백엔드 응답에서 일기 데이터 파싱 (형식: "📖 **제목**\n\n내용\n\n_요약_: 요약\n\n![제목](url)")
   const parseDiaryFromResponse = (text: string): { diary: GeneratedDiary; imageUrl: string } | null => {
@@ -155,6 +169,8 @@ export default function ChatBot({
     }
   }
 
+  const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
+
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
     try {
@@ -164,21 +180,24 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
-      const DIARY_BUTTON_MARKER = '##DIARY_BUTTON##'
       const result = await sendMessageWithResponse(roomId, text)
       const intent = result.intent.intent
-      const rawText = result.assistant_message.content
-      const hasDiaryButton = rawText.includes(DIARY_BUTTON_MARKER)
-      const botText = rawText.replace(DIARY_BUTTON_MARKER, '').trim()
+      const botText = result.assistant_message.content
+
+      // 순수 시작 요청 트리거 — [그림일기] 버튼 클릭과 동일하게 동작
+      if (botText === DIARY_FLOW_TRIGGER) {
+        actions.triggerDiaryFlow()
+        onNavigateToDiary?.()
+        return
+      }
 
       if (intent === '다이어리 작성') {
         const parsed = parseDiaryFromResponse(botText)
         if (parsed?.imageUrl) {
-          // 일기 생성 완료 응답 — 다이어리 뷰로 전달
           actions.receiveBotMessage(botText)
           onDiaryReady?.(parsed.diary, parsed.imageUrl)
         } else {
-          actions.receiveBotMessage(botText, hasDiaryButton ? 'start_diary' : undefined)
+          actions.receiveBotMessage(botText)
         }
       } else if (intent === '장소추천' || intent === '시설정보') {
         let places: PlaceResult[] = []
@@ -204,8 +223,6 @@ export default function ChatBot({
           })),
         )
         setTimeout(() => onNavigateToMap?.(), 800)
-      } else {
-        actions.receiveBotMessage(botText)
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
@@ -281,11 +298,31 @@ export default function ChatBot({
                 onClick={() => { actions.startDiary(); onNavigateToDiary?.() }}
                 className="mt-2 flex items-center gap-1.5 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
               >
-                📝 그림일기 시작하기
-              </button>
-            )}
-          </div>
-        ))}
+                {isBot ? sanitizeForDisplay(cleanText) : cleanText}
+              </div>
+              {hasActiveButtons && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {buttons.map((btn, btnIdx) => (
+                    <button
+                      key={btn}
+                      onClick={() => {
+                        actions.submitWelcomeChat(btn)
+                        sendWelcomeMessage(btn)
+                      }}
+                      className={
+                        btnIdx === 0
+                          ? 'rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]'
+                          : 'rounded-full border border-[#F5D6C8] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#8B6355] transition hover:bg-[#FFF0E6]'
+                      }
+                    >
+                      {btn}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
 
         {/* 비로그인 안내 말풍선 */}
         {!isLoggedIn && (

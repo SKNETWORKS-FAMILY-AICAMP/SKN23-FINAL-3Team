@@ -8,5 +8,11 @@ export default defineConfig({
   envDir: '../',  // 루트 .env 파일 사용
   server: {
     port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
   },
 })

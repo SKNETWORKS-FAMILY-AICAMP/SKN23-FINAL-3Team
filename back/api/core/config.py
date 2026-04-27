@@ -80,10 +80,6 @@ class Settings(BaseSettings):
     # ── 개발 모드 플래그 ─────────────────────────────────────────────────────
     USE_DUMMY_PLACES: bool = Field(default=False)
 
-    # ── 한국관광공사 / 카카오 ────────────────────────────────────────────────
-    TOUR_API_KEY: str = Field(default="")
-    KAKAO_REST_API_KEY: str = Field(default="")
-
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]
     @property

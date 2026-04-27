@@ -16,25 +16,18 @@ class PlacesRetriever(BaseRetriever):
         n_results: int = 5,
         category: str = None,
         city: str = None,
-        district: str = None,
         **kwargs,
     ) -> list[dict]:
         try:
             embedding = self._embedder.embed(query)
 
             # 필터 구성
-            filters = []
-            if category:
-                filters.append({"category": category})
-            if city:
-                filters.append({"city": city})
-            if district:
-                filters.append({"district": district})
-
-            if len(filters) > 1:
-                where = {"$and": filters}
-            elif len(filters) == 1:
-                where = filters[0]
+            if category and city:
+                where = {"$and": [{"category": category}, {"city": city}]}
+            elif category:
+                where = {"category": category}
+            elif city:
+                where = {"city": city}
             else:
                 where = None
 
