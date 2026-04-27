@@ -360,11 +360,38 @@ KMeans는 추천의 정답을 만드는 모델이 아니라,
 예를 들어 `에너자이저`, `산책이 제일 좋아`, `밖이 좋아요`와 같은 태그가 임베딩 공간에서 가까운 군집으로 묶이면,  
 이 태그들을 `dog_a: 활동성·탐험` 축에 배치한 근거로 활용할 수 있습니다.
 
+성향 검증은 태그 이름과 설명 문장을 임베딩한 뒤 KMeans 군집화를 수행하고, 그 결과를 PCA / t-SNE로 2차원 시각화하는 방식으로 진행했습니다.  
+이 분석의 목적은 추천 성능을 직접 높이는 것이 아니라, `DogScorer` / `OwnerScorer`의 5축 정의가 임의적인 수기 분류가 아니라 태그 의미 구조와도 어느 정도 일치하는지를 확인하는 데 있습니다.
+
+Silhouette score만 보면 dog / owner 모두 `k=4`에서 가장 높게 나왔지만, 최종 문서화와 성향 축 해석의 일관성을 위해 `FINAL_K = 5` 기준 결과도 함께 검토했습니다.
+
+> #### KMeans 시각화 결과
+
+**Dog tag t-SNE (3rd test)**
+
+![Dog tag t-SNE](assets/kmeans/K-Means_3rd_test/dog/dog_tag_3rd_tsne_scatter.png)
+
+반려견 태그는 활동형, 사회성 중심, 신중·예민 성향처럼 의미가 가까운 항목들이 서로 인접한 군집으로 모이는 경향을 보였습니다.  
+이는 `DogScorer`의 5축이 실제 태그 의미 분포와 완전히 무관하게 정의된 것이 아님을 보여주는 보조 근거로 해석할 수 있습니다.
+
+**Owner tag t-SNE (3rd test)**
+
+![Owner tag t-SNE](assets/kmeans/K-Means_3rd_test/owner/owner_tag_3rd_tsne_scatter.png)
+
+보호자 태그 역시 자연 선호, 도시 탐방, 감성·휴식, 먹거리 중심 취향처럼 유사 의미 태그들이 가까운 위치에 배치되는 패턴을 보였습니다.  
+따라서 `OwnerScorer`의 축 정의 역시 온보딩 태그의 의미 구조와 일정 부분 정합성이 있다고 설명할 수 있습니다.
+
+**Silhouette score**
+
+![Dog tag silhouette](assets/kmeans/K-Means_3rd_test/dog/dog_tag_3rd_silhouette_score.png)
+
+정량 지표 측면에서는 군집 수에 따라 분리도가 어떻게 변하는지 함께 확인했으며, 시각화 결과와 축 해석 가능성을 함께 고려해 최종 군집 구성을 해석했습니다.
+
 ## 4.3. AI 장소 추천
 
 AI 장소 추천은 사용자 검색어, 반려견 성향, 보호자 취향, 장소 메타데이터를 함께 반영해 반려견 동반 가능 장소를 추천하는 기능입니다.
 
-사용자 입력은 먼저 KoELECTRA 의도분류 모델을 거쳐 `장소추천` 의도로 분류되며, 이후 `PlacesChain.run()`을 통해 장소 검색과 재정렬, 추천 이유 생성을 수행합니다.
+사용자 입력은 먼저 KoELECTRA 의도분류 모델을 거쳐 `장소추천` 의도로 분류되며, 이후 `chat_response_service._handle_places()` 경로에서 하이브리드 장소 검색과 성향 기반 재정렬을 수행합니다. `PlacesChain`의 재정렬 규칙은 이 경로에서 공통으로 재사용됩니다.
 
 > #### 장소추천 파이프라인
 
@@ -375,7 +402,7 @@ KoELECTRA 의도분류
     ↓
 장소추천 intent
     ↓
-PlacesChain.run()
+chat_response_service._handle_places()
     ↓
 성향 타입 분류
     ↓
@@ -383,7 +410,7 @@ PlacesChain.run()
     ↓
 ChromaDB RAG 벡터 검색
     ↓
-반려견 성향 기반 재순위
+반려견/보호자 성향 기반 재순위
     ↓
 GPT-4.1-mini 추천 메시지 생성
     ↓
@@ -400,12 +427,12 @@ GPT-4.1-mini 추천 메시지 생성
 dog_tags
   → DogScorer.classify_type()
   → dog_type
-  → d_a ~ d_e 중 최고점 축
+  → a ~ e 축 점수 중 최고점 축을 타입 ID로 매핑
 
 owner_tags
   → OwnerScorer.classify_type()
   → owner_type
-  → o_a ~ o_e 중 최고점 축
+  → a ~ e 축 점수 중 최고점 축을 타입 ID로 매핑
 ```
 
 태그가 없는 경우에는 타입 분류 없이 `None`으로 처리하고 추천을 진행합니다.
@@ -441,23 +468,29 @@ district
 
 `QueryParser` 가 사용자 자유 입력에서 객관 조건 11키(지역·카테고리·반경·시간·실내외 등)를 분리해 위 필터로 매핑하며, "강남역 근처 5km" 같은 landmark 표현은 좌표 + 반경 검색으로 변환합니다 (2026-04-26 회귀 라운드 보강).
 
-> #### Step 4 — 반려견 성향 기반 재순위
+> #### Step 4 — 반려견/보호자 성향 기반 재순위
 
-ChromaDB에서 반환된 장소 후보를 반려견 성향에 따라 재정렬합니다.
+하이브리드 검색으로 가져온 장소 후보에 대해 반려견 성향과 보호자 성향을 함께 반영해 재정렬합니다.
 
 ```text
 dog_score_vector = DogScorer.calculate_vector(dog_tags)
+owner_score_vector = OwnerScorer.calculate_vector(owner_tags)
 
 활동성 a > 3 + category=공원/놀이터  → +0.10 bonus
 사회성 b > 3 + category=카페/관광지  → +0.05 bonus
 예민도 e > 3 + outdoor=Y            → -0.10 penalty
+
+자연 선호 a > 3 + outdoor=Y         → +0.08 bonus
+도시 탐험 b > 3 + category=카페/관광지 → +0.05 bonus
+여유 휴식 d > 3 + indoor=Y / 카페    → +0.05 bonus
 ```
 
 ```python
-final_score = similarity + bonus
+base_score = rag_score * 0.7 + rule_score * 0.3 + category_bias
+final_score = base_score + profile_bonus
 ```
 
-`dog_tags`가 없는 경우에는 이 재순위 단계를 생략합니다.
+`dog_tags`와 `owner_tags`가 모두 없는 경우에는 이 재정렬 단계를 생략합니다.
 
 > #### Step 5 — GPT 추천 메시지 생성
 
@@ -496,22 +529,23 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
       "reason": "추천 이유"
     }
   ],
-  "dog_type": "d_c",
+  "dog_type": "careful_pup",
   "dog_type_name": "조심스러운 아이",
-  "owner_type": "o_a",
+  "owner_type": "nature_lover",
   "owner_type_name": "자연 애호가"
 }
 ```
 
 > #### 추천 점수 구조
 
-현재 장소 추천은 ChromaDB 검색 유사도와 반려견 성향 기반 보너스/패널티를 중심으로 재정렬합니다.
+현재 장소 추천은 하이브리드 검색 단계에서 `rag_score`, `rule_score`, `category_bias`를 합산해 기본 점수를 만들고, 그 위에 반려견/보호자 성향 기반 보너스와 패널티를 더해 재정렬합니다.
 
 ```python
-final_score = similarity + bonus
+base_score = rag_score * 0.7 + rule_score * 0.3 + category_bias
+final_score = base_score + profile_bonus
 ```
 
-향후에는 보호자 취향 점수와 장소 룰 점수를 명시적으로 분리하여 아래와 같은 구조로 확장할 수 있습니다.
+현재 구현은 축별 가중합을 직접 계산하기보다, 태그 점수 벡터를 규칙 기반 bonus/penalty로 반영하는 방식입니다. 필요하다면 향후에는 아래와 같이 각 요소를 명시적 가중치 구조로 확장할 수 있습니다.
 
 ```python
 final_score = (
@@ -789,9 +823,11 @@ AI 그림일기 생성
 
 ## 6.1. 성향분석
 
-아직 기획 / 개발 중입니다.
+`DogScorer` / `OwnerScorer` 의 5축 점수 정의가 임의적이지 않음을 검증하기 위해, 온보딩 태그 이름과 설명 문장을 임베딩한 뒤 KMeans 군집화를 수행했습니다.
 
-`DogScorer` / `OwnerScorer` 의 5축 점수 정의가 임의적이지 않음을 KMeans 군집 + PCA / t-SNE 시각화로 검증하는 단계이며, 결과는 발표 이전에 보강할 예정입니다.
+3차 실험 결과는 `assets/kmeans/K-Means_3rd_test/` 에 정리되어 있으며, dog / owner 모두 의미가 유사한 태그들이 인접한 군집으로 모이는 경향을 확인했습니다.
+
+정량 지표상 silhouette 최고값은 `k=4`에서 관찰되었지만, 최종 해석과 문서화는 성향 축 설명의 일관성을 고려해 `k=5` 결과도 함께 검토했습니다.
 
 ## 6.2. AI 장소 추천
 
