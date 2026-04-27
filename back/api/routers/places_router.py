@@ -1,4 +1,5 @@
 import requests
+import os
 
 from core.deps import get_db
 from fastapi import APIRouter, Depends, Request

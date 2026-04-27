@@ -298,31 +298,11 @@ export default function ChatBot({
                 onClick={() => { actions.startDiary(); onNavigateToDiary?.() }}
                 className="mt-2 flex items-center gap-1.5 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
               >
-                {isBot ? sanitizeForDisplay(cleanText) : cleanText}
-              </div>
-              {hasActiveButtons && (
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {buttons.map((btn, btnIdx) => (
-                    <button
-                      key={btn}
-                      onClick={() => {
-                        actions.submitWelcomeChat(btn)
-                        sendWelcomeMessage(btn)
-                      }}
-                      className={
-                        btnIdx === 0
-                          ? 'rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]'
-                          : 'rounded-full border border-[#F5D6C8] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#8B6355] transition hover:bg-[#FFF0E6]'
-                      }
-                    >
-                      {btn}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
+                그림일기 작성하기
+              </button>
+            )}
+          </div>
+        ))}
 
         {/* 비로그인 안내 말풍선 */}
         {!isLoggedIn && (

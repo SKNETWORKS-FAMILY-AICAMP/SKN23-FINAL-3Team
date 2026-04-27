@@ -1047,7 +1047,6 @@ def _to_dict(place: PlaceModel) -> dict:
         "entrance_fee_type":   place.entrance_fee_type.value if place.entrance_fee_type else "unknown",
         "extra_fee_amount":    place.extra_fee_amount,
         "extra_fee_type":      place.extra_fee_type.value if place.extra_fee_type else "unknown",
-        "firstimage": place.firstimage or "",
         "similarity": 0.0,
         "rag_score": 0.0,
         "rule_score": 0.0,
