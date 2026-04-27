@@ -12,10 +12,10 @@ from __future__ import annotations
 from decimal import Decimal
 from datetime import datetime
 from core.database import Base
-from core.type.place import YNEnum
+from core.type.place import YNEnum, FeeType
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import BigInteger, Boolean, DateTime, Numeric, String, Text, UniqueConstraint, Index, func, Enum as SAEnum
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, String, Text, UniqueConstraint, Index, func, Enum as SAEnum
 
 
 class Place(Base):
@@ -58,7 +58,23 @@ class Place(Base):
     has_parking: Mapped[YNEnum | None] = mapped_column(SAEnum(YNEnum), nullable=True, comment="주차 가능 여부 (Y/N)")
     operation_info: Mapped[str | None] = mapped_column(Text, nullable=True, comment="운영시간 및 휴무일 정보")
     description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="장소 통합 설명 텍스트 (VectorDB ChromaDB 임베딩 소스)")
-    
+
+    # ── fee 정규화 (description 자연어 → 정규식/LLM 추출) ─────────────────
+    entrance_fee_amount: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, comment="입장료(원). NULL=불명/변동/조건부"
+    )
+    entrance_fee_type: Mapped[FeeType] = mapped_column(
+        SAEnum(FeeType), nullable=False, server_default=FeeType.UNKNOWN.value,
+        comment="입장료 정규화 타입 (free/fixed/variable/conditional/unknown)",
+    )
+    extra_fee_amount: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, comment="강아지 동반 추가요금(원). NULL=불명/변동/조건부"
+    )
+    extra_fee_type: Mapped[FeeType] = mapped_column(
+        SAEnum(FeeType), nullable=False, server_default=FeeType.UNKNOWN.value,
+        comment="추가요금 정규화 타입",
+    )
+
     modified_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="한국관광공사 원본 데이터 최종 수정일")
     
     created_at: Mapped[datetime] = mapped_column(

@@ -37,6 +37,22 @@ class YNEnum(str, enum.Enum):
     N = "N"
 
 
+class FeeType(str, enum.Enum):
+    """입장료/추가요금 정규화 타입.
+
+    free        : 0원 또는 무료
+    fixed       : 정수 금액 확정 (amount 컬럼에 원 단위)
+    variable    : 변동/시기별/계절별/문의 (amount NULL)
+    conditional : 성인/어린이 등 조건부 차등 (amount NULL)
+    unknown     : 정규식·LLM 양쪽 모두 매칭 실패 (default)
+    """
+    FREE = "free"
+    FIXED = "fixed"
+    VARIABLE = "variable"
+    CONDITIONAL = "conditional"
+    UNKNOWN = "unknown"
+
+
 class PlaceType:
     def __init__(self):
         self.types = PLACE_CATEGORY_TYPE_MAP
