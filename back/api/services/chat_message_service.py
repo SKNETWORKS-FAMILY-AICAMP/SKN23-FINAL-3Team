@@ -215,7 +215,7 @@ async def create_message_with_response(
             confidence=0.0,
             strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
         )
-
+        
     # diary 버튼 액션/확인 요청은 dispatch 에서 바로 처리되므로
     # 클라이언트에 반환하는 intent 도 '다이어리 작성'으로 맞춰줌
     # (KoELECTRA 가 '장소추천' 등으로 잘못 분류해도 프론트가 searchPlaces 호출하지 않도록)
@@ -227,7 +227,13 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP.get("다이어리 작성", {}),
         )
 
-    ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
+    ctx = chat_response_service.DispatchContext(
+        user_id=current_user_id,
+        db=db,
+        room_id=room_id,
+        pet_id=data.pet_id,
+    )
+
     assistant_text = await chat_response_service.dispatch(
         intent_result,
         data.content,

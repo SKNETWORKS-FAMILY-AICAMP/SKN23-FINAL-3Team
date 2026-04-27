@@ -52,8 +52,16 @@ export interface ChatTurnResponse {
 }
 
 /** POST /chat-rooms/{roomId}/messages — 의도분류 + AI 응답 포함 */
-export function sendMessageWithResponse(roomId: number, content: string): Promise<ChatTurnResponse> {
-  return api.post(`/chat-rooms/${roomId}/messages`, { role: 'user', content })
+export function sendMessageWithResponse(
+  roomId: number,
+  content: string,
+  petId?: number | null,
+): Promise<ChatTurnResponse> {
+  return api.post(`/chat-rooms/${roomId}/messages`, {
+    role: 'user',
+    content,
+    pet_id: petId ?? null,
+  })
 }
 
 /** POST /chat-rooms/{roomId}/messages */

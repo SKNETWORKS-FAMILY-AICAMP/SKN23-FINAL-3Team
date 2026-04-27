@@ -172,6 +172,8 @@ export default function ChatBot({
   const [imageLoading, setImageLoading] = useState(false)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const storedPetId = Number(localStorage.getItem('selected_pet_id'))
+  const selectedPetId = pet.id ?? (Number.isFinite(storedPetId) && storedPetId > 0 ? storedPetId : undefined)
 
   // 챗봇 말풍선 표시용 — 마크다운 및 이미지 제거 (왼쪽 패널 데이터는 그대로)
   const sanitizeForDisplay = (text: string): string => {
@@ -218,7 +220,7 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
-      const result = await sendMessageWithResponse(roomId, text)
+      const result = await sendMessageWithResponse(roomId, text, selectedPetId)
       const intent = result.intent.intent
       const botText = result.assistant_message.content
 
@@ -240,7 +242,7 @@ export default function ChatBot({
       } else if (intent === '장소추천' || intent === '시설정보') {
         let places: PlaceResult[] = []
         try {
-          places = await searchPlaces({ query: text })
+          places = await searchPlaces({ query: text, pet_id: selectedPetId })
           onPlacesFound?.(places)
         } catch {
           onPlacesFound?.([])
