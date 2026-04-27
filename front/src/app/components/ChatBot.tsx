@@ -6,7 +6,7 @@ import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse } from '../services/chatService'
+import { createChatRoom, sendMessageWithResponse, type FacilityCard } from '../services/chatService'
 import { searchPlaces, type PlaceResult } from '../services/placeService'
 
 // 백엔드 응답에서 인라인 버튼을 파싱하는 마커
@@ -140,6 +140,67 @@ function renderPlaceMessage(
   )
 }
 
+function renderFacilityMessage(text: string, facility?: FacilityCard) {
+  const lines = text.split('\n').map((l) => l.trim())
+
+  return (
+    <div className="space-y-1.5 text-[14px] leading-7 text-[#3D2B1F]">
+      {lines.map((line, idx) => {
+        if (!line) return null
+        const headerM = line.match(/^📍\s*\*\*(.+?)\*\*\s*$/)
+        if (headerM) {
+          return (
+            <p key={idx} className="text-[15px] font-semibold text-[#2F241D]">
+              📍 {headerM[1]}
+            </p>
+          )
+        }
+        const fieldM = line.match(/^-\s*([^:]+):\s*(.+)$/)
+        if (fieldM) {
+          const [, label, value] = fieldM
+          const muted = value.trim() === '정보 없음'
+          return (
+            <p key={idx} className={muted ? 'text-[#A89282]' : ''}>
+              <span className="font-medium text-[#5C4632]">{label}:</span>{' '}
+              <span>{value}</span>
+            </p>
+          )
+        }
+        return <p key={idx}>{line}</p>
+      })}
+      {facility?.match_source === 'vector' && facility.match_confidence < 0.7 && (
+        <p className="pt-1 text-[12px] text-[#A89282]">
+          (추정 매칭이라 다른 시설일 수 있어요. 정확한 이름을 알려주시면 다시 찾아드릴게요.)
+        </p>
+      )}
+    </div>
+  )
+}
+
+function facilityToPlaceResult(f: FacilityCard): PlaceResult {
+  return {
+    name: f.name,
+    address: f.address,
+    category: f.category,
+    sub_category: f.sub_category,
+    content_id: f.content_id,
+    lat: f.lat,
+    lng: f.lng,
+    tel: f.tel,
+    conditions: f.conditions,
+    pet_zone: '',
+    pet_size: '',
+    has_parking: f.has_parking,
+    operation: f.operation,
+    indoor: f.indoor,
+    outdoor: f.outdoor,
+    description: f.description,
+    firstimage: '',
+    similarity: f.match_confidence,
+    final_score: f.match_confidence,
+  }
+}
+
 interface Props {
   pet?: Pet
   onSelectPlace?: (place: string) => void
@@ -237,7 +298,7 @@ export default function ChatBot({
         } else {
           actions.receiveBotMessage(botText)
         }
-      } else if (intent === '장소추천' || intent === '시설정보') {
+      } else if (intent === '장소추천') {
         let places: PlaceResult[] = []
         try {
           places = await searchPlaces({ query: text })
@@ -261,6 +322,37 @@ export default function ChatBot({
           })),
         )
         setTimeout(() => onNavigateToMap?.(), 800)
+      } else if (intent === '시설정보') {
+        const facility = result.facility
+        if (facility) {
+          const mappedPlace: PlaceResult = {
+            name: facility.name,
+            address: facility.address,
+            category: facility.category,
+            sub_category: facility.sub_category,
+            content_id: facility.content_id,
+            lat: facility.lat,
+            lng: facility.lng,
+            tel: facility.tel,
+            operation: facility.operation,
+            has_parking: facility.has_parking,
+            indoor: facility.indoor,
+            outdoor: facility.outdoor,
+            conditions: facility.conditions,
+            description: facility.description,
+            pet_zone: '',
+            pet_size: '',
+            firstimage: '',
+            similarity: facility.match_confidence,
+            final_score: facility.match_confidence,
+          }
+          onPlacesFound?.([mappedPlace])
+          // 시설정보도 place variant로 렌더링 (단일 결과)
+          actions.receiveBotMessage(botText, undefined, 'place', [mappedPlace])
+          setTimeout(() => onNavigateToMap?.(), 800)
+        } else {
+          actions.receiveBotMessage(botText)
+        }
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
@@ -332,7 +424,11 @@ export default function ChatBot({
                 }`}
               >
                 {msg.role === 'bot'
-                  ? (msg.variant === 'place' ? renderPlaceMessage(displayText, msg.places) : renderBotText(displayText))
+                  ? (msg.variant === 'place'
+                      ? renderPlaceMessage(displayText, msg.places)
+                      : msg.variant === 'facility'
+                        ? renderFacilityMessage(displayText, msg.facility)
+                        : renderBotText(displayText))
                   : displayText}
               </div>
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
