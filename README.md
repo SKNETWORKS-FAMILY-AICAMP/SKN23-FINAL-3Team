@@ -120,12 +120,95 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 </div>
 
 ## 3.1. 데이터 출처 및 수집 방식
+
+  | 데이터 | 출처 | 수집 방식 |
+  |--------|------|-----------|
+  | 반려동물 동반 가능 장소 | 한국문화정보원 공공데이터 포털 | CSV 다운로드 |
+  | 견종 정보 | The Dog API | REST API 호출 |
+
+- **장소 데이터**: `한국문화정보원_전국_반려동물_동반_가능_문화시설_위
+치_데이터_20250324.csv` 기준
+  전체 70,650건에서 반려동물 동반 가능 장소만 필터링
+- **견종 데이터**: The Dog API에서 견종 정보 수집 후 GPT-4.1-mini로
+한국어 번역, 국내 인기 TOP 10 마킹
+
 ## 3.2. 데이터 전처리 파이프라인
 > #### 데이터 전처리 과정
 
+  ```
+  원본 CSV (70,650건)
+    ↓ 반려동물 동반 가능(Y) 필터링
+    ↓ 한반도 위경도 범위 검증 (위도 33~38.7, 경도 124~132)
+    ↓ 필수 필드 누락 제거 (시설명, 주소)
+    ↓ 중복 제거 (시설명 + 주소 기준)
+    ↓ 카테고리 매핑 → sub_category, content_type_id
+    ↓ 실내/실외 여부, 펫존 유형 변환
+    ↓ content_id 생성 (name + address MD5 해시)
+    ↓ 자연어 description 문장 생성 (벡터화용)
+    ↓ 입장료 / 추가요금 정규화 (description → entrance_fee_* / extra_fee_* 4 컬럼)
+    ↓
+    ├── MySQL DB 적재 (배치 1,000건 단위)
+    └── ChromaDB 벡터화 적재 (ko-sroberta-multitask, 배치 50건 단위)
+  ```
+    ▎ 최종 유효 장소: 21,130건 (2026-04-27 측정)
+
 > #### 주요 전처리 시스템 및 스키마
+
+  **벡터화용 description 문장 예시**
+
+  "[장소명]은 서울특별시에 위치한 카페 장소로 반려견 동반이 가능하다.
+  입장 가능 크기: 소형견. 이용 조건: 목줄 착용 필수.
+  실내 이용 가능. 주차 가능. 운영시간: 10:00~21:00. 휴무일: 월요일."
+
+  **Place DB 주요 스키마**
+
+    | 필드 | 설명 |
+    |------|------|
+    | `content_id` | name + address MD5 해시 (고유 식별자) |
+    | `name` / `address` | 장소명 / 주소 |
+    | `sub_category` | 세부 카테고리 (카페, 공원, 동물병원 등) |
+    | `is_indoor` / `is_outdoor` | 실내/실외 가능 여부 |
+    | `pet_zone_type` | 반려동물 구역 유형 (실내구역/실외구역/전구역) |
+    | `pet_size_limit` | 입장 가능 크기 제한 |
+    | `pet_restrictions` | 이용 제한사항 |
+    | `has_parking` | 주차 가능 여부 (Y/N) |
+    | `operation_info` | 운영시간 및 휴무일 |
+    | `description` | ChromaDB 벡터화 소스 텍스트 |
+
 ## 3.3. 수집 데이터 현황
 > #### 태그별 수집 개수
+
+  | sub_category | content_type_id | 설명 |
+  |--------------|-----------------|------|
+  | 카페 | 39 | 반려견 동반 카페 |
+  | 식당 | 39 | 반려동물 동반 음식점 |
+  | 펜션 | 32 | 반려견 동반 숙박 |
+  | 호텔 | 32 | 반려견 동반 호텔 |
+  | 공원 | 12 | 반려견 입장 가능 공원 |
+  | 관광지 | 12 | 반려견 동반 관광지 |
+  | 반려견놀이터 | 28 | 반려견 전용 놀이터 |
+  | 박물관 / 미술관 / 문예회관 | 12 | 반려견 동반 문화시설 |
+  | 동물병원 / 동물약국 | 14 | 동물 의료시설 |
+  | 반려동물용품 | 38 | 반려동물 용품점 |
+  | 미용 / 위탁관리 | 14 | 반려동물 케어 시설 |
+
+
+  **최종 적재 현황**
+
+  - MySQL DB: 21,130건
+  - ChromaDB 벡터: 21,130건 (컬렉션명: dog_places)
+
+  **카테고리별 적재 분포**
+
+  | sub_category | 건수 |
+  |--------------|------:|
+  | 동물약국 | 8,440 |
+  | 동물병원 | 4,486 |
+  | 반려동물용품 | 3,821 |
+  | 미용 / 위탁관리 | 2,003 |
+  | 카페 | 801 |
+  | 펜션 | 407 |
+  | 기타 | 1,172 |
 
 ---
 
@@ -149,7 +232,7 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 | 1. 챗봇 의도분류 | 사용자 입력을 분석해 다이어리 작성, 장소추천, 시설정보, 기타 응답으로 라우팅합니다. | KoELECTRA Fine-tuning, FastAPI, Intent Routing |
 | 2. 반려견과 보호자 성향 분석 | 온보딩에서 선택한 반려견·보호자 태그를 각각 5축 점수로 수치화하여 성향을 분석하고, 태그 텍스트 임베딩 기반 KMeans 군집화를 통해 비슷한 의미의 태그가 가까운 그룹으로 묶이는지 확인합니다. 이를 통해 성향 축 정의가 임의적이지 않음을 설명하는 근거로 활용합니다. | DogScorer, OwnerScorer, 태그 기반 벡터 점수화, Sentence-Transformers, KMeans, PCA, t-SNE |
 | 3. AI 장소 추천 | 사용자 검색어, 반려견 성향, 보호자 취향, 장소 특성을 결합해 반려견 동반 가능 장소를 개인화 추천합니다. | ChromaDB 벡터 검색, 코사인 유사도, 룰 기반 점수, 카카오 지도 API |
-| 4. AI 그림일기 | 챗봇 대화를 바탕으로 텍스트 일기와 동화책 스타일 이미지를 생성하고 저장합니다. | GPT-4.1-mini, gpt-image-1, ChromaDB RAG, S3 |
+| 4. AI 그림일기 | 챗봇 대화를 바탕으로 텍스트 일기와 동화책 스타일 이미지를 생성하고 저장합니다. | GPT-4.1-mini, gpt-image-2, ChromaDB RAG, S3 |
 
 </div>
 
@@ -167,6 +250,7 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 | 분류 클래스 | 다이어리 작성 / 장소추천 / 시설정보 / 기타 |
 | 학습 설정 | epochs=5, batch=16, lr=3e-5, max_length=128 |
 | 평가 지표 | Accuracy, Classification Report, per-class F1 |
+| 학습 결과 | **Accuracy 0.9848** (488 샘플, 5 epoch — 출처: `학습.txt`, gitignore 처리) |
 | 모델 저장 | `ai/intent/model/` |
 | 서비스 구조 | 메인 FastAPI 서버와 별도 포트에서 의도 분류 API 실행 |
 
@@ -355,6 +439,8 @@ city
 district
 ```
 
+`QueryParser` 가 사용자 자유 입력에서 객관 조건 11키(지역·카테고리·반경·시간·실내외 등)를 분리해 위 필터로 매핑하며, "강남역 근처 5km" 같은 landmark 표현은 좌표 + 반경 검색으로 변환합니다 (2026-04-26 회귀 라운드 보강).
+
 > #### Step 4 — 반려견 성향 기반 재순위
 
 ChromaDB에서 반환된 장소 후보를 반려견 성향에 따라 재정렬합니다.
@@ -455,6 +541,7 @@ final_score = (
 사용자 입력
   → KoELECTRA 의도분류
   → 장소추천 intent
+  → QueryParser (쿼리 → 객관 조건 분리) 
   → DogScorer / OwnerScorer 성향 타입 분류
   → 검색 쿼리 결정
   → ChromaDB RAG 코사인 유사도 검색
@@ -500,7 +587,7 @@ flowchart TD
     K --> L["GPT-4.1-mini<br>일기 텍스트 생성<br>max_tokens=1500 / temp=0.85"]
 
     L --> M["이미지 프롬프트 완성<br>build_final_image_prompt()"]
-    M --> N["gpt-image-1<br>1024x1024 이미지 생성"]
+    M --> N["gpt-image-2<br>1024x1024 이미지 생성"]
     N --> O["S3 업로드 / DB 저장"]
     O --> P["최종 그림일기 반환<br>제목 + 본문 + 요약 + 이미지"]
 ```
@@ -571,7 +658,7 @@ GPT가 생성한 `image_prompt_base`에 아래 요소를 결합해 최종 이미
 > #### 이미지 생성 및 저장
 
 ```text
-gpt-image-1
+gpt-image-2
   - size    : 1024x1024
   - quality : low / medium / high (설정 가능)
   - format  : base64 (b64_json)
@@ -701,12 +788,86 @@ AI 그림일기 생성
 </div>
 
 ## 6.1. 성향분석
+
+아직 기획 / 개발 중입니다.
+
+`DogScorer` / `OwnerScorer` 의 5축 점수 정의가 임의적이지 않음을 KMeans 군집 + PCA / t-SNE 시각화로 검증하는 단계이며, 결과는 발표 이전에 보강할 예정입니다.
+
 ## 6.2. AI 장소 추천
 
-장소추천 QA는 현재 진행 중입니다.
+장소 검색 RAG (`/api/places/search`) 의 품질을 정량 측정하는 자동화 평가 시스템 (`ai/evaluation/`) 을 구축하고, 첫 baseline 측정을 완료했습니다.
 
-추천 결과가 사용자 의도, 반려견 성향, 보호자 취향, 장소 조건에 맞는지 검토하고 있으며,  
-향후 테스트 케이스 기반으로 추천 품질을 정량·정성 평가할 예정입니다.
+> #### 평가셋 구성
+
+<div align="center">
+
+| 항목 | 값 |
+| --- | --- |
+| 총 건수 | 150건 |
+| Retrieval (정답 매칭) | 118건 |
+| Refusal (서울 외 거절) | 32건 |
+| 카테고리 | 9종 |
+
+</div>
+
+카테고리 9종 — 복합 조건 / 지역 × 장소유형 / 주관 형용사 / 위치 기반 근처 / 동반 조건 특수 / 실내·실외 / 시간 조건 / 편의시설(주차) / 오류·범위 밖.
+
+> #### 메트릭
+
+<div align="center">
+
+| 메트릭 | 정의 |
+| --- | --- |
+| **Hit@5** | Top-5 안에 정답이 하나라도 있는 비율 (이진 0 / 1) |
+| **Recall@5** | 정답이 여러 개일 때 Top-5 포함 비율 (0.0 ~ 1.0) |
+| **Refusal Rate** | 서울 외 지역 등 범위 밖 질문을 올바르게 거절한 비율 |
+
+</div>
+
+> #### 베이스라인 결과 (RUN_20260426)
+
+```text
+[전체 Retrieval] n=118
+  Hit@5    : 0.5254 (52.5%)
+  Recall@5 : 0.4102 (41.0%)
+
+[전체 Refusal]   n=32
+  Refusal Rate : 0.5938 (59.4%)
+```
+
+카테고리별 (취약 영역 강조):
+
+<div align="center">
+
+| 카테고리 | n | Hit@5 |
+| --- | ---: | ---: |
+| 복합 조건 | 29 | 0.483 |
+| 지역 × 장소유형 | 27 | — |
+| 주관 형용사 | 21 | — |
+| **위치 기반 근처** | **16** | **0.250** 🔴 |
+| 동반 조건 특수 | 11 | — |
+| 실내 / 실외 | 11 | — |
+| 시간 조건 | 11 | — |
+| 편의시설 (주차) | 9 | — |
+| 오류 / 범위 밖 | 32 | (Refusal 0.594) |
+
+</div>
+
+→ 개선 우선순위: **위치 기반 근처 (25.0%)** 는 `QueryParser` landmark 좌표 매핑 보강으로, **Refusal Rate (59.4%)** 는 서울 외 city 검출 정확도 향상으로 끌어올릴 계획입니다.
+
+> #### 개선 추적 흐름
+
+`run_id` 컬럼으로 baseline (RUN_20260426) 과 개선 후 결과를 비교합니다.
+
+```bash
+# baseline 측정
+python ai/evaluation/run_evaluation.py --output evaluation/results/before.xlsx
+
+# 검색 로직 개선 후
+python ai/evaluation/run_evaluation.py --output evaluation/results/after.xlsx
+```
+
+> #### 평가 관점
 
 <div align="center">
 
@@ -723,7 +884,7 @@ AI 그림일기 생성
 ## 6.3. AI 그림일기
 
 그림일기 QA는 생성 이미지의 품질을 점검하고, 저품질 결과를 개선하기 위한 평가 흐름입니다.  
-현재는 자동 QA와 수동 QA를 병행하는 방식으로 개선 중입니다.
+GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 병행해 평가 기준을 보강하고 있습니다.
 
 ### 품질 등급
 
@@ -748,8 +909,8 @@ AI 그림일기 생성
 
 | 구분 | 내용 |
 | --- | --- |
-| 자동 QA | 이미지 생성 결과를 기준으로 피사체 표현, 배경 품질, 스타일 일관성 등을 점검하고 Lv0~Lv5 등급으로 분류합니다. |
-| 수동 QA | 자동 평가에서 낮은 등급으로 분류된 이미지를 사람이 직접 확인하고, 왜곡·스타일 불일치·프롬프트 누락 요소를 기록합니다. |
+| 자동 QA (개발 예정) | GPT API 비전 모델로 피사체 표현·배경 품질·스타일 일관성을 평가하고 Lv0~Lv5 등급으로 분류. 평가 프롬프트와 룰북을 수동 QA 결과로 보강. |
+| 수동 QA | 생성 이미지를 사람이 직접 확인해 왜곡·스타일 불일치·프롬프트 누락 요소를 기록하고, 자동 QA의 평가 기준을 만드는 근거 자료로 활용. |
 
 </div>
 
@@ -770,7 +931,7 @@ AI 그림일기 생성
 │                         사용자 브라우저                               │
 │                   https://withdog.kro.kr                            │
 └───────────────────────────┬─────────────────────────────────────────┘
-                            │ HTTP (port 80)
+                            │ HTTPS (port 443, Let's Encrypt)
                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         AWS EC2 (Ubuntu)                            │
@@ -796,10 +957,10 @@ AI 그림일기 생성
 │  │  │                                                      │   │   │
 │  │  │  ┌─────────────┐  ┌─────────────┐  ┌────────────┐  │   │   │
 │  │  │  │  API Routers │  │  AI Modules  │  │  ChromaDB  │  │   │   │
-│  │  │  │ auth/users   │  │ DiaryChain   │  │ (in-proc)  │  │   │   │
-│  │  │  │ pets/diaries │  │ BreedRetriever│  │ 장소 RAG   │  │   │   │
-│  │  │  │ places/chat  │  │ DiaryRetriever│  │ 견종 RAG   │  │   │   │
-│  │  │  │ images/breeds│  │ PlacesRetriever│ │ 일기 RAG   │  │   │   │
+│  │  │  │ auth/users   │  │ DiaryChain    │  │ (in-proc)  │  │   │   │
+│  │  │  │ pets/diaries │  │ PlacesChain   │  │ 장소 RAG   │  │   │   │
+│  │  │  │ places/chat  │  │ BreedRetriever│  │ 견종 RAG   │  │   │   │
+│  │  │  │ images/breeds│  │ Diary/PlacesR.│  │ 일기 RAG   │  │   │   │
 │  │  │  └─────────────┘  └─────────────┘  └────────────┘  │   │   │
 │  │  └──────────────────────────────────────────────────────┘   │   │
 │  └─────────────────────────────────────────────────────────────┘   │
@@ -811,7 +972,7 @@ AI 그림일기 생성
   │  MySQL     │  │ (aioboto3) │  │            │  │              │
   │            │  │ 이미지/    │  │ GPT-4.1-   │  │ Kakao        │
   │ users      │  │ 프로필     │  │ mini       │  │ Google       │
-  │ pets       │  │ 업로드     │  │ gpt-image-1│  │ Naver        │
+  │ pets       │  │ 업로드     │  │ gpt-image-2│  │ Naver        │
   │ diaries    │  │            │  │            │  │              │
   │ places ... │  │            │  │            │  │              │
   └────────────┘  └────────────┘  └────────────┘  └──────────────┘
@@ -825,7 +986,7 @@ AI 그림일기 생성
 | API 호출 | 브라우저 → Nginx (`/api/*`) → FastAPI 백엔드 (internal) |
 | 정적 파일 | 브라우저 → Nginx (직접 서빙, 1년 캐시) |
 | 이미지 업로드 | 프론트 → FastAPI → AWS S3 (aioboto3 비동기) |
-| 그림일기 생성 | FastAPI → ChromaDB(RAG) → OpenAI GPT → gpt-image-1 → S3 저장 |
+| 그림일기 생성 | FastAPI → ChromaDB(RAG) → OpenAI GPT → gpt-image-2 → S3 저장 |
 
 > #### 로컬 개발 환경
 
@@ -844,8 +1005,8 @@ AI 그림일기 생성
     └─ .env  SERVER=local  (EC2 환경에서는 SERVER=ec2)
 ```
 
-- **도메인**: `withdog.kro.kr` → EC2 퍼블릭 IP 연결 (무료 도메인, kro.kr)  
-- **컨테이너 포트**: Nginx만 `80:80` 외부 노출, 백엔드는 내부 네트워크(`withdog-net`)로만 통신
+- **도메인**: `https://withdog.kro.kr` (HTTPS, Let's Encrypt 인증서) → EC2 퍼블릭 IP 연결 (무료 도메인, kro.kr)  
+- **컨테이너 포트**: Nginx만 `80:80` / `443:443` 외부 노출 (80 → 443 리다이렉트), 백엔드는 내부 네트워크(`withdog-net`)로만 통신
 
 ---
 <div align="center">
@@ -854,7 +1015,69 @@ AI 그림일기 생성
 
 </div>
 
+DBMS: AWS RDS MySQL 8.0, charset `utf8mb4_unicode_ci`, 엔진 `InnoDB`.  
+DDL 원본: `back/db/withDOG.sql`. ORM 매핑: `back/api/models/`.
 
+> #### ERD 다이어그램
+
+![image](./assets/ERD.png)
+
+> #### 테이블 목록 (총 9개)
+
+<div align="center">
+
+| 테이블 | 용도 | Soft Delete | 비고 |
+| --- | --- | --- | --- |
+| `users` | 소셜 로그인 사용자 | ✓ (`deleted_at`) | UNIQUE(provider, provider_id) |
+| `pets` | 반려견 | ✓ | breed_id RESTRICT, type_id RESTRICT |
+| `breeds` | 견종 마스터 (357종) | — | 시드 1회성 |
+| `keywords` | 성향 태그 (PET / USER) | — | description = JSON 점수 벡터 |
+| `chat_rooms` | 챗봇 대화 세션 | ✓ | 룸 삭제해도 메시지 보존 |
+| `chat_messages` | 대화 메시지 | ✗ (영구 보존) | role: user / assistant / system |
+| `diaries` | 그림일기 (6하원칙) | ✓ | image_id nullable (2-phase) |
+| `images` | S3 이미지 메타 | ✓ | file_url, file_name |
+| `places` | 반려견 동반 장소 (21,130건) | — | content_id UNIQUE |
+
+</div>
+
+> #### 관계 (ER)
+
+```text
+users 1 ─── N pets
+users 1 ─── N chat_rooms ── N chat_messages
+users 1 ─── N diaries N ─── 1 pets
+users.profile_id ── 1 images   (RESTRICT)
+diaries.image_id  ── 1 images   (RESTRICT, nullable)
+pets.breed_id     ── 1 breeds   (RESTRICT)
+pets.type_id      ── 1 keywords (RESTRICT, PET 카테고리)
+users.type_id     ── 1 keywords (RESTRICT, USER 카테고리)
+```
+
+> #### 설계 원칙
+
+- **Soft Delete + 10일 후 Hard Delete** — `users` / `pets` / `chat_rooms` / `diaries` / `images` 는 `deleted_at` 컬럼으로 soft delete. 모든 조회 쿼리는 `WHERE deleted_at IS NULL` 자동 추가하며, `users` 만 APScheduler 가 매일 03:00 `deleted_at < now() - 10 days` 사용자를 물리 삭제합니다.
+- **2-phase 다이어리 저장** — `diaries.image_id = NULL` 로 일기 행 먼저 생성 → 이미지 생성·S3 업로드 완료 후 `PATCH` 로 바인딩. 이미지 생성 실패가 일기 본문 저장을 막지 않도록 분리.
+- **chat_messages 영구 보존** — `chat_rooms` 가 soft delete 되어도 메시지는 보존됩니다 (룸 복구·학습 데이터 활용 목적).
+- **이미지 RESTRICT** — `users.profile_id`, `diaries.image_id` 가 RESTRICT 로 참조되어 사용 중인 이미지는 삭제 불가.
+- **인덱스 전략** — 사용자 식별 `(provider, provider_id)` UNIQUE, 룸 정렬 `(user_id, updated_at DESC)`, 메시지 정렬 `(room_id, created_at)`, 일기 필터 `(user_id, deleted_at)`, 장소 위치 `(latitude, longitude)`.
+
+> #### 입장료 정규화 컬럼 (2026-04-27 신설)
+
+기존 `places.description` 자연어 본문에서 입장료 / 추가요금을 추출해 4 컬럼으로 정규화한 ETL 결과를 적재합니다.
+
+<div align="center">
+
+| 컬럼 | 타입 | 의미 |
+| --- | --- | --- |
+| `entrance_fee_amount` | INT NULL | 입장료(원). NULL = 불명·변동·조건부 |
+| `entrance_fee_type` | ENUM | `free` / `fixed` / `variable` / `conditional` / `unknown` |
+| `extra_fee_amount` | INT NULL | 강아지 추가요금(원) |
+| `extra_fee_type` | ENUM | 동일 5종 |
+
+</div>
+
+**적재 분포** — entrance: free 19.07% / fixed 1.84% / variable 77.28% / unknown 1.81%. extra: unknown 98.06% (펜션·카페 외 정책적 미정규화).  
+`description` 원본은 보존하며, 정규화 결과는 신규 컬럼으로만 저장합니다.
 
 ---
 
@@ -875,12 +1098,17 @@ SKN23-FINAL-3Team/
 │       └── types/              # 공통 타입 정의
 │
 ├── back/
-│   └── api/                    # FastAPI 백엔드
-│       ├── routers/            # auth, users, pets, diaries, chat-rooms, images, places, breeds, keywords
-│       ├── services/           # chat_response_service, diary_service, place_service ...
-│       ├── models/             # user, pet, diary, chat_room, chat_message, image, breed, place
-│       ├── schemas/            # Pydantic 스키마
-│       └── core/               # DB, 설정, 의존성
+│   ├── main.py                 # 진입점 (back/api/main.py 로더)
+│   ├── api/                    # FastAPI 백엔드
+│   │   ├── main.py             # FastAPI 앱 (lifespan, 라우터 등록)
+│   │   ├── routers/            # 12종 (auth, users, pets, diaries, chat-rooms, chat-messages, images, places, breeds, keywords, intent, admin)
+│   │   ├── services/           # 16종 (chat_response, diary_response, chat_message, place, user, pet, diary, chat_room, image, breed, keyword, intent, auth, admin, common, scheduler)
+│   │   ├── models/             # 9개 SQLAlchemy 모델
+│   │   ├── schemas/            # 10개 Pydantic 스키마
+│   │   └── core/               # config, database, deps, location, type
+│   ├── data/scripts/           # breeds / keywords / places 시드 (2026-04-27 back/db/seeds/ 에서 이동)
+│   └── db/
+│       └── withDOG.sql         # MySQL DDL 덤프
 │
 ├── ai/
 │   ├── chains/                 # DiaryChain (RAG + GPT 일기 생성 파이프라인)
@@ -900,84 +1128,118 @@ SKN23-FINAL-3Team/
 
 ---
 
-## 9.1. DB 스키마 (주요 테이블)
-
-| 테이블 | 주요 컬럼 |
-|--------|-----------|
-| users | id, email, nickname, gender, birth_date, profile_id, provider, selected_tags |
-| pets | id, user_id, name, breed_id, gender, is_neutered, selected_tags |
-| diaries | id, pet_id, image_id, title, content, summary, emotion |
-| chat_rooms | id, user_id, title, created_at, updated_at |
-| chat_messages | id, chat_room_id, role, content |
-| images | id, file_name, file_url |
-| breeds | id, name_ko, name_en, size, top10 |
-| places | id, name, category, address, tags ... |
-
----
-
-## 9.2. 주요 API 엔드포인트
+## 9.1. 주요 API 엔드포인트
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| POST | /api/auth/{provider} | 소셜 로그인 (kakao/google/naver) |
-| GET | /api/users/me | 내 정보 조회 |
-| PATCH | /api/users/{id} | 유저 정보 수정 |
-| GET | /api/pets?user_id={id} | 반려견 목록 조회 |
-| POST | /api/pets | 반려견 등록 |
-| GET | /api/diaries?pet_id={id} | 일기 목록 조회 |
-| POST | /api/diaries | 일기 생성 |
-| PATCH | /api/diaries/{id} | 일기 수정 |
-| DELETE | /api/diaries/{id} | 일기 삭제 |
-| POST | /api/images | 이미지 S3 업로드 |
-| GET | /api/chat-rooms?user_id={id} | 채팅방 목록 |
-| POST | /api/chat-rooms/{id}/messages | 채팅 메시지 전송 (챗봇) |
-| GET | /api/chat-rooms/{id}/messages | 채팅 메시지 조회 |
-| GET | /api/places?query={q} | 장소 추천 검색 |
-| GET | /api/breeds | 견종 목록 조회 |
+| GET | `/api/health` | 헬스체크 (server / db 상태) |
+| POST | `/api/auth/{provider}` | 소셜 로그인 (kakao / google / naver) |
+| GET | `/api/admin/token` | 개발용 무기한 JWT (`X-Admin-Key` 헤더) |
+| GET | `/api/users/me` | 내 정보 조회 |
+| GET | `/api/users/{id}` | 사용자 조회 |
+| PATCH | `/api/users/{id}` | 유저 정보 수정 |
+| DELETE | `/api/users/{id}` | 유저 soft delete (10일 후 hard delete) |
+| POST | `/api/pets` | 반려견 등록 |
+| GET | `/api/pets?user_id={id}` | 반려견 목록 조회 |
+| GET | `/api/pets/{id}` | 반려견 상세 |
+| PATCH | `/api/pets/{id}` | 반려견 수정 |
+| DELETE | `/api/pets/{id}` | 반려견 soft delete |
+| GET | `/api/diaries?pet_id={id}` | 일기 목록 조회 |
+| POST | `/api/diaries` | 일기 생성 (image_id 없이도 생성 가능) |
+| PATCH | `/api/diaries/{id}` | 일기 수정 (image_id 바인딩 포함) |
+| DELETE | `/api/diaries/{id}` | 일기 soft delete |
+| POST | `/api/diary/generate` | AI 일기 텍스트 생성 (GPT-4.1-mini) |
+| POST | `/api/diary/generate-image` | AI 일기 이미지 생성 (gpt-image-2) |
+| POST | `/api/images` | 이미지 S3 업로드 |
+| DELETE | `/api/images/{id}` | 이미지 soft delete (FK RESTRICT 검증) |
+| POST | `/api/chat-rooms` | 채팅방 생성 (title NULL이면 첫 메시지로 자동) |
+| GET | `/api/chat-rooms?user_id={id}` | 채팅방 목록 (updated_at DESC) |
+| GET | `/api/chat-rooms/{id}` | 채팅방 상세 |
+| PATCH | `/api/chat-rooms/{id}/title` | 채팅방 제목 변경 |
+| DELETE | `/api/chat-rooms/{id}` | 채팅방 soft delete (메시지는 보존) |
+| POST | `/api/chat-rooms/{id}/messages` | 채팅 메시지 전송 (챗봇 한 턴 처리) |
+| GET | `/api/chat-rooms/{id}/messages` | 채팅 메시지 조회 |
+| GET | `/api/places/search?query=&category=&city=` | 장소 추천 검색 (RAG + LLM reason) |
+| GET | `/api/places/{content_id}` | 장소 상세 |
+| GET | `/api/breeds` | 견종 목록 조회 |
+| GET | `/api/keywords?category=PET` | 강아지 성향 태그 |
+| GET | `/api/keywords?category=USER` | 사용자 여행 성향 태그 |
 
 전체 API 문서: `https://withdog.kro.kr/api/docs`
 
 ---
 
-## 9.3. 환경 설정
+## 9.2. 환경 설정
 
 > ### 환경변수 (.env)
 
+총 41개 키. 카테고리별로 정리된 템플릿입니다. 값은 환경별로 직접 채워 사용하세요 (`.env`는 `.gitignore` 처리됨).
+
 ```env
-# OpenAI
-OPENAI_API_KEY=your_key
-GPT_MODEL=gpt-4.1-mini
+# ── 서버 환경 ───────────────────────────────────────────────
+SERVER=               # local | ec2
+APP_ENV=
+DEBUG=
+FRONTEND_BASE_URL=
+VITE_API_URL=
 
-# DB (AWS RDS MySQL)
-DB_HOST=your_rds_endpoint
-DB_PORT=3306
-DB_USER=admin
-DB_PASSWORD=your_password
-DB_NAME=withdog
+# ── 데이터베이스 (AWS RDS MySQL) ────────────────────────────
+DB_HOST=
+DB_PORT=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
 
-# AWS S3
-AWS_S3_BUCKET_NAME=withdog-storage
-AWS_REGION=ap-northeast-2
+# ── SSH 터널 (local 환경 전용) ──────────────────────────────
+SSH_HOST=
+SSH_PORT=
+SSH_USER=
+SSH_PKEY=
 
-# SSH 터널링 (로컬 환경)
-SERVER=local          # ec2 환경에서는 'ec2'
-SSH_HOST=your_ec2_ip
-SSH_USER=ubuntu
-SSH_PKEY=/path/to/withDOG.pem
+# ── 외부 API ────────────────────────────────────────────────
+OPENAI_API_KEY=
+DOG_API_KEY=          # The Dog API
+TOUR_API_KEY=         # 한국관광공사 OpenAPI
+KAKAO_REST_API_KEY=   # 카카오 REST API (랜드마크 좌표 조회)
 
-# 소셜 로그인
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-KAKAO_CLIENT_ID=...
-KAKAO_CLIENT_SECRET=...
-NAVER_CLIENT_ID=...
-NAVER_CLIENT_SECRET=...
+# ── OAuth 2.0 (백엔드) ──────────────────────────────────────
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=
+KAKAO_CLIENT_ID=
+KAKAO_CLIENT_SECRET=
+KAKAO_REDIRECT_URI=
+NAVER_CLIENT_ID=
+NAVER_CLIENT_SECRET=
+NAVER_REDIRECT_URI=
 
-# 프론트엔드 (Vite)
-VITE_API_URL=http://localhost:8000
-VITE_GOOGLE_CLIENT_ID=...
-VITE_KAKAO_CLIENT_ID=...
-VITE_NAVER_CLIENT_ID=...
+# ── OAuth 2.0 (프론트, Vite 노출) ───────────────────────────
+VITE_GOOGLE_CLIENT_ID=
+VITE_KAKAO_CLIENT_ID=
+VITE_KAKAO_JAVASCRIPT_API_KEY=    # 카카오 지도 SDK
+VITE_NAVER_CLIENT_ID=
+
+# ── AWS S3 ──────────────────────────────────────────────────
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=
+AWS_S3_BUCKET_NAME=
+
+# ── 보안 ────────────────────────────────────────────────────
+SECRET_KEY=           # JWT 서명 + 관리자 토큰 발급 (이중 용도)
+
+# ── LLM / 임베딩 모델 ───────────────────────────────────────
+GPT_MODEL=            # 기본 모델 ID (예: gpt-4.1-mini)
+GPT_IMAGE_MODEL=      # 이미지 생성 모델 (현재 gpt-image-2)
+EMBED_MODEL_NAME=     # sentence-transformers 모델
+
+# ── Hugging Face / Transformers ────────────────────────────
+HF_HUB_OFFLINE=       # 0 | 1
+TRANSFORMERS_OFFLINE= # 0 | 1
+
+# ── 기타 ────────────────────────────────────────────────────
+ANONYMIZED_TELEMETRY= # ChromaDB 텔레메트리 무력화
+USE_DUMMY_PLACES=     # 장소 검색 디버깅용 더미 데이터 플래그
 ```
 ---
 
@@ -996,7 +1258,9 @@ Freemium 기반으로 앱 유입 → 구독 전환 → 데이터 수익까지 �
 | ③ | 광고/제휴 | 카페·숙소·애견용품 노출 기반 PPL, 여행 상품 예약 연계 패키지 |
 | ④ | B2B 데이터 | 지역별 수요·소비 패턴 트렌드 리포트 판매 (관광사·지자체·숙박) |
 
-> API 비용 추정: 무료 유저 1인당 하루 약 150원 수준. 손익분기를 위해서는 구독 전환율 15% 이상 필요.
+> API 비용 추정: 무료 유저 1인당 하루 약 150원 수준 (그림일기 3회 한도 기준 — `gpt-4.1-mini` 텍스트 일기 + 이미지 호출 합산). 월 약 4,500원 비용을 월 10,000원 구독으로 회수하려면 무료 약 5.7명당 유료 1명 (전환율 15%) 이 손익분기 조건입니다.
+>
+> ※ 이미지 모델은 2026-04-27 `gpt-image-1` (quality 정액) → `gpt-image-2` (토큰 기반 과금: Image $8/$2/$30, Text $5/$1.25 per 1M) 로 전환. 위 150원 추정은 종전 단가 기준이며 발표 후 실측 토큰으로 재산정 예정.
 
 ---
 
@@ -1022,10 +1286,12 @@ Freemium 기반으로 앱 유입 → 구독 전환 → 데이터 수익까지 �
 | 분류 | 기술 |
 |------|------|
 | 텍스트 일기 생성 | ![GPT-4.1-mini](https://img.shields.io/badge/GPT--4.1--mini-412991?style=flat-square&logo=openai&logoColor=white) |
-| 이미지 생성 | ![gpt-image-1](https://img.shields.io/badge/gpt--image--1-412991?style=flat-square&logo=openai&logoColor=white) |
+| 이미지 생성 | ![gpt-image-2](https://img.shields.io/badge/gpt--image--2-412991?style=flat-square&logo=openai&logoColor=white) |
 | 의도 분류 | ![KoELECTRA](https://img.shields.io/badge/KoELECTRA-FF6F00?style=flat-square&logo=huggingface&logoColor=white) ![Fine-tuned](https://img.shields.io/badge/Fine--tuned-FFB000?style=flat-square) |
-| 임베딩 | ![ko-sroberta-multitask](https://img.shields.io/badge/ko--sroberta--multitask-FF6F00?style=flat-square&logo=huggingface&logoColor=white) |
+| 임베딩 | ![ko-sroberta-multitask](https://img.shields.io/badge/ko--sroberta--multitask-FF6F00?style=flat-square&logo=huggingface&logoColor=white) ![sentence-transformers](https://img.shields.io/badge/sentence--transformers-FFB000?style=flat-square) |
 | Vector DB | ![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6B35?style=flat-square) ![RAG](https://img.shields.io/badge/RAG_x3-6A5ACD?style=flat-square) |
+| 군집·시각화 | ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white) ![KMeans](https://img.shields.io/badge/KMeans-3776AB?style=flat-square) ![matplotlib](https://img.shields.io/badge/matplotlib-11557C?style=flat-square) ![PCA·t--SNE](https://img.shields.io/badge/PCA·t--SNE-6A5ACD?style=flat-square) |
+| 이미지 평가 (예정) | ![GPT-4 Vision](https://img.shields.io/badge/GPT--4_Vision-412991?style=flat-square&logo=openai&logoColor=white) |
 
 > ### Frontend
 
@@ -1034,9 +1300,10 @@ Freemium 기반으로 앱 유입 → 구독 전환 → 데이터 수익까지 �
 | Framework | ![React](https://img.shields.io/badge/React_18-61DAFB?style=flat-square&logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) |
 | Build | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) |
 | Styling | ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white) |
-| Router | ![React Router](https://img.shields.io/badge/React_Router_v6-CA4245?style=flat-square&logo=reactrouter&logoColor=white) |
+| Router | ![React Router](https://img.shields.io/badge/React_Router_v7-CA4245?style=flat-square&logo=reactrouter&logoColor=white) |
 | Animation | ![Framer Motion](https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
 | UI | ![Radix UI](https://img.shields.io/badge/Radix_UI-161618?style=flat-square&logo=radixui&logoColor=white) ![Lucide React](https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white) |
+| Map | ![Kakao Maps SDK](https://img.shields.io/badge/Kakao_Maps_SDK-FFCD00?style=flat-square&logo=kakao&logoColor=black) |
 | Design | ![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat-square&logo=figma&logoColor=white) ![Adobe Photoshop](https://img.shields.io/badge/Photoshop-31A8FF?style=flat-square&logo=adobephotoshop&logoColor=white) ![Adobe Illustrator](https://img.shields.io/badge/Illustrator-FF9A00?style=flat-square&logo=adobeillustrator&logoColor=white) |
 
 > ### Infra
@@ -1048,6 +1315,16 @@ Freemium 기반으로 앱 유입 → 구독 전환 → 데이터 수익까지 �
 | Web Server | ![Nginx](https://img.shields.io/badge/Nginx_1.25-009639?style=flat-square&logo=nginx&logoColor=white) |
 | Domain | ![withdog.kro.kr](https://img.shields.io/badge/withdog.kro.kr-000000?style=flat-square&logo=googlechrome&logoColor=white) |
 | 터널링 | ![SSH Tunnel](https://img.shields.io/badge/SSH_Tunnel-4D4D4D?style=flat-square&logo=openssh&logoColor=white) ![sshtunnel](https://img.shields.io/badge/sshtunnel-3776AB?style=flat-square&logo=python&logoColor=white) ![paramiko](https://img.shields.io/badge/paramiko-3776AB?style=flat-square&logo=python&logoColor=white) |
+
+> ### External API
+
+| 분류 | 기술 |
+|------|------|
+| LLM / 이미지 | ![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=flat-square&logo=openai&logoColor=white) |
+| 견종 데이터 | ![The Dog API](https://img.shields.io/badge/The_Dog_API-FFA500?style=flat-square) |
+| 관광 데이터 | ![한국관광공사 OpenAPI](https://img.shields.io/badge/한국관광공사_OpenAPI-0064FF?style=flat-square) |
+| 지도·좌표 | ![Kakao Maps](https://img.shields.io/badge/Kakao_Maps-FFCD00?style=flat-square&logo=kakao&logoColor=black) ![Kakao REST API](https://img.shields.io/badge/Kakao_REST_API-FFCD00?style=flat-square&logo=kakao&logoColor=black) |
+| 소셜 로그인 | ![Kakao OAuth](https://img.shields.io/badge/Kakao_OAuth-FFCD00?style=flat-square&logo=kakao&logoColor=black) ![Google OAuth](https://img.shields.io/badge/Google_OAuth-4285F4?style=flat-square&logo=google&logoColor=white) ![Naver OAuth](https://img.shields.io/badge/Naver_OAuth-03C75A?style=flat-square&logo=naver&logoColor=white) |
 
 ---
 
