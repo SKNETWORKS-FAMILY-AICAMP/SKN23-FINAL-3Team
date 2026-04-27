@@ -11,10 +11,12 @@ places 테이블에 장소 데이터를 적재하는 시드 스크립트.
   [FIX-4] pet_zone_type 매핑 명확화 (실내구역/실외구역/전구역)
   [FIX-5] content_id 해시 충돌 방어
   [FIX-6] 컬럼명을 도메인 용어로 변경 (rela_poses_fclty → has_parking 등)
+  [FIX-7] entrance_fee/extra_fee 정규화: description 자연어 → 4 정규화 컬럼 inline ETL
+          (이전 normalize_fee.py 일회용 ETL 통합 — DB 재구축 시 단일 단계로 fee 컬럼 적재)
 
 ⚠️ 실행 전 필수:
   1. places_schema_migration_v2.sql 실행으로 컬럼명 변경
-  2. models/place.py의 Place 클래스 속성명 동기화
+  2. models/place.py의 Place 클래스 속성명 동기화 + entrance_fee_*/extra_fee_* 4 컬럼
 """
 from __future__ import annotations
 
@@ -28,11 +30,14 @@ sys.path.insert(0, _BACK_API)
 
 import asyncio  # noqa: E402
 import hashlib  # noqa: E402
+import re  # noqa: E402
 import pandas as pd  # noqa: E402
 import core.database  # noqa: E402
 
+from dataclasses import dataclass  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from models.place import Place  # noqa: E402
+from core.type.place import FeeType  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 from core.config import settings  # noqa: E402
 from sshtunnel import SSHTunnelForwarder  # noqa: E402
@@ -43,6 +48,102 @@ CSV_PATH = os.path.normpath(os.path.join(
     _HERE,
     "../../../data/raw/한국문화정보원_전국_반려동물_동반_가능_문화시설_위치_데이터_20250324.csv"
 ))
+
+# ── fee 정규화 (description 자연어 → 4 컬럼 정규식 1차 패스) ────────────
+# 우선순위 순차 적용, 첫 매칭에서 break.
+# 검증 결과 (21,130 행): entrance_fee unknown 1.81%, extra_fee unknown 98.06%
+# (펜션 외 카테고리는 추가요금 표기 자체가 없어 ROI 0 — 스펙 영구 보류 영역).
+RE_FLAGS = re.DOTALL
+
+
+def _amount_const(value: int):
+    def _impl(_match: re.Match) -> int:
+        return value
+    return _impl
+
+
+def _amount_group(idx: int):
+    def _impl(match: re.Match) -> int:
+        raw = match.group(idx).replace(",", "").strip()
+        return int(raw)
+    return _impl
+
+
+def _amount_manwon(idx: int):
+    def _impl(match: re.Match) -> int:
+        raw = match.group(idx).replace(",", "").strip()
+        return int(raw) * 10000
+    return _impl
+
+
+def _amount_null(_match: re.Match) -> None:
+    return None
+
+
+# 각 항목: (pattern_idx, compiled_re, FeeType, amount_extractor)
+ENTRANCE_RULES = [
+    (1, re.compile(r"입장료\s*[:：]?\s*(무료|없|(?<!\d)0\s*원)", RE_FLAGS),
+     FeeType.FREE, _amount_const(0)),
+    (2, re.compile(r"입장료\s*[:：]\s*([\d,]+)\s*원", RE_FLAGS),
+     FeeType.FIXED, _amount_group(1)),
+    (3, re.compile(r"입장료\s*[:：]\s*(\d+)\s*만\s*원", RE_FLAGS),
+     FeeType.FIXED, _amount_manwon(1)),
+    (4, re.compile(r"입장료\s*[:：]\s*변동", RE_FLAGS),
+     FeeType.VARIABLE, _amount_null),
+    (5, re.compile(r"입장료\s*[:：]\s*(상이|시기별|계절별|문의)", RE_FLAGS),
+     FeeType.VARIABLE, _amount_null),
+    (6, re.compile(r"입장료\s*[:：].{0,30}?(성인|어린이|청소년)", RE_FLAGS),
+     FeeType.CONDITIONAL, _amount_null),
+]
+
+EXTRA_RULES = [
+    (1, re.compile(r"(추가\s*요금|동반료|입실료)\s*없", RE_FLAGS),
+     FeeType.FREE, _amount_const(0)),
+    (2, re.compile(r"반려[동물견].{0,30}?무료", RE_FLAGS),
+     FeeType.FREE, _amount_const(0)),
+    (3, re.compile(
+         r"(애견|강아지|반려[동물견])\s*(동반)?\s*추가\s*요금\s*[:：]\s*([\d,]+)\s*원",
+         RE_FLAGS,
+     ),
+     FeeType.FIXED, _amount_group(3)),
+    (4, re.compile(r"(추가\s*요금|동반료|입실료)\s*[:：]?\s*([\d,]+)\s*원", RE_FLAGS),
+     FeeType.FIXED, _amount_group(2)),
+    (5, re.compile(r"(추가\s*요금|동반료|입실료)\s*[:：]?\s*(\d+)\s*만\s*원", RE_FLAGS),
+     FeeType.FIXED, _amount_manwon(2)),
+    (6, re.compile(r"(추가\s*요금|동반료).{0,30}?(변동|상이|문의)", RE_FLAGS),
+     FeeType.VARIABLE, _amount_null),
+    (7, re.compile(r"(추가\s*요금|동반료).{0,30}?(소형|중형|대형|체급|크기별)", RE_FLAGS),
+     FeeType.CONDITIONAL, _amount_null),
+]
+
+
+@dataclass
+class FeeMatch:
+    """fee 정규화 결과 한 컬럼 단위."""
+    fee_type: FeeType
+    amount: int | None
+
+
+def _match_rules(description: str | None, rules: list) -> FeeMatch:
+    """우선순위 순서로 룰 적용, 첫 매칭 반환. 매칭 실패 시 unknown."""
+    if not description:
+        return FeeMatch(FeeType.UNKNOWN, None)
+    for _idx, pattern, fee_type, extractor in rules:
+        m = pattern.search(description)
+        if not m:
+            continue
+        try:
+            amount = extractor(m)
+        except (ValueError, IndexError):
+            continue
+        return FeeMatch(fee_type, amount)
+    return FeeMatch(FeeType.UNKNOWN, None)
+
+
+def normalize_fee(description: str | None) -> tuple[FeeMatch, FeeMatch]:
+    """description → (entrance_fee 결과, extra_fee 결과). 두 룰셋 독립 적용."""
+    return _match_rules(description, ENTRANCE_RULES), _match_rules(description, EXTRA_RULES)
+
 
 # ── 카테고리 매핑: (content_type_id, sub_category) ────────────
 BIG_CATEGORY_MAP = {
@@ -235,6 +336,9 @@ async def seed() -> None:
                 if desc_extra:
                     description_doc += f"\n[장소 정보] {desc_extra}"
 
+                # [FIX-7] description 정규식 fee 정규화 — INSERT 시 4 컬럼 같이 채움
+                ent_fee, ext_fee = normalize_fee(description_doc)
+
                 # [FIX-6] 새 컬럼명 사용
                 new_place = Place(
                     content_id=content_id_hash,
@@ -253,6 +357,10 @@ async def seed() -> None:
                     has_parking=parking_value,
                     operation_info=operation_info,
                     description=description_doc,
+                    entrance_fee_amount=ent_fee.amount,
+                    entrance_fee_type=ent_fee.fee_type,
+                    extra_fee_amount=ext_fee.amount,
+                    extra_fee_type=ext_fee.fee_type,
                 )
                 session.add(new_place)
                 inserted += 1

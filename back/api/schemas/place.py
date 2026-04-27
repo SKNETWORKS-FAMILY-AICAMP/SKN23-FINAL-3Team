@@ -13,7 +13,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.type.place import YNEnum
+from core.type.place import YNEnum, FeeType
 
 
 class PlaceResponse(BaseModel):
@@ -40,6 +40,10 @@ class PlaceResponse(BaseModel):
     has_parking: Optional[YNEnum] = Field(None, description="주차 가능 여부 (Y/N)")
     operation_info: Optional[str] = Field(None, description="운영시간 및 휴무일 정보")
     description: Optional[str] = Field(None, description="장소 통합 설명 텍스트")
+    entrance_fee_amount: Optional[int] = Field(None, description="입장료(원). NULL=불명/변동/조건부")
+    entrance_fee_type: FeeType = Field(FeeType.UNKNOWN, description="입장료 정규화 타입 (free/fixed/variable/conditional/unknown)")
+    extra_fee_amount: Optional[int] = Field(None, description="추가요금(원). NULL=불명/변동/조건부")
+    extra_fee_type: FeeType = Field(FeeType.UNKNOWN, description="추가요금 정규화 타입")
     modified_time: Optional[datetime] = Field(None, description="한국관광공사 원본 데이터 최종 수정일")
     created_at: datetime = Field(..., description="수집 등록 일시")
     updated_at: datetime = Field(..., description="수집 갱신 일시")
