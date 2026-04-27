@@ -11,3 +11,7 @@ class BaseScorer(ABC):
     @abstractmethod
     def classify_type(self, tags: list[str]) -> str:
         ...
+
+    @abstractmethod
+    def get_type_name(self, type_id: str) -> str:
+        ...

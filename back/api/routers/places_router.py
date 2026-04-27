@@ -5,7 +5,12 @@ from core.deps import get_db
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.place_service import search_places_from_db
-from services.chat_response_service import generate_place_reasons
+from services.chat_response_service import (
+    DispatchContext,
+    _load_place_preference_context,
+    _rerank_places_with_profile,
+    generate_place_reasons,
+)
 
 router = APIRouter(tags=["places"])
 
@@ -94,6 +99,7 @@ def get_kakao_image(place_name: str) -> str:
 async def search_places(
     query: str,
     request: Request,
+    pet_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """장소 검색 엔드포인트.
@@ -113,6 +119,10 @@ async def search_places(
         {"places": [...]} 형태의 장소 목록
     """
     places = await search_places_from_db(query, db, n_results=5, request=request)
+    profile_ctx = await _load_place_preference_context(
+        DispatchContext(db=db, pet_id=pet_id)
+    )
+    places = _rerank_places_with_profile(places, profile_ctx, request=request)
 
     for place in places:
         # 1순위: 관광공사 detailImage2 (content_id 직접 사용, API 호출 1회로 단축)

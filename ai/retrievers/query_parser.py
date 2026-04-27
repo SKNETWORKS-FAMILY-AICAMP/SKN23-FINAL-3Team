@@ -27,6 +27,7 @@ import json
 import logging
 
 from openai import AsyncOpenAI
+from back.api.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,9 @@ For waste-bag requests:
 class QueryParser:
     """LLM으로 사용자 쿼리를 객관/주관 조건으로 분리한다."""
 
-    def __init__(self, llm_client: AsyncOpenAI, model: str = "gpt-4.1-mini"):
+    def __init__(self, llm_client: AsyncOpenAI, model: str | None = None):
         self._llm   = llm_client
-        self._model = model
+        self._model = model or settings.GPT_MODEL
 
     async def parse(self, query: str) -> dict:
         """쿼리를 파싱해서 조건 dict 반환. 실패 시 subjective=query만 담아 반환."""

@@ -215,7 +215,12 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
         )
 
-    ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
+    ctx = chat_response_service.DispatchContext(
+        user_id=current_user_id,
+        db=db,
+        room_id=room_id,
+        pet_id=data.pet_id,
+    )
     assistant_text = await chat_response_service.dispatch(
         intent_result,
         data.content,
