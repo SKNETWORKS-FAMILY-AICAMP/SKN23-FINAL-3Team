@@ -28,6 +28,7 @@ class MessageCreate(BaseModel):
         description="발신자 구분 (user | assistant | system)",
     )
     content: str = Field(..., min_length=1, description="메시지 본문")
+    pet_id: int | None = Field(default=None, description="현재 선택한 반려견 ID")
 
 
 class MessageResponse(BaseModel):

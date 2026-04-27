@@ -33,10 +33,12 @@ export function searchPlaces(params: {
   query: string
   category?: string
   city?: string
+  pet_id?: number | null
 }): Promise<PlaceResult[]> {
   const qs = new URLSearchParams({ query: params.query })
   if (params.category) qs.set('category', params.category)
   if (params.city) qs.set('city', params.city)
+  if (params.pet_id != null) qs.set('pet_id', String(params.pet_id))
   return api
     .get<SearchPlacesResponse>(`/places/search?${qs}`)
     .then((response) => response.places)

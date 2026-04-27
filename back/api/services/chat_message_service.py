@@ -215,7 +215,7 @@ async def create_message_with_response(
             confidence=0.0,
             strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
         )
-
+        
     # diary 버튼 액션/확인 요청은 dispatch 에서 바로 처리되므로
     # 클라이언트에 반환하는 intent 도 '다이어리 작성'으로 맞춰줌
     # (KoELECTRA 가 '장소추천' 등으로 잘못 분류해도 프론트가 searchPlaces 호출하지 않도록)

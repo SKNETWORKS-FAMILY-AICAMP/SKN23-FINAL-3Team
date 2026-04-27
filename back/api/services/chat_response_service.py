@@ -18,14 +18,19 @@ import json
 import logging
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Sequence
 
 from fastapi import Request
 from openai import AsyncOpenAI
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.location.place import Place
+from models.pet import Pet
+from models.user import User
 from services.intent_service import IntentResult, RAG_STRATEGY_MAP
 from services.place_service import (
     SEOUL,
@@ -72,6 +77,7 @@ class DispatchContext:
     user_id: int | None = None
     db: AsyncSession | None = None
     room_id: int | None = None
+    pet_id: int | None = None
 
 
 @dataclass
@@ -400,6 +406,95 @@ async def _is_out_of_service_area(query: str, request: Request | None = None) ->
         return False
 
 
+async def _load_place_preference_context(ctx: DispatchContext) -> dict:
+    """Load the current user's profile tags for place recommendation reranking."""
+    if ctx.db is None or (ctx.user_id is None and ctx.pet_id is None):
+        return {"pet_name": "", "dog_tags": [], "owner_tags": []}
+
+    pet_name = ""
+    dog_tags: list[str] = []
+    owner_tags: list[str] = []
+    owner_user_id = ctx.user_id
+
+    try:
+        pet_query = select(Pet).where(Pet.deleted_at.is_(None))
+        if ctx.pet_id is not None:
+            pet_query = pet_query.where(Pet.id == ctx.pet_id).limit(1)
+        elif ctx.user_id is not None:
+            pet_query = (
+                pet_query.where(Pet.user_id == ctx.user_id)
+                .order_by(Pet.id.desc())
+                .limit(1)
+            )
+        else:
+            pet_query = pet_query.limit(0)
+
+        pet_result = await ctx.db.execute(pet_query)
+        pet = pet_result.scalar_one_or_none()
+        if pet is not None:
+            pet_name = pet.name or ""
+            dog_tags = list(pet.selected_tags or [])
+            owner_user_id = pet.user_id
+    except Exception as e:
+        logger.warning(f"[ChatResponse] pet preference load failed: {e}")
+
+    if owner_user_id is not None:
+        try:
+            user_result = await ctx.db.execute(
+                select(User).where(User.id == owner_user_id, User.deleted_at.is_(None))
+            )
+            user = user_result.scalar_one_or_none()
+            if user is not None:
+                owner_tags = list(user.selected_tags or [])
+        except Exception as e:
+            logger.warning(f"[ChatResponse] user preference load failed: {e}")
+
+    profile_ctx = {
+        "pet_name": pet_name,
+        "dog_tags": dog_tags,
+        "owner_tags": owner_tags,
+    }
+    logger.info(
+        "[ChatResponse] place profile loaded | user_id=%s | pet_name=%s | dog_tags=%s | owner_tags=%s",
+        owner_user_id,
+        pet_name,
+        dog_tags,
+        owner_tags,
+    )
+    return profile_ctx
+
+
+def _rerank_places_with_profile(
+    places: list[dict],
+    profile_ctx: dict,
+    request: Request | None = None,
+) -> list[dict]:
+    """Apply PlacesChain reranking rules to already-fetched place results."""
+    if not places:
+        return places
+
+    dog_tags = profile_ctx.get("dog_tags") or []
+    owner_tags = profile_ctx.get("owner_tags") or []
+    if not (dog_tags or owner_tags):
+        logger.info("[ChatResponse] profile rerank skipped | no dog/owner tags")
+        return places
+
+    try:
+        container = request.app.state.ai_container if request else None
+        places_chain = getattr(container, "places_chain", None) if container else None
+        if places_chain is None:
+            logger.info("[ChatResponse] profile rerank skipped | places_chain unavailable")
+            return places
+        return places_chain.rerank_places(
+            places,
+            dog_tags=dog_tags,
+            owner_tags=owner_tags,
+        )
+    except Exception as e:
+        logger.warning(f"[ChatResponse] profile rerank failed: {e}")
+        return places
+
+
 _DEFAULT_DIARY_PET = {
     "pet_name": "우리 아이",
     "breed": "강아지",
@@ -588,6 +683,8 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, reque
     if await _is_out_of_service_area(query, request=request):
         return _OUT_OF_SERVICE_AREA_MESSAGE
 
+    profile_ctx = await _load_place_preference_context(ctx)
+
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
@@ -595,6 +692,8 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, reque
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
+
+    places = _rerank_places_with_profile(places, profile_ctx, request=request)
 
     if places:
         return _format_place_list_response(places)
