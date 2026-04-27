@@ -45,9 +45,6 @@ class Place(Base):
     latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True, comment="위도 (GPS Y좌표 / WGS84)")
     longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True, comment="경도 (GPS X좌표 / WGS84)")
     
-    firstimage: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="대표 이미지 원본 URL (약 500x333, 상세 화면용)")
-    firstimage2: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="대표 이미지 썸네일 URL (약 150x100, 목록 화면용)")
-    
     is_indoor: Mapped[bool | None] = mapped_column(TINYINT(1), nullable=True, comment="실내 여부 (NULL=미확인)")
     is_outdoor: Mapped[bool | None] = mapped_column(TINYINT(1), nullable=True, comment="실외 여부 (NULL=미확인)")
 
@@ -64,14 +61,14 @@ class Place(Base):
         Integer, nullable=True, comment="입장료(원). NULL=불명/변동/조건부"
     )
     entrance_fee_type: Mapped[FeeType] = mapped_column(
-        SAEnum(FeeType), nullable=False, server_default=FeeType.UNKNOWN.value,
+        SAEnum(FeeType), nullable=False, server_default=FeeType.unknown.value,
         comment="입장료 정규화 타입 (free/fixed/variable/conditional/unknown)",
     )
     extra_fee_amount: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, comment="강아지 동반 추가요금(원). NULL=불명/변동/조건부"
+        Integer, nullable=True, comment="강아지 추가요금(원). NULL=불명/변동/조건부"
     )
     extra_fee_type: Mapped[FeeType] = mapped_column(
-        SAEnum(FeeType), nullable=False, server_default=FeeType.UNKNOWN.value,
+        SAEnum(FeeType), nullable=False, server_default=FeeType.unknown.value,
         comment="추가요금 정규화 타입",
     )
 
