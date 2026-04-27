@@ -506,7 +506,7 @@ async def generate_image(req: ImageRequest) -> ImageResponse:
         raise HTTPException(status_code=400, detail="image_prompt가 비어 있습니다.")
 
     response = await _get_openai_client().images.generate(
-        model="gpt-image-1",
+        model=settings.GPT_IMAGE_MODEL,
         prompt=req.image_prompt,
         size="1024x1024",
         quality="medium",  # 옵션값: low→medium

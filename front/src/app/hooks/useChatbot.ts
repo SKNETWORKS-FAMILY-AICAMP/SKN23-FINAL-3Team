@@ -376,6 +376,10 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
     const token = localStorage.getItem('access_token')
     if (!token) return
 
+    // 'welcome' 스텝은 ChatBot.tsx 의 sendWelcomeMessage 가 sendMessageWithResponse 로
+    // API 호출을 직접 담당하므로, 여기서 중복 저장하면 두 채팅방에 AI 응답이 각각 생성됨.
+    if (state.step === 'welcome') return
+
     // 유저 메시지가 하나라도 생긴 뒤부터 저장 시작
     const hasUserMessage = state.messages.some((m) => m.role === 'user')
     if (!hasUserMessage) return
@@ -410,7 +414,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
 
     persist()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.messages])
+  }, [state.messages, state.step])
 
   useEffect(() => {
     if (!state.isGenerating || !state.selectedDiaryType || !state.selectedEmotionEmoji) return

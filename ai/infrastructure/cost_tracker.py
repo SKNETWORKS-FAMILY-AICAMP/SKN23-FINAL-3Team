@@ -117,9 +117,9 @@ class OpenAICostTracker:
         await self._ensure_table()
 
         cost = _IMAGE_PRICES.get(quality, _IMAGE_PRICES["low"])
-        logger.info("[비용] gpt-image-1 | quality=%s | $%.4f | %s", quality, cost, note or "-")
+        logger.info("[비용] %s | quality=%s | $%.4f | %s", settings.GPT_IMAGE_MODEL, quality, cost, note or "-")
         await self._insert(
-            model="gpt-image-1",
+            model=settings.GPT_IMAGE_MODEL,
             call_type="image",
             prompt_tokens=0,
             completion_tokens=0,

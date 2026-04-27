@@ -29,6 +29,8 @@ if _root not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(os.path.join(_root, ".env"))
 
+from back.api.core.config import settings
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
@@ -170,7 +172,7 @@ async def generate_image(req: ImageRequest) -> ImageResponse:
         raise HTTPException(status_code=400, detail="image_prompt가 비어 있습니다.")
 
     response = await get_client().images.generate(
-        model="gpt-image-1",
+        model=settings.GPT_IMAGE_MODEL,
         prompt=req.image_prompt,
         size="1024x1024",
         quality="medium",  # 옵션값: low→medium (얼굴·디테일 품질 향상)
