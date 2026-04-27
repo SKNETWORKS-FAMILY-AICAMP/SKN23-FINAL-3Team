@@ -953,7 +953,7 @@ async def search_places_from_db(
     db: AsyncSession,
     n_results: int = 5,
     category: str = None,
-    city: str = None,
+    city: str = None, 
     request: Request = None,
 ) -> list[dict]:
     """Run the hybrid place-search pipeline."""
@@ -1007,7 +1007,6 @@ async def search_places_from_db(
         logger.error(f"[PlaceService] place search failed: {e}")
         return []
 
-
 def _calc_rule_score(place: PlaceModel) -> float:
     """Calculate a simple rule-based dog-friendliness score."""
     score = 0.0
@@ -1020,7 +1019,6 @@ def _calc_rule_score(place: PlaceModel) -> float:
     if place.has_parking and place.has_parking.value == "Y":
         score += 0.1
     return round(min(score, 1.0), 4)
-
 
 def _to_dict(place: PlaceModel) -> dict:
     """Convert a PlaceModel instance into an API response dict."""

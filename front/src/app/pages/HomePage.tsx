@@ -230,20 +230,19 @@ function DiaryAlbum({
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
-  const [pinnedMap, setPinnedMap] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem('pinned_diaries') || '{}'); } catch { return {}; }
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('diary_favorites');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
   });
 
-  const handleTogglePin = (e: React.MouseEvent, entry: DiaryEntry) => {
+  const toggleFavorite = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setPinnedMap((prev) => {
-      const next = { ...prev };
-      if (next[entry.date] === entry.id) {
-        delete next[entry.date];
-      } else {
-        next[entry.date] = entry.id;
-      }
-      localStorage.setItem('pinned_diaries', JSON.stringify(next));
+    setFavorites(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('diary_favorites', JSON.stringify([...next]));
       return next;
     });
   };
@@ -377,16 +376,18 @@ function DiaryAlbum({
     );
   }
 
-  // 날짜별 그룹핑 (최신 날짜 먼저)
-  const grouped = [...diaries].reduce<{ date: string; entries: DiaryEntry[] }[]>((acc, entry) => {
-    const existing = acc.find((g) => g.date === entry.date);
-    if (existing) {
-      existing.entries.push(entry);
-    } else {
-      acc.push({ date: entry.date, entries: [entry] });
-    }
-    return acc;
-  }, []);
+  // 날짜별 그룹핑 후 최신 날짜 먼저 정렬
+  const grouped = [...diaries]
+    .reduce<{ date: string; entries: DiaryEntry[] }[]>((acc, entry) => {
+      const existing = acc.find((g) => g.date === entry.date);
+      if (existing) {
+        existing.entries.push(entry);
+      } else {
+        acc.push({ date: entry.date, entries: [entry] });
+      }
+      return acc;
+    }, [])
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   const formatDateHeader = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -420,26 +421,24 @@ function DiaryAlbum({
 
               {/* 해당 날짜 카드 그리드 */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                {entries.map((entry) => {
-                  const isPinned = pinnedMap[entry.date] === entry.id;
-                  return (
+                {entries.map((entry) => (
                   <div
                     key={entry.id}
                     className="group relative cursor-pointer overflow-hidden rounded-[20px] border border-[#E9D9C9] bg-[#FFFDF8] shadow-[0_4px_16px_rgba(61,43,31,0.07)] transition hover:-translate-y-0.5 hover:shadow-md"
                     onClick={() => setSelected(entry)}
                   >
-                    {/* 즐겨찾기 버튼 — 왼쪽 상단, 항상 표시 */}
+                    {/* 즐겨찾기 버튼 (좌상단) */}
                     <button
-                      onClick={(e) => handleTogglePin(e, entry)}
-                      title={isPinned ? '캘린더 대표 해제' : '캘린더 대표로 설정'}
-                      className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm transition hover:bg-black/50"
+                      onClick={(e) => toggleFavorite(e, entry.id)}
+                      className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 transition hover:bg-black/50"
                     >
                       <Star
-                        className="h-3.5 w-3.5"
-                        style={isPinned ? { fill: '#F4845F', color: '#F4845F' } : { fill: 'transparent', color: 'white' }}
+                        className="h-4 w-4"
+                        fill={favorites.has(entry.id) ? '#F4845F' : 'none'}
+                        stroke={favorites.has(entry.id) ? '#F4845F' : 'white'}
                       />
                     </button>
-                    {/* 삭제 버튼 — 오른쪽 상단, 호버 시 표시 */}
+                    {/* 삭제 버튼 (우상단, hover 시 표시) */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -461,8 +460,7 @@ function DiaryAlbum({
                       )}
                     </div>
                   </div>
-                  );
-                })}
+                ))}
               </div>
             </div>
           ))}
@@ -611,6 +609,7 @@ export default function HomePage({
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [chatKey, setChatKey] = useState(0);
   const [savedDiaryId, setSavedDiaryId] = useState<number | null>(null);
   const [isEditingDiary, setIsEditingDiary] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -1053,13 +1052,26 @@ export default function HomePage({
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => setShowChatHistory((prev) => !prev)}
-                    className="rounded-full px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80"
-                    style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
-                  >
-                    {showChatHistory ? '← 챗봇' : '최근 대화 기록'}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {!showChatHistory && (
+                      <button
+                        onClick={() => {
+                          setShowChatHistory(false);
+                          setChatKey((k) => k + 1);
+                        }}
+                        className="rounded-full border border-[#F4845F] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] transition hover:bg-[#FFF0E6]"
+                      >
+                        + 새 채팅
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowChatHistory((prev) => !prev)}
+                      className="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
+                      style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
+                    >
+                      {showChatHistory ? '← 챗봇' : '최근 채팅 기록'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1069,6 +1081,7 @@ export default function HomePage({
                 ) : (
                   <div className="h-full p-3">
                     <ChatBot
+                      key={chatKey}
                       pet={currentPet}
                       onSelectPlace={handleUsePlace}
                       onPlacesFound={handlePlacesFound}
@@ -1076,6 +1089,7 @@ export default function HomePage({
                       onNavigateToMap={handleOpenMapTab}
                       onDiaryReady={handleDiaryReady}
                       diaryTrigger={diaryTrigger}
+                      initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
                     />
                   </div>
                 )}
