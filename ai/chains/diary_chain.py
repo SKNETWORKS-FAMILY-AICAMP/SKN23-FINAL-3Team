@@ -8,10 +8,6 @@ from ai.retrievers.breed_retriever import BreedRetriever
 from ai.retrievers.diary_retriever import DiaryRetriever
 from ai.infrastructure.cost_tracker import OpenAICostTracker
 
-MODEL = "gpt-4.1-mini"
-IMAGE_MODEL = "gpt-image-1"
-
-
 class DiaryChain(BaseChain):
 
     def __init__(
@@ -83,7 +79,7 @@ class DiaryChain(BaseChain):
         print("GPT 일기 생성 중...")
         try:
             response = await self._llm.chat.completions.create(
-                model=MODEL,
+                model=settings.GPT_MODEL,
                 messages=[
                     {"role": "system", "content": self._prompt_builder.build_system_prompt()},
                     {"role": "user",   "content": diary_llm_prompt},
@@ -165,7 +161,7 @@ class DiaryChain(BaseChain):
         print("이미지 생성 중...")
         try:
             response = await self._llm.images.generate(
-                model=IMAGE_MODEL,
+                model=settings.GPT_IMAGE_MODEL,
                 prompt=image_prompt_final,
                 size="1024x1024",
                 quality=quality,

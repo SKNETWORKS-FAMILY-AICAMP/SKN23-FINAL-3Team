@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 _openai_client: AsyncOpenAI | None = None
 _GPT_MODEL = settings.GPT_MODEL
-_IMAGE_MODEL = settings.DIARY_IMAGE_MODEL
+_IMAGE_MODEL = settings.GPT_IMAGE_MODEL
 _OUT_OF_SERVICE_AREA_MESSAGE = "현재 서비스는 서울 지역만 지원하고 있습니다."
 
 

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Navigation, Phone } from 'lucide-react';
 import type { PlaceResult } from '../services/placeService';
 
-declare const kakao: any;
+declare global {
+  interface Window {
+    kakao: any;
+  }
+}
+
 
 interface Props {
   places: PlaceResult[];

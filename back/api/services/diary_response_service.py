@@ -39,7 +39,7 @@ _diary_prompt_builder = DiaryPromptBuilder()
 
 _openai_client: AsyncOpenAI | None = None
 _GPT_MODEL = settings.GPT_MODEL
-_IMAGE_MODEL = settings.DIARY_IMAGE_MODEL
+_IMAGE_MODEL = settings.GPT_IMAGE_MODEL
 
 _BUTTONS_MARKER = "%%BUTTONS%%"
 
