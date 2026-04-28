@@ -171,7 +171,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
 {focus}
 
 [내용 구성]
-- 본문 450자 이상 500자 이내
+- 본문 400자 이상
 - 5~7문장
 - 기승전결이 느껴지는 자연스러운 흐름
 - 감각 묘사 2개 이상 포함 (냄새/촉감/소리/움직임 중)
@@ -211,7 +211,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
 [출력 형식 - 반드시 JSON만]
 {{
   "title": "귀엽고 짧은 제목 (15자 이내, 강아지 말투)",
-  "content": "일기 본문 (450자 이상 500자 이내, 강아지 1인칭)",
+  "content": "일기 본문 (400자 이상, 강아지 1인칭)",
   "summary": "한줄요약 (30자 이내, 귀엽게)",
   "image_prompt_base": "English only. One single storybook scene within 90 words. One cute dog as the main character. Narrative single moment, not a static portrait, not a collage, not multiple scenes."
 }}
