@@ -6,12 +6,11 @@ import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse } from '../services/chatService'
+import { createChatRoom, sendMessageWithResponse, updateMessageContent, type FacilityCard } from '../services/chatService'
 import { searchPlaces, type PlaceResult } from '../services/placeService'
 
 const BUTTONS_MARKER = '%%BUTTONS%%'
 const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
-const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
 
 function parseMessageButtons(content: string): { text: string; buttons: string[] } {
   const idx = content.indexOf(BUTTONS_MARKER)
@@ -108,8 +107,16 @@ function buildFallbackPlaceReason(place: {
 
 function renderPlaceMessage(
   text: string,
-  places?: PlaceResult[],
-  onPlaceClick?: (place: PlaceResult) => void,
+  places?: Array<{
+    name: string
+    address: string
+    category: string
+    sub_category: string
+    indoor: string
+    outdoor: string
+    has_parking: string
+    reason?: string
+  }>,
 ) {
   const blocks = splitPlaceMessage(text)
   const fallbackIntro = blocks[0]
@@ -268,18 +275,8 @@ export default function ChatBot({
     }
   }
 
-  const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
-  const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
-
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
-    // 일기 관련 키워드가 명확히 포함된 경우 백엔드 호출 없이 다이어리 플로우로 진입
-    if (DIARY_KEYWORDS.some((k) => text.includes(k))) {
-      actions.triggerDiaryFlow()
-      onNavigateToDiary?.()
-      return
-    }
-
     try {
       let roomId = welcomeChatRoomId
       if (roomId === null) {
@@ -321,6 +318,18 @@ export default function ChatBot({
           updateMessageContent(roomId, result.assistant_message.id, formatted).catch(() => { })
         }
         setTimeout(() => onNavigateToMap?.(), 800)
+      } else if (intent === '시설정보') {
+        const facility = result.facility
+        if (facility) {
+          const mappedPlace = facilityToPlaceResult(facility)
+          onPlacesFound?.([mappedPlace])
+          actions.receiveBotMessage(botText, undefined, 'facility', undefined, facility)
+          setTimeout(() => onNavigateToMap?.(), 800)
+        } else {
+          actions.receiveBotMessage(botText)
+        }
+      } else {
+        actions.receiveBotMessage(botText)
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
@@ -387,7 +396,11 @@ export default function ChatBot({
                   }`}
               >
                 {msg.role === 'bot'
-                  ? (msg.variant === 'place' ? renderPlaceMessage(displayText, msg.places) : renderBotText(displayText))
+                  ? (msg.variant === 'place'
+                      ? renderPlaceMessage(displayText, msg.places)
+                      : msg.variant === 'facility'
+                        ? renderFacilityMessage(displayText, msg.facility)
+                        : renderBotText(displayText))
                   : displayText}
               </div>
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}

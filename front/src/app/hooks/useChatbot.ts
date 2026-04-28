@@ -3,7 +3,8 @@ import type { Pet } from '../types'
 import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, saveMessage } from '../services/chatService'
+import { createChatRoom, saveMessage, type FacilityCard } from '../services/chatService'
+import type { PlaceResult } from '../services/placeService'
 
 // ── 메시지 타입 ──────────────────────────────────────
 export interface Message {
@@ -23,6 +24,8 @@ export interface Message {
     reason?: string
   }>
   facility?: FacilityCard
+  // variant?: 'place'
+  // places?: PlaceResult[]
 }
 
 // ── 챗봇 단계 ────────────────────────────────────────
@@ -73,7 +76,7 @@ export type ChatbotAction =
     type: 'RECEIVE_BOT_MESSAGE'
     text: string
     action?: 'start_diary'
-    variant?: 'place'
+    variant?: 'place' | 'facility'
     places?: Array<{
       name: string
       address: string
@@ -84,6 +87,9 @@ export type ChatbotAction =
       has_parking: string
       reason?: string
     }>
+    facility?: FacilityCard
+    // variant?: 'place'
+    // places?: PlaceResult[]
   }
 
 // ── 헬퍼 ─────────────────────────────────────────────
@@ -476,7 +482,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
       (
         text: string,
         action?: 'start_diary',
-        variant?: 'place',
+        variant?: 'place' | 'facility',
         places?: Array<{
           name: string
           address: string
@@ -487,7 +493,11 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
           has_parking: string
           reason?: string
         }>,
-      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
+        facility?: FacilityCard,
+      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places, facility }),
+      //   variant?: 'place',
+      //   places?: PlaceResult[],
+      // ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
       [],
     ),
   }
