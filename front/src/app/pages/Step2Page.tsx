@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { getMe, updateUser } from "../services/userService";
 import { createPet, updatePet } from "../services/petService";
-import { getAllBreeds, type Breed } from "../services/breedService";
+import { getAllBreeds, getTop10Breeds, type Breed } from "../services/breedService";
 import { uploadImage } from "../services/imageService";
 
 type GuardianGender = "male" | "female" | "other" | undefined;
@@ -29,77 +29,6 @@ type ProfileSetupData = {
   personality: string[];         // 반려견 성격 태그
   image?: string;
 };
-
-const popularBreeds = [
-  "말티즈",
-  "포메라니안",
-  "푸들",
-  "비숑 프리제",
-  "시추",
-  "골든 리트리버",
-  "라브라도 리트리버",
-  "웰시 코기",
-  "프렌치 불독",
-  "진돗개",
-  "닥스훈트",
-  "치와와",
-  "믹스견(소형)",
-  "믹스견(중형)",
-  "믹스견(대형)",
-];
-
-const allBreeds = [
-  "골든 리트리버",
-  "그레이하운드",
-  "그레이트 데인",
-  "그레이트 피레니즈",
-  "닥스훈트",
-  "달마시안",
-  "도베르만",
-  "독일 셰퍼드",
-  "라브라도 리트리버",
-  "라사 압소",
-  "말티즈",
-  "말티푸",
-  "맨체스터 테리어",
-  "마스티프",
-  "미니어처 슈나우저",
-  "미니어처 핀셔",
-  "바센지",
-  "바셋 하운드",
-  "버니즈 마운틴 독",
-  "보더 콜리",
-  "보스턴 테리어",
-  "불 테리어",
-  "비글",
-  "비숑 프리제",
-  "사모예드",
-  "삽살개",
-  "시바 이누",
-  "시베리안 허스키",
-  "시추",
-  "아메리칸 코커 스패니얼",
-  "아키타",
-  "아프간 하운드",
-  "요크셔 테리어",
-  "웰시 코기",
-  "잭 러셀 테리어",
-  "진돗개",
-  "차우차우",
-  "치와와",
-  "카발리에 킹 찰스 스패니얼",
-  "케언 테리어",
-  "코커 스패니얼",
-  "콜리",
-  "퍼그",
-  "페키니즈",
-  "포메라니안",
-  "푸들",
-  "프렌치 불독",
-  "믹스견(소형)",
-  "믹스견(중형)",
-  "믹스견(대형)",
-];
 
 // scoring.py DOG_TAG_SCORES 기준 (24개)
 const personalityOptions = [
@@ -245,9 +174,8 @@ function BreedModal({
 
   const filteredBreeds = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    const list = breeds.length > 0 ? breeds : allBreeds.map((n) => ({ id: 0, name_ko: n, name_en: n, top10: false, created_at: "" }));
-    if (!q) return list;
-    return list.filter((b) => b.name_ko.toLowerCase().includes(q) || b.name_en.toLowerCase().includes(q));
+    if (!q) return breeds;
+    return breeds.filter((b) => b.name_ko.toLowerCase().includes(q) || b.name_en.toLowerCase().includes(q));
   }, [keyword, breeds]);
 
   if (!isOpen) return null;
@@ -288,28 +216,34 @@ function BreedModal({
         </div>
 
         <div className="mt-6 overflow-y-auto px-6 pb-8 md:px-8">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 pr-2">
-            {filteredBreeds.map((breed) => {
-              const active = selectedBreed === breed.name_ko;
-              return (
-                <button
-                  key={breed.id || breed.name_ko}
-                  type="button"
-                  onClick={() => {
-                    onSelect(breed);
-                    onClose();
-                  }}
-                  className={`rounded-[16px] px-4 py-4 text-left text-[18px] font-medium transition ${
-                    active
-                      ? "bg-[#F7E8E1] text-[#C65B27]"
-                      : "text-[#5F5A55] hover:bg-[#F7F4F1]"
-                  }`}
-                >
-                  {breed.name_ko}
-                </button>
-              );
-            })}
-          </div>
+          {breeds.length === 0 ? (
+            <p className="py-12 text-center text-[#8D867E]">견종 목록을 불러오는 중...</p>
+          ) : filteredBreeds.length === 0 ? (
+            <p className="py-12 text-center text-[#8D867E]">검색 결과가 없습니다.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 pr-2">
+              {filteredBreeds.map((breed) => {
+                const active = selectedBreed === breed.name_ko;
+                return (
+                  <button
+                    key={breed.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(breed);
+                      onClose();
+                    }}
+                    className={`rounded-[16px] px-4 py-4 text-left text-[18px] font-medium transition ${
+                      active
+                        ? "bg-[#F7E8E1] text-[#C65B27]"
+                        : "text-[#5F5A55] hover:bg-[#F7F4F1]"
+                    }`}
+                  >
+                    {breed.name_ko}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -468,6 +402,7 @@ export default function ProfileSetupPage() {
   });
   const [selectedBreedId, setSelectedBreedId] = useState<number | null>(null);
   const [breeds, setBreeds] = useState<Breed[]>([]);
+  const [topBreeds, setTopBreeds] = useState<Breed[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isBreedModalOpen, setIsBreedModalOpen] = useState(false);
@@ -479,6 +414,7 @@ export default function ProfileSetupPage() {
 
   useEffect(() => {
     getAllBreeds().then(setBreeds).catch(() => {/* 로드 실패 시 하드코딩 목록으로 fallback */});
+    getTop10Breeds().then(setTopBreeds).catch(() => setTopBreeds([]));
   }, []);
 
   // 수정 모드: 기존 데이터로 폼 초기화
@@ -574,13 +510,9 @@ export default function ProfileSetupPage() {
     e.target.value = "";
   };
 
-  // 인기 견종 칩 클릭 시 breed_id도 같이 세팅
-  const normalize = (s: string) => s.replace(/[\s\-·（）()]/g, '').toLowerCase();
-  const handlePopularBreedSelect = (breedName: string) => {
-    setForm((prev) => ({ ...prev, breed: breedName }));
-    const found = breeds.find((b) => normalize(b.name_ko) === normalize(breedName));
-    if (found) setSelectedBreedId(found.id);
-    else setSelectedBreedId(null);
+  const handleTopBreedSelect = (breed: Breed) => {
+    setForm((prev) => ({ ...prev, breed: breed.name_ko }));
+    setSelectedBreedId(breed.id);
   };
 
   const handleStart = async () => {
@@ -592,6 +524,7 @@ export default function ProfileSetupPage() {
       alert("견종을 선택해주세요. (목록에서 선택하거나 견종 선택 버튼을 눌러주세요)");
       return;
     }
+    const breedId = selectedBreedId;
     if (!form.petGender) {
       alert("반려견 성별을 선택해주세요.");
       return;
@@ -624,7 +557,7 @@ export default function ProfileSetupPage() {
           profile_id: profileId,
         });
         const updatedPet = await updatePet(petId, {
-          breed_id: selectedBreedId,
+          breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
@@ -640,7 +573,7 @@ export default function ProfileSetupPage() {
       } else if (isPetOnlyMode) {
         // 반려견 추가 모드: createPet만
         const newPet = await createPet({
-          breed_id: selectedBreedId,
+          breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
@@ -670,7 +603,7 @@ export default function ProfileSetupPage() {
           profile_id: profileId,
         });
         const newPet = await createPet({
-          breed_id: selectedBreedId,
+          breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
@@ -885,13 +818,13 @@ export default function ProfileSetupPage() {
 
                 <p className="mb-3 mt-4 text-xs font-medium text-[#C18A61]">인기 견종</p>
                 <div className="flex flex-wrap gap-2">
-                  {popularBreeds.map((breed) => (
+                  {topBreeds.map((breed) => (
                     <Chip
-                      key={breed}
-                      active={form.breed === breed}
-                      onClick={() => handlePopularBreedSelect(breed)}
+                      key={breed.id}
+                      active={selectedBreedId === breed.id}
+                      onClick={() => handleTopBreedSelect(breed)}
                     >
-                      {breed}
+                      {breed.name_ko}
                     </Chip>
                   ))}
                 </div>

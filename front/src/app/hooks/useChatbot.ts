@@ -3,7 +3,7 @@ import type { Pet } from '../types'
 import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, saveMessage } from '../services/chatService'
+import { createChatRoom, saveMessage, type FacilityCard } from '../services/chatService'
 import type { PlaceResult } from '../services/placeService'
 
 // ── 메시지 타입 ──────────────────────────────────────
@@ -12,8 +12,20 @@ export interface Message {
   role: 'bot' | 'user'
   content: string
   action?: 'start_diary'
-  variant?: 'place'
-  places?: PlaceResult[]
+  variant?: 'place' | 'facility'
+  places?: Array<{
+    name: string
+    address: string
+    category: string
+    sub_category: string
+    indoor: string
+    outdoor: string
+    has_parking: string
+    reason?: string
+  }>
+  facility?: FacilityCard
+  // variant?: 'place'
+  // places?: PlaceResult[]
 }
 
 // ── 챗봇 단계 ────────────────────────────────────────
@@ -61,12 +73,24 @@ export type ChatbotAction =
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
   | { type: 'TRIGGER_DIARY_FLOW' }
   | {
-      type: 'RECEIVE_BOT_MESSAGE'
-      text: string
-      action?: 'start_diary'
-      variant?: 'place'
-      places?: PlaceResult[]
-    }
+    type: 'RECEIVE_BOT_MESSAGE'
+    text: string
+    action?: 'start_diary'
+    variant?: 'place' | 'facility'
+    places?: Array<{
+      name: string
+      address: string
+      category: string
+      sub_category: string
+      indoor: string
+      outdoor: string
+      has_parking: string
+      reason?: string
+    }>
+    facility?: FacilityCard
+    // variant?: 'place'
+    // places?: PlaceResult[]
+  }
 
 // ── 헬퍼 ─────────────────────────────────────────────
 let _counter = 0
@@ -262,6 +286,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       if (action.action) msg.action = action.action
       if (action.variant) msg.variant = action.variant
       if (action.places) msg.places = action.places
+      if (action.facility) msg.facility = action.facility
       return {
         ...state,
         isGenerating: false,
@@ -346,7 +371,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
   // pet prop이 바뀌면 내부 state.pet도 동기화
   useEffect(() => {
     dispatch({ type: 'UPDATE_PET', pet })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pet.name, pet.breed, pet.ownerName, pet.birthDate])
 
   // 메시지가 초기화되면(RESET/FORCE_START) 저장 상태도 초기화
@@ -399,7 +424,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
     }
 
     persist()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.messages, state.step])
 
   useEffect(() => {
@@ -457,9 +482,22 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
       (
         text: string,
         action?: 'start_diary',
-        variant?: 'place',
-        places?: PlaceResult[],
-      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
+        variant?: 'place' | 'facility',
+        places?: Array<{
+          name: string
+          address: string
+          category: string
+          sub_category: string
+          indoor: string
+          outdoor: string
+          has_parking: string
+          reason?: string
+        }>,
+        facility?: FacilityCard,
+      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places, facility }),
+      //   variant?: 'place',
+      //   places?: PlaceResult[],
+      // ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
       [],
     ),
   }

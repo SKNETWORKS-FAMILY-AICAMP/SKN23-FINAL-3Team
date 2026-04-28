@@ -6,12 +6,11 @@ import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse, updateMessageContent } from '../services/chatService'
+import { createChatRoom, sendMessageWithResponse, updateMessageContent, type FacilityCard } from '../services/chatService'
 import { searchPlaces, type PlaceResult } from '../services/placeService'
 
 const BUTTONS_MARKER = '%%BUTTONS%%'
 const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
-const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
 
 function parseMessageButtons(content: string): { text: string; buttons: string[] } {
   const idx = content.indexOf(BUTTONS_MARKER)
@@ -108,8 +107,16 @@ function buildFallbackPlaceReason(place: {
 
 function renderPlaceMessage(
   text: string,
-  places?: PlaceResult[],
-  onPlaceClick?: (place: PlaceResult) => void,
+  places?: Array<{
+    name: string
+    address: string
+    category: string
+    sub_category: string
+    indoor: string
+    outdoor: string
+    has_parking: string
+    reason?: string
+  }>,
 ) {
   const blocks = splitPlaceMessage(text)
   const fallbackIntro = blocks[0]
@@ -121,20 +128,19 @@ function renderPlaceMessage(
         <>
           <p>반려견과 함께 가보기 좋은 장소를 정리했어요.</p>
           <div className="space-y-3">
-          {places.map((place, index) => (
-            <div key={`${place.name}-${index}`} className="space-y-1">
-              <button
-                onClick={() => onPlaceClick?.(place)}
-                className="font-semibold text-[#F4845F] underline underline-offset-2 text-left hover:text-[#e8764f] transition-colors"
-              >
-                {index + 1}. {place.name}
-              </button>
-              <p>- 주소: {place.address}</p>
-              <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
-            </div>
-          ))}
+            {places.map((place, index) => {
+              return (
+                <div key={`${place.name}-${index}`} className="space-y-1">
+                  <p className="font-semibold text-[#2F241D]">
+                    {index + 1}. {place.name}
+                  </p>
+                  <p>- 주소: {place.address}</p>
+                  <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
+                </div>
+              )
+            })}
           </div>
-          <p>장소 이름을 누르면 상세 정보를 확인할 수 있어요.</p>
+          <p>세부 정보는 아래 지도와 장소 카드에서 함께 확인해보세요.</p>
         </>
       ) : (
         <>
@@ -146,6 +152,67 @@ function renderPlaceMessage(
       )}
     </div>
   )
+}
+
+function renderFacilityMessage(text: string, facility?: FacilityCard) {
+  const lines = text.split('\n').map((l) => l.trim())
+
+  return (
+    <div className="space-y-1.5 text-[14px] leading-7 text-[#3D2B1F]">
+      {lines.map((line, idx) => {
+        if (!line) return null
+        const headerM = line.match(/^📍\s*\*\*(.+?)\*\*\s*$/)
+        if (headerM) {
+          return (
+            <p key={idx} className="text-[15px] font-semibold text-[#2F241D]">
+              📍 {headerM[1]}
+            </p>
+          )
+        }
+        const fieldM = line.match(/^-\s*([^:]+):\s*(.+)$/)
+        if (fieldM) {
+          const [, label, value] = fieldM
+          const muted = value.trim() === '정보 없음'
+          return (
+            <p key={idx} className={muted ? 'text-[#A89282]' : ''}>
+              <span className="font-medium text-[#5C4632]">{label}:</span>{' '}
+              <span>{value}</span>
+            </p>
+          )
+        }
+        return <p key={idx}>{line}</p>
+      })}
+      {facility?.match_source === 'vector' && facility.match_confidence < 0.7 && (
+        <p className="pt-1 text-[12px] text-[#A89282]">
+          (추정 매칭이라 다른 시설일 수 있어요. 정확한 이름을 알려주시면 다시 찾아드릴게요.)
+        </p>
+      )}
+    </div>
+  )
+}
+
+function facilityToPlaceResult(f: FacilityCard): PlaceResult {
+  return {
+    name: f.name,
+    address: f.address,
+    category: f.category,
+    sub_category: f.sub_category,
+    content_id: f.content_id,
+    lat: f.lat,
+    lng: f.lng,
+    tel: f.tel,
+    conditions: f.conditions,
+    pet_zone: '',
+    pet_size: '',
+    has_parking: f.has_parking,
+    operation: f.operation,
+    indoor: f.indoor,
+    outdoor: f.outdoor,
+    description: f.description,
+    firstimage: '',
+    similarity: f.match_confidence,
+    final_score: f.match_confidence,
+  }
 }
 
 interface Props {
@@ -210,13 +277,6 @@ export default function ChatBot({
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
-    // 일기 관련 키워드가 명확히 포함된 경우 백엔드 호출 없이 다이어리 플로우로 진입
-    if (DIARY_KEYWORDS.some((k) => text.includes(k))) {
-      actions.triggerDiaryFlow()
-      onNavigateToDiary?.()
-      return
-    }
-
     try {
       let roomId = welcomeChatRoomId
       if (roomId === null) {
@@ -243,7 +303,7 @@ export default function ChatBot({
         } else {
           actions.receiveBotMessage(botText)
         }
-      } else if (intent === '장소추천' || intent === '시설정보') {
+      } else if (intent === '장소추천') {
         let places: PlaceResult[] = []
         try {
           places = await searchPlaces({ query: text, pet_id: selectedPetId })
@@ -255,11 +315,20 @@ export default function ChatBot({
         // 화면에 표시된 장소 목록과 DB 저장 내용을 동기화 (채팅 기록과 일치)
         if (places.length > 0 && roomId !== null && result.assistant_message.id) {
           const formatted = formatPlacesForStorage(places)
-          updateMessageContent(roomId, result.assistant_message.id, formatted).catch(() => {})
+          updateMessageContent(roomId, result.assistant_message.id, formatted).catch(() => { })
         }
         setTimeout(() => onNavigateToMap?.(), 800)
+      } else if (intent === '시설정보') {
+        const facility = result.facility
+        if (facility) {
+          const mappedPlace = facilityToPlaceResult(facility)
+          onPlacesFound?.([mappedPlace])
+          actions.receiveBotMessage(botText, undefined, 'facility', undefined, facility)
+          setTimeout(() => onNavigateToMap?.(), 800)
+        } else {
+          actions.receiveBotMessage(botText)
+        }
       } else {
-        // 기타 intent — 백엔드 응답 텍스트를 그대로 표시
         actions.receiveBotMessage(botText)
       }
     } catch {
@@ -275,7 +344,7 @@ export default function ChatBot({
     if (!diaryTrigger) return
     actions.forceStartDiary(diaryPlace)
     onNavigateToDiary?.()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaryTrigger])
 
   const handleSubmitText = () => {
@@ -321,14 +390,17 @@ export default function ChatBot({
           return (
             <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
               <div
-                className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
-                  msg.role === 'bot'
-                    ? 'bg-white text-[#3D2B1F] shadow-sm'
-                    : 'bg-[#F4845F] text-white'
-                }`}
+                className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${msg.role === 'bot'
+                  ? 'bg-white text-[#3D2B1F] shadow-sm'
+                  : 'bg-[#F4845F] text-white'
+                  }`}
               >
                 {msg.role === 'bot'
-                  ? (msg.variant === 'place' ? renderPlaceMessage(displayText, msg.places, setSelectedChatPlace) : renderBotText(displayText))
+                  ? (msg.variant === 'place'
+                      ? renderPlaceMessage(displayText, msg.places)
+                      : msg.variant === 'facility'
+                        ? renderFacilityMessage(displayText, msg.facility)
+                        : renderBotText(displayText))
                   : displayText}
               </div>
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
@@ -455,81 +527,81 @@ export default function ChatBot({
 
         {isLoggedIn && <>
 
-        {/* 일기 유형 선택 */}
-        {step === 'type_select' && (
-          <div className="grid grid-cols-2 gap-2 p-3">
-            {DIARY_TYPES.map((dt) => (
+          {/* 일기 유형 선택 */}
+          {step === 'type_select' && (
+            <div className="grid grid-cols-2 gap-2 p-3">
+              {DIARY_TYPES.map((dt) => (
+                <button
+                  key={dt.id}
+                  onClick={() => actions.selectDiaryType(dt.id)}
+                  className="flex flex-col items-start rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] px-3 py-3 text-left transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                >
+                  <span className="mb-1 text-xl">{dt.icon}</span>
+                  <span className="text-xs font-bold text-[#3D2B1F]">{dt.label}</span>
+                  <span className="text-[10px] text-[#8B6355]">{dt.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 보조 관점 제안 */}
+          {step === 'additional_prompt' && (
+            <div className="flex gap-2 p-3">
               <button
-                key={dt.id}
-                onClick={() => actions.selectDiaryType(dt.id)}
-                className="flex flex-col items-start rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] px-3 py-3 text-left transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                onClick={() => actions.respondToPerspective(true)}
+                className="flex-1 rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white transition hover:bg-[#e8764f]"
               >
-                <span className="mb-1 text-xl">{dt.icon}</span>
-                <span className="text-xs font-bold text-[#3D2B1F]">{dt.label}</span>
-                <span className="text-[10px] text-[#8B6355]">{dt.description}</span>
+                네, 좋아요!
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* 보조 관점 제안 */}
-        {step === 'additional_prompt' && (
-          <div className="flex gap-2 p-3">
-            <button
-              onClick={() => actions.respondToPerspective(true)}
-              className="flex-1 rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white transition hover:bg-[#e8764f]"
-            >
-              네, 좋아요!
-            </button>
-            <button
-              onClick={() => actions.respondToPerspective(false)}
-              className="flex-1 rounded-xl border border-[#F5D6C8] py-3 text-sm font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              괜찮아요
-            </button>
-          </div>
-        )}
-
-        {/* 감정 선택 */}
-        {step === 'emotion_select' && (
-          <div className="grid grid-cols-4 gap-2 p-3">
-            {EMOTIONS.map((em) => (
               <button
-                key={em.emoji}
-                onClick={() => actions.selectEmotion(em.emoji, em.label)}
-                className="flex flex-col items-center rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] py-2.5 transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                onClick={() => actions.respondToPerspective(false)}
+                className="flex-1 rounded-xl border border-[#F5D6C8] py-3 text-sm font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
               >
-                <span className="text-2xl">{em.emoji}</span>
-                <span className="mt-1 text-[10px] text-[#8B6355]">{em.label}</span>
+                괜찮아요
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* 텍스트 입력창 */}
-        {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
-          <div className="flex items-center gap-2 p-3">
-            <input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSubmitText()
-                }
-              }}
-              placeholder="편하게 말씀해주세요..."
-              className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
-            />
-            <button
-              onClick={handleSubmitText}
-              disabled={!inputValue.trim()}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+          {/* 감정 선택 */}
+          {step === 'emotion_select' && (
+            <div className="grid grid-cols-4 gap-2 p-3">
+              {EMOTIONS.map((em) => (
+                <button
+                  key={em.emoji}
+                  onClick={() => actions.selectEmotion(em.emoji, em.label)}
+                  className="flex flex-col items-center rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] py-2.5 transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                >
+                  <span className="text-2xl">{em.emoji}</span>
+                  <span className="mt-1 text-[10px] text-[#8B6355]">{em.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 텍스트 입력창 */}
+          {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
+            <div className="flex items-center gap-2 p-3">
+              <input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSubmitText()
+                  }
+                }}
+                placeholder="편하게 말씀해주세요..."
+                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
+              />
+              <button
+                onClick={handleSubmitText}
+                disabled={!inputValue.trim()}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </>}
       </div>
 

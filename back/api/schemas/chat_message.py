@@ -50,6 +50,35 @@ class IntentInfo(BaseModel):
     confidence: float = Field(..., description="분류 신뢰도 (0.0~1.0)")
 
 
+class FacilityCard(BaseModel):
+    """
+        시설정보 의도 응답에 첨부되는 단일 시설 카드 페이로드.
+
+        프론트가 이 데이터로 챗방 우측 패널의 시설 상세 카드와 지도 단일 좌표 포커스를 그린다.
+    """
+
+    name: str = Field(..., description="시설명")
+    address: str = Field("", description="도로명 주소")
+    category: str = Field("", description="대분류 (한국관광공사 코드 매핑)")
+    sub_category: str = Field("", description="세부 분류 (카페/공원/숙박 등)")
+    content_id: str = Field("", description="한국관광공사 콘텐츠 ID")
+    lat: float = Field(0.0, description="위도 (WGS84)")
+    lng: float = Field(0.0, description="경도 (WGS84)")
+    tel: str = Field("", description="대표 전화")
+    operation: str = Field("", description="운영시간/휴무일 정보")
+    has_parking: str = Field("", description="주차 가능 여부 (Y/N/'')")
+    indoor: str = Field("", description="실내 가능 (Y/N)")
+    outdoor: str = Field("", description="실외 가능 (Y/N)")
+    conditions: str = Field("", description="반려견 동반 시 제한사항 원문")
+    description: str = Field("", description="장소 설명 텍스트")
+    entrance_fee_amount: int | None = Field(None, description="입장료 (원). 미상이면 null")
+    entrance_fee_type: str = Field("unknown", description="free/fixed/variable/conditional/unknown")
+    extra_fee_amount: int | None = Field(None, description="강아지 추가요금 (원). 미상이면 null")
+    extra_fee_type: str = Field("unknown", description="free/fixed/variable/conditional/unknown")
+    match_source: str = Field("vector", description="매칭 경로 (name_exact | vector)")
+    match_confidence: float = Field(0.0, description="매칭 신뢰도 (0.0~1.0)")
+
+
 class MessageUpdate(BaseModel):
     """채팅 메시지 내용 수정 요청."""
     content: str = Field(..., min_length=1, description="수정할 메시지 본문")
@@ -65,3 +94,7 @@ class ChatTurnResponse(BaseModel):
     user_message: MessageResponse = Field(..., description="저장된 사용자 메시지")
     assistant_message: MessageResponse = Field(..., description="저장된 assistant 응답 메시지")
     intent: IntentInfo = Field(..., description="의도 분류 결과")
+    facility: FacilityCard | None = Field(
+        None,
+        description="시설정보 의도일 때만 채워지는 단일 시설 카드 페이로드 (그 외 null)",
+    )
