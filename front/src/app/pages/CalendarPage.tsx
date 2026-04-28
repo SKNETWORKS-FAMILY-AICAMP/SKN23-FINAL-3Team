@@ -170,6 +170,11 @@ export default function CalendarPage() {
                     ✨ {selectedDiary.summary}
                   </div>
                 )}
+                {selectedDiary.where_text && (
+                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#F0F7FF] px-3 py-1 text-xs font-medium text-[#5B8DB8]">
+                    📍 {selectedDiary.where_text}
+                  </div>
+                )}
               </div>
 
               {/* 이미지 */}

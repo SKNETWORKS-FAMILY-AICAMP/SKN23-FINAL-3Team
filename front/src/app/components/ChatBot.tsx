@@ -203,12 +203,13 @@ function facilityToPlaceResult(f: FacilityCard): PlaceResult {
 
 interface Props {
   pet?: Pet
-  onSelectPlace?: (place: string) => void
+  onSelectPlace?: (place: PlaceResult) => void
   onPlacesFound?: (places: PlaceResult[]) => void
   onNavigateToMap?: () => void
   onNavigateToDiary?: () => void
   onDiaryReady?: (diary: GeneratedDiary, imageUrl: string) => void
   diaryTrigger?: number
+  diaryPlace?: string
   initialMessage?: string
 }
 
@@ -222,6 +223,7 @@ export default function ChatBot({
   onNavigateToDiary,
   onDiaryReady,
   diaryTrigger,
+  diaryPlace,
   initialMessage,
 }: Props) {
   const navigate = useNavigate()
@@ -271,9 +273,17 @@ export default function ChatBot({
   }
 
   const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
+  const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
+    // 일기 관련 키워드가 명확히 포함된 경우 백엔드 호출 없이 다이어리 플로우로 진입
+    if (DIARY_KEYWORDS.some((k) => text.includes(k))) {
+      actions.triggerDiaryFlow()
+      onNavigateToDiary?.()
+      return
+    }
+
     try {
       let roomId = welcomeChatRoomId
       if (roomId === null) {
@@ -367,7 +377,7 @@ export default function ChatBot({
 
   useEffect(() => {
     if (!diaryTrigger) return
-    actions.forceStartDiary()
+    actions.forceStartDiary(diaryPlace)
     onNavigateToDiary?.()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaryTrigger])
@@ -404,10 +414,6 @@ export default function ChatBot({
   const handleStartDiary = () => {
     actions.startDiary()
     onNavigateToDiary?.()
-  }
-
-  const handleNavigateToMap = () => {
-    onNavigateToMap?.()
   }
 
   return (
@@ -492,7 +498,10 @@ export default function ChatBot({
               그림일기
             </button>
             <button
-              onClick={handleNavigateToMap}
+              onClick={() => {
+                actions.submitWelcomeChat('반려견과 함께 가기 좋은 장소를 추천해줘')
+                sendWelcomeMessage('반려견과 함께 가기 좋은 장소를 추천해줘')
+              }}
               className="rounded-full border border-[#F4845F] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#F4845F] transition hover:bg-[#FFF7F3]"
             >
               장소 추천
@@ -591,7 +600,7 @@ export default function ChatBot({
 
         {/* 감정 선택 */}
         {step === 'emotion_select' && (
-          <div className="grid grid-cols-3 gap-2 p-3">
+          <div className="grid grid-cols-4 gap-2 p-3">
             {EMOTIONS.map((em) => (
               <button
                 key={em.emoji}

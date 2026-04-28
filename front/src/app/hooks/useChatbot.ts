@@ -57,7 +57,7 @@ export interface ChatbotState {
 export type ChatbotAction =
   | { type: 'START_DIARY' }
   | { type: 'UPDATE_PET'; pet: Pet }
-  | { type: 'FORCE_START_DIARY' }
+  | { type: 'FORCE_START_DIARY'; placeName?: string }
   | { type: 'SELECT_DIARY_TYPE'; id: DiaryTypeId }
   | { type: 'SUBMIT_MAIN_ANSWER'; answer: string }
   | { type: 'RESPOND_TO_PERSPECTIVE'; accepted: boolean }
@@ -93,12 +93,12 @@ const nextId = () => `msg-${++_counter}`
 const botMsg = (content: string): Message => ({ id: nextId(), role: 'bot', content })
 const userMsg = (content: string): Message => ({ id: nextId(), role: 'user', content })
 const fmt = (tpl: string, name: string) => tpl.replace(/\{petName\}/g, name)
-const ACKS = ['그렇군요 😊', '아, 그랬군요!', '좋아요 🐾', '잘 알겠어요!', '기억해둘게요 🤍', '소중한 순간이네요.']
+const ACKS = ['그렇군요 😊', '아, 그랬군요!', '좋아요', '잘 알겠어요!', '기억해둘게요 🤍', '소중한 순간이네요.']
 const randomAck = () => ACKS[Math.floor(Math.random() * ACKS.length)]
 
 // ── 초기 상태 ────────────────────────────────────────
 function makeInitialState(pet: Pet, welcomeOverride?: string): ChatbotState {
-  const welcome = welcomeOverride ?? `안녕하세요! 저는 ${pet.name}의 반짝이는 하루와\n소중한 추억을 차곡차곡 담아드리는 AI 멍봇이에요 🐾\n\n추억을 함께 기록하고,\n어울리는 장소도 추천해드릴게요.\n\n오늘은 어떤 하루를 남겨볼까요?`
+  const welcome = welcomeOverride ?? `안녕하세요! 저는 ${pet.name}의 반짝이는 하루와\n소중한 추억을 차곡차곡 담아드리는 AI 멍봇이에요\n\n추억을 함께 기록하고,\n어울리는 장소도 추천해드릴게요.\n\n오늘은 어떤 하루를 남겨볼까요?`
   return {
     step: 'welcome',
     pet,
@@ -175,7 +175,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
         messages: [
           ...state.messages,
           userMsg(action.answer),
-          botMsg(`잘 기록됐어요! 🐾\n\n${fmt(dt.perspectiveSuggestion, petName)}`),
+          botMsg(`잘 기록됐어요!\n\n${fmt(dt.perspectiveSuggestion, petName)}`),
         ],
       }
     }
@@ -262,7 +262,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
         generatedDiary: diary,
         messages: [
           ...state.messages,
-          botMsg(`${petName}의 일기가 완성됐어요 🐾`),
+          botMsg(`${petName}의 일기가 완성됐어요`),
           botMsg(diaryMessage),
         ],
       }
@@ -296,7 +296,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
         step: 'type_select',
         messages: [
           ...state.messages,
-          botMsg(`${petName}의 오늘 하루를 어떤 유형으로 기록할까요? 🐾`),
+          botMsg(`${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`),
         ],
       }
     }
@@ -306,13 +306,16 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
 
     case 'FORCE_START_DIARY': {
       const fresh = makeInitialState(state.pet)
+      const placeMsg = action.placeName
+        ? `좋아요! ${petName}와(과) ${action.placeName}에서 보낸 하루를 어떤 유형으로 기록할까요?`
+        : `좋아요! ${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`
       return {
         ...fresh,
         step: 'type_select',
         messages: [
           ...fresh.messages,
           userMsg('그림일기 쓸게요 📝'),
-          botMsg(`좋아요! ${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`),
+          botMsg(placeMsg),
         ],
       }
     }
@@ -459,7 +462,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
 
   const actions = {
     startDiary: useCallback(() => dispatch({ type: 'START_DIARY' }), []),
-    forceStartDiary: useCallback(() => dispatch({ type: 'FORCE_START_DIARY' }), []),
+    forceStartDiary: useCallback((placeName?: string) => dispatch({ type: 'FORCE_START_DIARY', placeName }), []),
     triggerDiaryFlow: useCallback(() => dispatch({ type: 'TRIGGER_DIARY_FLOW' }), []),
     selectDiaryType: useCallback((id: DiaryTypeId) => dispatch({ type: 'SELECT_DIARY_TYPE', id }), []),
     submitMainAnswer: useCallback((answer: string) => dispatch({ type: 'SUBMIT_MAIN_ANSWER', answer }), []),
