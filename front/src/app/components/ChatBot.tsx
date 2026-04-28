@@ -273,7 +273,7 @@ export default function ChatBot({
   }
 
   const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
-  const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
+  const DIARY_KEYWORDS = ['일기 쓰', '일기 써', '일기를 쓰', '일기쓰', '그림일기 쓰', '그림일기 써']
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
