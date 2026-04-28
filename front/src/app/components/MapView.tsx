@@ -12,12 +12,13 @@ declare global {
 interface Props {
   places: PlaceResult[];
   onUsePlace: (place: PlaceResult) => void;
+  initialSelectedId?: string;
 }
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.9780 };
 
-export default function MapView({ places, onUsePlace }: Props) {
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+export default function MapView({ places, onUsePlace, initialSelectedId }: Props) {
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(initialSelectedId ?? null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);

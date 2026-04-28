@@ -4,6 +4,7 @@ import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
 import { createChatRoom, saveMessage } from '../services/chatService'
+import type { PlaceResult } from '../services/placeService'
 
 // ── 메시지 타입 ──────────────────────────────────────
 export interface Message {
@@ -12,16 +13,7 @@ export interface Message {
   content: string
   action?: 'start_diary'
   variant?: 'place'
-  places?: Array<{
-    name: string
-    address: string
-    category: string
-    sub_category: string
-    indoor: string
-    outdoor: string
-    has_parking: string
-    reason?: string
-  }>
+  places?: PlaceResult[]
 }
 
 // ── 챗봇 단계 ────────────────────────────────────────
@@ -73,16 +65,7 @@ export type ChatbotAction =
       text: string
       action?: 'start_diary'
       variant?: 'place'
-      places?: Array<{
-        name: string
-        address: string
-        category: string
-        sub_category: string
-        indoor: string
-        outdoor: string
-        has_parking: string
-        reason?: string
-      }>
+      places?: PlaceResult[]
     }
 
 // ── 헬퍼 ─────────────────────────────────────────────
@@ -475,16 +458,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
         text: string,
         action?: 'start_diary',
         variant?: 'place',
-        places?: Array<{
-          name: string
-          address: string
-          category: string
-          sub_category: string
-          indoor: string
-          outdoor: string
-          has_parking: string
-          reason?: string
-        }>,
+        places?: PlaceResult[],
       ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
       [],
     ),

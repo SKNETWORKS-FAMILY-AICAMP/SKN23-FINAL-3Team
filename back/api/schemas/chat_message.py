@@ -50,6 +50,11 @@ class IntentInfo(BaseModel):
     confidence: float = Field(..., description="분류 신뢰도 (0.0~1.0)")
 
 
+class MessageUpdate(BaseModel):
+    """채팅 메시지 내용 수정 요청."""
+    content: str = Field(..., min_length=1, description="수정할 메시지 본문")
+
+
 class ChatTurnResponse(BaseModel):
     """
         user 메시지 저장 → 의도 분류 → 각 서비스 응답 생성 → assistant 메시지 저장까지 완료된 한 턴.

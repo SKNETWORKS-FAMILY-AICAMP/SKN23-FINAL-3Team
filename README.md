@@ -21,7 +21,8 @@
 
   <tr>
     <td style="padding:14px; line-height:1.6;">
-      서비스 기획 · 화면 설계<br/>
+      서비스 기획<br/>
+      화면 설계<br/>
       프론트엔드(UX/UI)<br/>
       LLM 개발 (그림일기)<br/>
       발표
@@ -32,7 +33,7 @@
     RDB 설계 및 관리<br/>
     FastAPI 구축 및 백엔드 개발<br/>
     LLM (의도분류) · ML (의도분류)
-    </td>![alt text](image.png)
+    </td>
     <td style="padding:14px; line-height:1.6;">
       데이터 수집 · 정제<br/>
       벡터DB<br/>

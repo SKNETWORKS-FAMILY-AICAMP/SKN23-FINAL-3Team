@@ -2,17 +2,91 @@ import { useState, useEffect } from 'react'
 import { ArrowLeft, MessageSquare, Clock } from 'lucide-react'
 import { getMe } from '../services/userService'
 import { getChatRooms, getMessages, type ChatRoom, type ChatMessage } from '../services/chatService'
+import { searchPlaces, type PlaceResult } from '../services/placeService'
 
 interface Props {
   onBack: () => void
+  onShowPlaces?: (places: PlaceResult[], selected: PlaceResult) => void
 }
 
-export default function ChatHistory({ onBack }: Props) {
+// 장소 추천 메시지 여부 감지
+function isPlaceMessage(content: string): boolean {
+  return /\d+\.\s+.+/.test(content) && /주소:/.test(content)
+}
+
+// 텍스트에서 번호 + 장소명 추출
+function extractPlaceEntries(content: string): { name: string; address: string; contentId?: string }[] {
+  const entries: { name: string; address: string; contentId?: string }[] = []
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const nameMatch = lines[i].match(/^\d+\.\s+(.+)$/)
+    if (nameMatch) {
+      const name = nameMatch[1].trim()
+      let address = ''
+      let contentId: string | undefined
+      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+        if (!address) {
+          const addrMatch = lines[j].match(/[-–]\s*주소:\s*(.+)/)
+          if (addrMatch) address = addrMatch[1].trim()
+        }
+        const idMatch = lines[j].match(/[-–]\s*_id:\s*(.+)/)
+        if (idMatch) { contentId = idMatch[1].trim(); break }
+      }
+      entries.push({ name, address, contentId })
+    }
+  }
+  return entries
+}
+
+// 장소 메시지를 파싱해서 장소명만 링크로 렌더링 (_id 줄은 숨김)
+function renderHistoryPlaceMessage(
+  content: string,
+  loadingName: string | null,
+  onPlaceClick: (entry: { name: string; address: string; contentId?: string }) => void,
+) {
+  const entries = extractPlaceEntries(content)
+  const lines = content.split('\n')
+
+  return (
+    <div className="space-y-0.5 text-sm leading-7">
+      {lines.map((line, i) => {
+        // _id 줄은 사용자에게 표시하지 않음
+        if (/^[-–]\s*_id:/.test(line)) return null
+
+        const nameMatch = line.match(/^(\d+)\.\s+(.+)$/)
+        if (nameMatch) {
+          const num = nameMatch[1]
+          const name = nameMatch[2].trim()
+          const found = entries.find((e) => e.name === name)
+          if (found) {
+            const isLoading = loadingName === name
+            return (
+              <p key={i}>
+                {num}.{' '}
+                <button
+                  onClick={() => !isLoading && onPlaceClick(found)}
+                  disabled={isLoading}
+                  className="font-semibold text-[#F4845F] underline underline-offset-2 hover:text-[#e8764f] transition-colors disabled:opacity-60"
+                >
+                  {isLoading ? '불러오는 중...' : name}
+                </button>
+              </p>
+            )
+          }
+        }
+        return <p key={i}>{line}</p>
+      })}
+    </div>
+  )
+}
+
+export default function ChatHistory({ onBack, onShowPlaces }: Props) {
   const [rooms, setRooms] = useState<ChatRoom[]>([])
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [msgLoading, setMsgLoading] = useState(false)
+  const [loadingPlace, setLoadingPlace] = useState<string | null>(null)
 
   useEffect(() => {
     getMe()
@@ -33,6 +107,25 @@ export default function ChatHistory({ onBack }: Props) {
       .finally(() => setMsgLoading(false))
   }
 
+  const handlePlaceClick = async ({ name, address, contentId }: { name: string; address: string; contentId?: string }) => {
+    if (!onShowPlaces) return
+    setLoadingPlace(name)
+    try {
+      const results = await searchPlaces({ query: name })
+      // content_id로 정확히 매칭 → 이름으로 매칭 → 폴백
+      const match =
+        (contentId ? results.find((r) => r.content_id === contentId) : null) ??
+        results.find((r) => r.name === name) ??
+        null
+      const selected = match ?? ({ name, address, content_id: contentId } as PlaceResult)
+      onShowPlaces(results.length > 0 ? results : [selected], selected)
+    } catch {
+      onShowPlaces([{ name, address } as PlaceResult], { name, address } as PlaceResult)
+    } finally {
+      setLoadingPlace(null)
+    }
+  }
+
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -40,7 +133,6 @@ export default function ChatHistory({ onBack }: Props) {
   if (selectedRoom) {
     return (
       <div className="flex h-full flex-col bg-[#FFF8F3]">
-        {/* 서브 헤더 */}
         <div className="flex items-center gap-2 border-b border-[#F5D6C8] bg-white px-4 py-3">
           <button
             onClick={() => setSelectedRoom(null)}
@@ -52,7 +144,6 @@ export default function ChatHistory({ onBack }: Props) {
           <span className="text-[11px] text-[#B08B7A]">{formatDate(selectedRoom.updated_at)}</span>
         </div>
 
-        {/* 메시지 목록 */}
         <div className="flex-1 overflow-y-auto space-y-3 p-4">
           {msgLoading ? (
             <div className="flex h-full items-center justify-center">
@@ -72,13 +163,14 @@ export default function ChatHistory({ onBack }: Props) {
                     : 'ml-auto bg-[#F4845F] text-white'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'assistant' && isPlaceMessage(msg.content)
+                  ? renderHistoryPlaceMessage(msg.content, loadingPlace, handlePlaceClick)
+                  : msg.content}
               </div>
             ))
           )}
         </div>
 
-        {/* 하단 버튼 */}
         <div className="border-t border-[#F5D6C8] bg-white px-4 py-3">
           <button
             onClick={onBack}
@@ -132,7 +224,6 @@ export default function ChatHistory({ onBack }: Props) {
         )}
       </div>
 
-      {/* 하단: 챗봇으로 돌아가기 */}
       <div className="border-t border-[#F5D6C8] bg-white px-4 py-3">
         <button
           onClick={onBack}

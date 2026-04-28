@@ -1,16 +1,17 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { Send, LogIn, Lock } from 'lucide-react'
+import { Send, LogIn, Lock, X, Phone, Navigation } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
 import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse } from '../services/chatService'
+import { createChatRoom, sendMessageWithResponse, updateMessageContent } from '../services/chatService'
 import { searchPlaces, type PlaceResult } from '../services/placeService'
 
-// 백엔드 응답에서 인라인 버튼을 파싱하는 마커
 const BUTTONS_MARKER = '%%BUTTONS%%'
+const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
+const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
 
 function parseMessageButtons(content: string): { text: string; buttons: string[] } {
   const idx = content.indexOf(BUTTONS_MARKER)
@@ -45,6 +46,20 @@ function renderBotText(content: string): React.ReactNode {
       </span>
     )
   })
+}
+
+// 표시된 장소 목록을 DB 저장용 텍스트로 포맷 (history에서 파싱 가능한 형식)
+function formatPlacesForStorage(places: PlaceResult[]): string {
+  const lines = ['반려견과 함께 가보기 좋은 장소를 정리했어요.', '']
+  places.forEach((place, i) => {
+    lines.push(`${i + 1}. ${place.name}`)
+    lines.push(`- 주소: ${place.address}`)
+    if (place.reason) lines.push(`- 추천 이유: ${place.reason}`)
+    if (place.content_id) lines.push(`- _id: ${place.content_id}`)
+    lines.push('')
+  })
+  lines.push('장소 이름을 누르면 상세 정보를 확인할 수 있어요.')
+  return lines.join('\n')
 }
 
 function splitPlaceMessage(text: string) {
@@ -93,16 +108,8 @@ function buildFallbackPlaceReason(place: {
 
 function renderPlaceMessage(
   text: string,
-  places?: Array<{
-    name: string
-    address: string
-    category: string
-    sub_category: string
-    indoor: string
-    outdoor: string
-    has_parking: string
-    reason?: string
-  }>,
+  places?: PlaceResult[],
+  onPlaceClick?: (place: PlaceResult) => void,
 ) {
   const blocks = splitPlaceMessage(text)
   const fallbackIntro = blocks[0]
@@ -114,19 +121,20 @@ function renderPlaceMessage(
         <>
           <p>반려견과 함께 가보기 좋은 장소를 정리했어요.</p>
           <div className="space-y-3">
-          {places.map((place, index) => {
-            return (
-              <div key={`${place.name}-${index}`} className="space-y-1">
-                <p className="font-semibold text-[#2F241D]">
-                  {index + 1}. {place.name}
-                </p>
-                <p>- 주소: {place.address}</p>
-                <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
-              </div>
-            )
-          })}
+          {places.map((place, index) => (
+            <div key={`${place.name}-${index}`} className="space-y-1">
+              <button
+                onClick={() => onPlaceClick?.(place)}
+                className="font-semibold text-[#F4845F] underline underline-offset-2 text-left hover:text-[#e8764f] transition-colors"
+              >
+                {index + 1}. {place.name}
+              </button>
+              <p>- 주소: {place.address}</p>
+              <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
+            </div>
+          ))}
           </div>
-          <p>세부 정보는 아래 지도와 장소 카드에서 함께 확인해보세요.</p>
+          <p>장소 이름을 누르면 상세 정보를 확인할 수 있어요.</p>
         </>
       ) : (
         <>
@@ -173,21 +181,10 @@ export default function ChatBot({
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
+  const [selectedChatPlace, setSelectedChatPlace] = useState<PlaceResult | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const storedPetId = Number(localStorage.getItem('selected_pet_id'))
   const selectedPetId = pet.id ?? (Number.isFinite(storedPetId) && storedPetId > 0 ? storedPetId : undefined)
-
-  // 챗봇 말풍선 표시용 — 마크다운 및 이미지 제거 (왼쪽 패널 데이터는 그대로)
-  const sanitizeForDisplay = (text: string): string => {
-    return text
-      .split('\n')
-      .filter(line => !/_요약_:/.test(line))        // _요약_: 줄 제거
-      .filter(line => !/^!\[.*?\]\(https?:\/\//.test(line.trim())) // ![...](url) 줄 제거
-      .join('\n')
-      .replace(/\*\*(.+?)\*\*/g, '$1')             // **굵게** → 굵게
-      .replace(/_(.+?)_/g, '$1')                   // _기울임_ → 기울임
-      .trim()
-  }
 
   // 백엔드 응답에서 일기 데이터 파싱 (형식: "📖 **제목**\n\n내용\n\n_요약_: 요약\n\n![제목](url)")
   const parseDiaryFromResponse = (text: string): { diary: GeneratedDiary; imageUrl: string } | null => {
@@ -210,9 +207,6 @@ export default function ChatBot({
       imageUrl: imageM?.[1] ?? '',
     }
   }
-
-  const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
-  const DIARY_KEYWORDS = ['그림일기', '일기 쓰', '일기 써', '일기를 쓰', '일기쓰']
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
@@ -257,22 +251,16 @@ export default function ChatBot({
         } catch {
           onPlacesFound?.([])
         }
-        actions.receiveBotMessage(
-          botText,
-          undefined,
-          'place',
-          places.map((place) => ({
-            name: place.name,
-            address: place.address,
-            category: place.category,
-            sub_category: place.sub_category,
-            indoor: place.indoor,
-            outdoor: place.outdoor,
-            has_parking: place.has_parking,
-            reason: place.reason,
-          })),
-        )
+        actions.receiveBotMessage(botText, undefined, 'place', places)
+        // 화면에 표시된 장소 목록과 DB 저장 내용을 동기화 (채팅 기록과 일치)
+        if (places.length > 0 && roomId !== null && result.assistant_message.id) {
+          const formatted = formatPlacesForStorage(places)
+          updateMessageContent(roomId, result.assistant_message.id, formatted).catch(() => {})
+        }
         setTimeout(() => onNavigateToMap?.(), 800)
+      } else {
+        // 기타 intent — 백엔드 응답 텍스트를 그대로 표시
+        actions.receiveBotMessage(botText)
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
@@ -325,7 +313,7 @@ export default function ChatBot({
   }
 
   return (
-    <div className="flex h-full flex-col rounded-[20px] overflow-hidden bg-[#FFF8F3]">
+    <div className="relative flex h-full flex-col rounded-[20px] overflow-hidden bg-[#FFF8F3]">
       {/* 메시지 목록 */}
       <div className="flex-1 overflow-y-auto space-y-3 p-3">
         {messages.map((msg) => {
@@ -340,7 +328,7 @@ export default function ChatBot({
                 }`}
               >
                 {msg.role === 'bot'
-                  ? (msg.variant === 'place' ? renderPlaceMessage(displayText, msg.places) : renderBotText(displayText))
+                  ? (msg.variant === 'place' ? renderPlaceMessage(displayText, msg.places, setSelectedChatPlace) : renderBotText(displayText))
                   : displayText}
               </div>
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
@@ -544,6 +532,121 @@ export default function ChatBot({
         )}
         </>}
       </div>
+
+      {/* 장소 상세 모달 */}
+      {selectedChatPlace && (
+        <div
+          className="absolute inset-0 z-20 flex flex-col bg-white rounded-[20px] overflow-hidden"
+          style={{ top: 0, left: 0 }}
+        >
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#F5D6C8] bg-[#FFF8F3]">
+            <button
+              onClick={() => setSelectedChatPlace(null)}
+              className="flex items-center gap-1.5 text-sm text-[#8B6355] hover:text-[#3D2B1F] transition-colors"
+            >
+              <X className="h-4 w-4" />
+              돌아가기
+            </button>
+            <span className="text-sm font-bold text-[#3D2B1F] truncate max-w-[60%] text-center">{selectedChatPlace.name}</span>
+            <div className="w-16" />
+          </div>
+
+          {/* 내용 */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm text-[#3D2B1F]">
+            {/* 이름 + 태그 */}
+            <div>
+              <p className="text-lg font-bold">{selectedChatPlace.name}</p>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {selectedChatPlace.category && (
+                  <span className="rounded-full bg-[#FFF0E6] px-2.5 py-0.5 text-xs text-[#F4845F] font-medium">{selectedChatPlace.category}</span>
+                )}
+                {selectedChatPlace.sub_category && (
+                  <span className="rounded-full bg-[#FFF0E6] px-2.5 py-0.5 text-xs text-[#F4845F] font-medium">{selectedChatPlace.sub_category}</span>
+                )}
+                {selectedChatPlace.indoor === 'Y' && (
+                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-500 font-medium">실내 가능</span>
+                )}
+              </div>
+            </div>
+
+            {/* 이용조건 */}
+            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
+              <p className="text-xs font-bold text-[#8B6355]">이용조건</p>
+              <p className="text-sm">{selectedChatPlace.conditions || '제한사항 없음'}</p>
+            </div>
+
+            {/* 운영시간 */}
+            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
+              <p className="text-xs font-bold text-[#8B6355]">운영시간</p>
+              <p className="text-sm">{selectedChatPlace.operation || '정보 없음'}</p>
+            </div>
+
+            {/* 반려견 정보 */}
+            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
+              <p className="text-xs font-bold text-[#8B6355]">반려견 이용 정보</p>
+              <p>반려견 구역: {selectedChatPlace.pet_zone || '정보 없음'}</p>
+              <p>크기 제한: {selectedChatPlace.pet_size || '모두 가능'}</p>
+              <p>주차: {selectedChatPlace.has_parking === 'Y' ? '가능' : '정보 없음'}</p>
+            </div>
+
+            {/* 전화 */}
+            {selectedChatPlace.tel && (
+              <div className="rounded-xl bg-[#FFF8F3] p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-[#8B6355]">매장 연락처</p>
+                  <p className="text-sm mt-0.5">{selectedChatPlace.tel}</p>
+                </div>
+                <a
+                  href={`tel:${selectedChatPlace.tel}`}
+                  className="flex items-center gap-1 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
+                >
+                  <Phone className="h-3 w-3" />
+                  전화하기
+                </a>
+              </div>
+            )}
+
+            {/* 위치 */}
+            <div className="rounded-xl bg-[#FFF8F3] p-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-[#8B6355]">매장 위치</p>
+                <p className="text-sm mt-0.5">{selectedChatPlace.address}</p>
+              </div>
+              <a
+                href={`https://map.kakao.com/link/search/${encodeURIComponent(selectedChatPlace.name)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
+              >
+                <Navigation className="h-3 w-3" />
+                길찾기
+              </a>
+            </div>
+
+            {/* 장소 설명 */}
+            {selectedChatPlace.description && (
+              <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
+                <p className="text-xs font-bold text-[#8B6355]">장소 설명</p>
+                <p className="text-sm leading-6">{selectedChatPlace.description}</p>
+              </div>
+            )}
+          </div>
+
+          {/* 하단 버튼 */}
+          <div className="px-4 py-3 border-t border-[#F5D6C8] bg-[#FFF8F3]">
+            <button
+              onClick={() => {
+                if (_onSelectPlace) _onSelectPlace(selectedChatPlace)
+                setSelectedChatPlace(null)
+              }}
+              className="w-full rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white hover:bg-[#e8764f] transition-colors"
+            >
+              이 장소로 일기 쓰기 →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
