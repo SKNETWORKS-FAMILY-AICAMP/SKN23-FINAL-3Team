@@ -234,12 +234,17 @@ async def create_message_with_response(
         pet_id=data.pet_id,
     )
 
-    assistant_text = await chat_response_service.dispatch(
-        intent_result,
-        data.content,
-        ctx,
-        request=request,
-    )
+    try:
+        assistant_text = await chat_response_service.dispatch(
+            intent_result,
+            data.content,
+            ctx,
+            request=request,
+        )
+    except Exception as e:
+        logger.error(f"[ChatMessage] dispatch 실패: {e}", exc_info=True)
+        assistant_text = None
+
     if not assistant_text:
         assistant_text = "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
 
