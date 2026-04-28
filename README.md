@@ -642,7 +642,7 @@ flowchart TD
 ```json
 {
   "title": "귀엽고 짧은 제목 (15자 이내, 강아지 말투)",
-  "content": "일기 본문 (450자 이상 500자 이내, 강아지 1인칭)",
+  "content": "일기 본문 (400자 이상, 강아지 1인칭)",
   "summary": "한줄요약 (30자 이내, 귀엽게)",
   "image_prompt_base": "English only. One single storybook scene within 90 words."
 }
