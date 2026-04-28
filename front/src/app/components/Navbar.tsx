@@ -19,6 +19,7 @@ import {
 import { getMe } from "../services/userService";
 import { getPets } from "../services/petService";
 import { getImage } from "../services/imageService";
+import { SubscriptionModal } from "./SubscriptionModal";
 
 interface SubItem {
   label: string;
@@ -44,6 +45,7 @@ export function Navbar() {
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
 
   const { scrollY } = useScroll();
   const navigate = useNavigate();
@@ -166,10 +168,8 @@ export function Navbar() {
       <div className="w-full px-6">
         <div className="flex items-center justify-between h-16">
           {/* 왼쪽: 로고 */}
-          <Link to="/home" className="flex items-center gap-1.5 select-none cursor-pointer hover:opacity-75 transition-opacity">
-            <span className="text-xl font-black tracking-tight text-orange-500">with</span>
-            <span className="text-xl font-black tracking-tight text-gray-800">DOG</span>
-            <span className="text-lg leading-none">🐾</span>
+          <Link to="/home" className="flex items-center select-none cursor-pointer hover:opacity-75 transition-opacity">
+            <img src="/logo.svg" alt="withDOG" className="h-16 w-auto" />
           </Link>
 
           {/* 오른쪽: 메뉴 + 프로필/로그인 */}
@@ -277,6 +277,13 @@ export function Navbar() {
                       className="absolute right-0 top-full pt-2 z-50"
                     >
                       <div className="min-w-[160px] rounded-2xl border border-gray-100 bg-white py-2 shadow-lg">
+                        <button
+                          onClick={() => { setProfileOpen(false); setSubscriptionOpen(true); }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-orange-500 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                        >
+                          <span className="text-base leading-none">🐾</span>
+                          구독 패스
+                        </button>
                         <button
                           onClick={() => { setProfileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
                           className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-orange-50 hover:text-orange-600"
@@ -402,6 +409,13 @@ export function Navbar() {
             {isLoggedIn ? (
               <>
                 <button
+                  onClick={() => { setMobileOpen(false); setSubscriptionOpen(true); }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-orange-500 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                >
+                  <span className="text-base leading-none">🐾</span>
+                  구독 패스
+                </button>
+                <button
                   onClick={() => { setMobileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
                   className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors"
                 >
@@ -499,6 +513,8 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <SubscriptionModal open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
     </>
   );
 }

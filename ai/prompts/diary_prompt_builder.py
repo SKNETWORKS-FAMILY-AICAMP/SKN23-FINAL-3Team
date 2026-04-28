@@ -17,7 +17,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
         "🥰": "두근두근 설레고 사랑스러운 톤. 심장이 녹는 것 같은 달달한 문장.",
         "😄": "밝고 환한 톤. 활기차고 기분 좋은 하루. 에너지 넘치는 문장.",
         "🙂": "잔잔하고 만족스러운 톤. 별거 아닌 것 같지만 충분히 행복한 느낌.",
-        "😆": "신나고 장난기 넘치는 톤. 못 참고 터지는 웃음. 유쾌하고 통통 튀는 문장.",
+        "😢": "슬프고 쓸쓸한 톤. 잔잔하게 울컥하는 느낌. 감정을 억누르지 않고 솔직하게, 그래도 포근하게 마무리.",
     }
 
     # ── 일기 유형 → 강조 포인트 ────────────────────────
@@ -93,7 +93,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
         "🥰": "deeply loving glowing expression, heart-filled sparkling eyes, warm tender affectionate mood",
         "😄": "bright wide cheerful smile, happy beaming eyes, warm sunny joyful energy",
         "🙂": "gentle content expression, soft calm satisfied eyes, quiet peaceful happy mood",
-        "😆": "playful mischievous laughing expression, lively twinkling eyes, energetic fun-filled mood",
+        "😢": "gently sad expression, soft watery eyes, quiet wistful subdued mood, tender melancholy energy",
     }
 
     # ── BasePromptBuilder 필수 구현 ──────────────────────
@@ -171,7 +171,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
 {focus}
 
 [내용 구성]
-- 본문 최소 300자
+- 본문 400자 이상
 - 5~7문장
 - 기승전결이 느껴지는 자연스러운 흐름
 - 감각 묘사 2개 이상 포함 (냄새/촉감/소리/움직임 중)
@@ -211,7 +211,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
 [출력 형식 - 반드시 JSON만]
 {{
   "title": "귀엽고 짧은 제목 (15자 이내, 강아지 말투)",
-  "content": "일기 본문 (300자 이상, 강아지 1인칭)",
+  "content": "일기 본문 (400자 이상, 강아지 1인칭)",
   "summary": "한줄요약 (30자 이내, 귀엽게)",
   "image_prompt_base": "English only. One single storybook scene within 90 words. One cute dog as the main character. Narrative single moment, not a static portrait, not a collage, not multiple scenes."
 }}
