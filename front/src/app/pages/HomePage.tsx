@@ -624,6 +624,7 @@ export default function HomePage({
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [showPlacePanel, setShowPlacePanel] = useState(false);
+  const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -707,8 +708,12 @@ export default function HomePage({
 
   const handleUsePlace = (place: PlaceResult) => {
     setAutoPlace(place);
-    setTab('diary');
     setDiaryResult(null);
+    // 채팅 기록에서 온 경우: 기록 닫고 챗봇 새 채팅으로 시작
+    if (showChatHistory) {
+      setShowChatHistory(false);
+      setChatKey((k) => k + 1);
+    }
     setDiaryTrigger((prev) => prev + 1);
   };
 
@@ -866,6 +871,7 @@ export default function HomePage({
             </div>
 
             <div className="flex-1 overflow-y-auto">
+
               {tab === null && (
                 <HomeIntro
                   onOpenMap={handleOpenMapTab}
@@ -1080,7 +1086,11 @@ export default function HomePage({
               )}
 
               {tab === 'map' && showMapSearch && (
-                <MapView places={mapPlaces} onUsePlace={handleUsePlace} />
+                <MapView
+                  places={mapPlaces}
+                  onUsePlace={handleUsePlace}
+                  initialSelectedId={historySelectedId ?? undefined}
+                />
               )}
             </div>
           </div>
@@ -1137,7 +1147,16 @@ export default function HomePage({
 
               <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
                 {showChatHistory ? (
-                  <ChatHistory onBack={() => setShowChatHistory(false)} />
+                  <ChatHistory
+                    onBack={() => setShowChatHistory(false)}
+                    onShowPlaces={(places, selected) => {
+                      setMapPlaces(places)
+                      setHistorySelectedId(selected.content_id ?? selected.name)
+                      setTab('map')
+                      setShowMapSearch(true)
+                      // 채팅 기록은 닫지 않음 — 일기쓰기 버튼 클릭 시 handleUsePlace에서 닫힘
+                    }}
+                  />
                 ) : (
                   <div className="h-full p-3">
                     <ChatBot

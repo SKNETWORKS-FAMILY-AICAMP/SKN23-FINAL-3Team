@@ -82,3 +82,12 @@ export function getMessages(roomId: number): Promise<ChatMessage[]> {
 export function getRecentMessages(roomId: number, n: number): Promise<ChatMessage[]> {
   return api.get(`/chat-rooms/${roomId}/messages?last_n=${n}`)
 }
+
+/** PATCH /chat-rooms/{roomId}/messages/{messageId} */
+export function updateMessageContent(
+  roomId: number,
+  messageId: number,
+  content: string,
+): Promise<ChatMessage> {
+  return api.patch(`/chat-rooms/${roomId}/messages/${messageId}`, { content })
+}
