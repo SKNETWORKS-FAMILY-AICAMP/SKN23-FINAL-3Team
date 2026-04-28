@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.chat_room_service import get_room
 from services.intent_service import IntentResult
 from services import chat_response_service, intent_service
-from services.diary_response_service import is_diary_button_action, is_diary_confirm_request
+from services.diary_response_service import is_diary_button_action, is_diary_confirm_request, is_diary_start_flow_request
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +170,10 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
         )
         
-    # diary 버튼 액션/확인 요청은 dispatch 에서 바로 처리되므로
+    # diary 버튼 액션/확인/시작 요청은 dispatch 에서 바로 처리되므로
     # 클라이언트에 반환하는 intent 도 '다이어리 작성'으로 맞춰줌
     # (KoELECTRA 가 '장소추천' 등으로 잘못 분류해도 프론트가 searchPlaces 호출하지 않도록)
-    if is_diary_button_action(data.content) or is_diary_confirm_request(data.content):
+    if is_diary_button_action(data.content) or is_diary_confirm_request(data.content) or is_diary_start_flow_request(data.content):
         logger.info(f"[ChatMessage] diary 버튼/확인 액션 → intent 강제 재정의: {data.content!r}")
         intent_result = IntentResult(
             intent="다이어리 작성",
@@ -258,3 +258,33 @@ async def list_messages(
         .order_by(ChatMessage.created_at.asc())
     )
     return result.scalars().all()
+
+
+async def update_message_content(
+    room_id: int,
+    message_id: int,
+    new_content: str,
+    db: AsyncSession,
+    current_user_id: int,
+) -> ChatMessage:
+    """assistant 메시지 내용을 수정합니다 (장소 추천 후 표시 내용 동기화용)."""
+    from services.chat_room_service import _assert_owner, get_room
+
+    room = await get_room(room_id, db)
+    _assert_owner(room, current_user_id)
+
+    result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.room_id == room_id,
+        )
+    )
+    message = result.scalar_one_or_none()
+    if message is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="메시지를 찾을 수 없습니다.")
+
+    message.content = new_content
+    await db.flush()
+    await db.refresh(message)
+    return message
