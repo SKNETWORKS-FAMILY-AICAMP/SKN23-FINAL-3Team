@@ -151,7 +151,14 @@ def _detect_facility_slots(query: str) -> list[str]:
 def _facility_field_value(facility: dict, slot: str) -> str | None:
     """슬롯에 해당하는 표시용 문자열을 반환. 데이터가 비어있으면 None."""
     if slot == "operation":
-        return (facility.get("operation") or "").strip() or None
+        raw = (facility.get("operation") or "").strip()
+        if not raw:
+            return None
+        for prefix in ("운영시간:", "운영시간："):
+            if raw.startswith(prefix):
+                raw = raw[len(prefix):].lstrip()
+                break
+        return raw or None
 
     if slot == "parking":
         v = (facility.get("has_parking") or "").strip()
@@ -207,18 +214,24 @@ def _facility_field_value(facility: dict, slot: str) -> str | None:
 def _format_facility_response(facility: dict, slots: list[str]) -> str:
     """검색된 시설을 바탕으로 결정적(LLM 미사용) 답변 텍스트를 생성한다.
 
-    슬롯이 비어 있으면 7필드 모두 노출하고, 슬롯이 있으면 해당 슬롯 + 위치(주소)를 같이 노출.
-    데이터가 없는 항목은 '정보 없음'으로 명시하여 hallucinate 위험을 차단한다.
+    7개 핵심 필드(운영시간·주차·이용 요금·반려견 동반 조건·주소·전화·실내/실외)를
+    **항상 모두** 노출한다. 데이터가 없는 항목은 '정보 없음'으로 명시하여
+    hallucinate 위험을 차단한다.
+
+    슬롯(`slots`)이 매칭됐으면 해당 필드를 **맨 위로 정렬**하여 강조하고,
+    매칭이 없으면 `_FACILITY_FIELD_LABELS` 정의 순서대로 노출한다. 슬롯은
+    필드 숨김 용도가 아니다.
     """
     name = facility.get("name") or "시설"
     lines: list[str] = [f"📍 **{name}**"]
 
+    base_order = list(_FACILITY_FIELD_LABELS.keys())
     if slots:
-        target_slots = list(slots)
-        if "location" not in target_slots:
-            target_slots.append("location")
+        priority = [s for s in slots if s in _FACILITY_FIELD_LABELS]
+        rest = [s for s in base_order if s not in priority]
+        target_slots = priority + rest
     else:
-        target_slots = list(_FACILITY_FIELD_LABELS.keys())
+        target_slots = base_order
 
     for slot in target_slots:
         label = _FACILITY_FIELD_LABELS.get(slot)
@@ -231,7 +244,7 @@ def _format_facility_response(facility: dict, slots: list[str]) -> str:
             lines.append(f"- {label}: 정보 없음")
 
     lines.append("")
-    lines.append("아래 지도와 시설 카드에서 위치를 함께 확인해보세요.")
+    lines.append("좌측 지도와 시설 카드에서 위치를 함께 확인해보세요.")
     return "\n".join(lines)
 
 _FALLBACK_SYSTEM_PROMPT = (
@@ -296,7 +309,7 @@ def _format_place_list_response(places: Sequence[dict]) -> str:
             lines.append(f"- 추천 이유: {reason}")
             lines.append("")
 
-    lines.append("세부 정보는 아래 지도와 장소 카드에서 함께 확인해보세요.")
+    lines.append("세부 정보는 좌측 지도와 장소 카드에서 함께 확인해보세요.")
     return "\n".join(lines)
 
 
@@ -719,17 +732,17 @@ async def _handle_facility(
                 - 서비스 외 지역  : (안내, None)
                 - 정상 매칭        : (필드 요약 텍스트, search_facility_by_name 결과 dict)
     """
-    if await _is_out_of_service_area(query, request=request):
-        return _OUT_OF_SERVICE_AREA_MESSAGE, None
-
     if ctx.db is None:
         logger.warning("[ChatResponse] db 세션 없음 — 시설 검색 불가")
         return _FACILITY_NOT_FOUND_MESSAGE, None
 
-    facility = await search_facility_by_name(query, ctx.db, request=request)
-    if facility is None:
+    result = await search_facility_by_name(query, ctx.db, request=request)
+    if result.out_of_service_area:
+        return _OUT_OF_SERVICE_AREA_MESSAGE, None
+    if result.facility is None:
         return _FACILITY_NOT_FOUND_MESSAGE, None
 
+    facility = result.facility
     slots = _detect_facility_slots(query)
     text = _format_facility_response(facility, slots)
     logger.info(

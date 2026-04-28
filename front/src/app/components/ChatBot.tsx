@@ -114,19 +114,19 @@ function renderPlaceMessage(
         <>
           <p>반려견과 함께 가보기 좋은 장소를 정리했어요.</p>
           <div className="space-y-3">
-          {places.map((place, index) => {
-            return (
-              <div key={`${place.name}-${index}`} className="space-y-1">
-                <p className="font-semibold text-[#2F241D]">
-                  {index + 1}. {place.name}
-                </p>
-                <p>- 주소: {place.address}</p>
-                <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
-              </div>
-            )
-          })}
+            {places.map((place, index) => {
+              return (
+                <div key={`${place.name}-${index}`} className="space-y-1">
+                  <p className="font-semibold text-[#2F241D]">
+                    {index + 1}. {place.name}
+                  </p>
+                  <p>- 주소: {place.address}</p>
+                  <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
+                </div>
+              )
+            })}
           </div>
-          <p>세부 정보는 아래 지도와 장소 카드에서 함께 확인해보세요.</p>
+          <p>세부 정보는 좌측 지도와 장소 카드에서 함께 확인해보세요.</p>
         </>
       ) : (
         <>
@@ -359,12 +359,13 @@ export default function ChatBot({
             final_score: facility.match_confidence,
           }
           onPlacesFound?.([mappedPlace])
-          // 시설정보도 place variant로 렌더링 (단일 결과)
-          actions.receiveBotMessage(botText, undefined, 'place', [mappedPlace])
+          actions.receiveBotMessage(botText, undefined, 'facility', undefined, facility)
           setTimeout(() => onNavigateToMap?.(), 800)
         } else {
           actions.receiveBotMessage(botText)
         }
+      } else {
+        actions.receiveBotMessage(botText)
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
@@ -379,7 +380,7 @@ export default function ChatBot({
     if (!diaryTrigger) return
     actions.forceStartDiary(diaryPlace)
     onNavigateToDiary?.()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaryTrigger])
 
   const handleSubmitText = () => {
@@ -425,18 +426,17 @@ export default function ChatBot({
           return (
             <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
               <div
-                className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${
-                  msg.role === 'bot'
-                    ? 'bg-white text-[#3D2B1F] shadow-sm'
-                    : 'bg-[#F4845F] text-white'
-                }`}
+                className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${msg.role === 'bot'
+                  ? 'bg-white text-[#3D2B1F] shadow-sm'
+                  : 'bg-[#F4845F] text-white'
+                  }`}
               >
                 {msg.role === 'bot'
                   ? (msg.variant === 'place'
-                      ? renderPlaceMessage(displayText, msg.places)
-                      : msg.variant === 'facility'
-                        ? renderFacilityMessage(displayText, msg.facility)
-                        : renderBotText(displayText))
+                    ? renderPlaceMessage(displayText, msg.places)
+                    : msg.variant === 'facility'
+                      ? renderFacilityMessage(displayText, msg.facility)
+                      : renderBotText(displayText))
                   : displayText}
               </div>
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
@@ -563,81 +563,81 @@ export default function ChatBot({
 
         {isLoggedIn && <>
 
-        {/* 일기 유형 선택 */}
-        {step === 'type_select' && (
-          <div className="grid grid-cols-2 gap-2 p-3">
-            {DIARY_TYPES.map((dt) => (
+          {/* 일기 유형 선택 */}
+          {step === 'type_select' && (
+            <div className="grid grid-cols-2 gap-2 p-3">
+              {DIARY_TYPES.map((dt) => (
+                <button
+                  key={dt.id}
+                  onClick={() => actions.selectDiaryType(dt.id)}
+                  className="flex flex-col items-start rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] px-3 py-3 text-left transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                >
+                  <span className="mb-1 text-xl">{dt.icon}</span>
+                  <span className="text-xs font-bold text-[#3D2B1F]">{dt.label}</span>
+                  <span className="text-[10px] text-[#8B6355]">{dt.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 보조 관점 제안 */}
+          {step === 'additional_prompt' && (
+            <div className="flex gap-2 p-3">
               <button
-                key={dt.id}
-                onClick={() => actions.selectDiaryType(dt.id)}
-                className="flex flex-col items-start rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] px-3 py-3 text-left transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                onClick={() => actions.respondToPerspective(true)}
+                className="flex-1 rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white transition hover:bg-[#e8764f]"
               >
-                <span className="mb-1 text-xl">{dt.icon}</span>
-                <span className="text-xs font-bold text-[#3D2B1F]">{dt.label}</span>
-                <span className="text-[10px] text-[#8B6355]">{dt.description}</span>
+                네, 좋아요!
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* 보조 관점 제안 */}
-        {step === 'additional_prompt' && (
-          <div className="flex gap-2 p-3">
-            <button
-              onClick={() => actions.respondToPerspective(true)}
-              className="flex-1 rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white transition hover:bg-[#e8764f]"
-            >
-              네, 좋아요!
-            </button>
-            <button
-              onClick={() => actions.respondToPerspective(false)}
-              className="flex-1 rounded-xl border border-[#F5D6C8] py-3 text-sm font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              괜찮아요
-            </button>
-          </div>
-        )}
-
-        {/* 감정 선택 */}
-        {step === 'emotion_select' && (
-          <div className="grid grid-cols-4 gap-2 p-3">
-            {EMOTIONS.map((em) => (
               <button
-                key={em.emoji}
-                onClick={() => actions.selectEmotion(em.emoji, em.label)}
-                className="flex flex-col items-center rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] py-2.5 transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                onClick={() => actions.respondToPerspective(false)}
+                className="flex-1 rounded-xl border border-[#F5D6C8] py-3 text-sm font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
               >
-                <span className="text-2xl">{em.emoji}</span>
-                <span className="mt-1 text-[10px] text-[#8B6355]">{em.label}</span>
+                괜찮아요
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* 텍스트 입력창 */}
-        {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
-          <div className="flex items-center gap-2 p-3">
-            <input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSubmitText()
-                }
-              }}
-              placeholder="편하게 말씀해주세요..."
-              className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
-            />
-            <button
-              onClick={handleSubmitText}
-              disabled={!inputValue.trim()}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+          {/* 감정 선택 */}
+          {step === 'emotion_select' && (
+            <div className="grid grid-cols-4 gap-2 p-3">
+              {EMOTIONS.map((em) => (
+                <button
+                  key={em.emoji}
+                  onClick={() => actions.selectEmotion(em.emoji, em.label)}
+                  className="flex flex-col items-center rounded-xl border border-[#F5D6C8] bg-[#FFFAF7] py-2.5 transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
+                >
+                  <span className="text-2xl">{em.emoji}</span>
+                  <span className="mt-1 text-[10px] text-[#8B6355]">{em.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 텍스트 입력창 */}
+          {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
+            <div className="flex items-center gap-2 p-3">
+              <input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSubmitText()
+                  }
+                }}
+                placeholder="편하게 말씀해주세요..."
+                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
+              />
+              <button
+                onClick={handleSubmitText}
+                disabled={!inputValue.trim()}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </>}
       </div>
     </div>

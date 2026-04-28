@@ -1,6 +1,7 @@
 import logging
 import re
 from copy import deepcopy
+from dataclasses import dataclass
 
 import httpx
 from fastapi import Request
@@ -949,64 +950,71 @@ async def _filter_with_relaxation(
 
 
 FACILITY_VECTOR_MIN_SIMILARITY = 0.45
-FACILITY_NAME_CANDIDATE_MAX_LEN = 12
+SEOUL_ALIASES = {"서울", "서울특별시"}
+
+
+@dataclass
+class FacilitySearchResult:
+    """시설정보 검색 결과 분기를 명시화한 dataclass.
+
+    호출자(`_handle_facility`)가 못 찾음/서울 외 지역을 별도 안내 문구로
+    구분하기 위해 두 분기를 동시에 표현한다.
+
+    Attributes:
+        facility: 매칭된 시설 dict (`_to_dict` + `match_source` + `match_confidence`).
+                  미매칭 시 None.
+        out_of_service_area: 발화에 명시된 도시가 서울이 아니어서 차단된 경우 True.
+    """
+
+    facility: dict | None = None
+    out_of_service_area: bool = False
 
 
 async def search_facility_by_name(
     query: str,
     db: AsyncSession,
     request: Request | None = None,
-) -> dict | None:
+) -> FacilitySearchResult:
+    """시설정보 의도 전용 단일 시설 검색.
+
+    장소추천 파서(`_parse_query_with_llm` / `QueryParser`)는 객관(필터)·주관
+    (분위기) 분리에 최적화돼 있어 시설명 추출에 부적합하다. 본 함수는
+    `FacilityQueryParser` 로 시설명·도시 두 슬롯만 추출한 뒤:
+
+        1) `Place.name LIKE %facility_name%` 정확 매칭 (서울 한정).
+        2) 미스 시 ChromaDB 의미 유사도 top-3 → 첫 번째.
+           유사도가 `FACILITY_VECTOR_MIN_SIMILARITY` 미만이면 신뢰 부족으로 미매칭.
+
+    Args:
+        query  : 사용자 발화 원문.
+        db     : AsyncSession.
+        request: FastAPI Request (AIContainer 접근용).
+
+    Returns:
+        FacilitySearchResult.
+            - facility=dict, out_of_service_area=False : 매칭 성공.
+            - facility=None, out_of_service_area=False : 못 찾음.
+            - facility=None, out_of_service_area=True  : 서울 외 지역.
     """
-        시설정보 의도 전용 단일 시설 검색.
+    container = request.app.state.ai_container if request else None
+    if container is None or not hasattr(container, "_facility_query_parser"):
+        logger.info("[FacilityService] FacilityQueryParser 미주입 — 미매칭 처리")
+        return FacilitySearchResult()
 
-        장소추천(`search_places_from_db`)이 카테고리·지역·분위기 매칭에 최적화돼 있는 반면,
-        본 함수는 사용자가 지칭한 **단일 시설**을 정확히 찾기 위해 다음 순서를 따른다.
+    parsed = await container._facility_query_parser.parse(query)
+    facility_name = (parsed.get("facility_name") or "").strip()
+    city = (parsed.get("city") or "").strip()
 
-            1. `Place.name LIKE %후보%` 정확 매칭 (서울 한정).
-               후보 = `query_parser`가 뽑은 landmark + 짧은 subjective.
-               여러 건이면 이름이 짧은 것을 우선 (부분 매칭의 오탐 최소화).
-            2. 1)에서 미스면 ChromaDB 의미적 유사도 top-3 → 첫 번째.
-               유사도가 `FACILITY_VECTOR_MIN_SIMILARITY` 미만이면 신뢰 부족으로 None.
+    if city and city not in SEOUL_ALIASES:
+        logger.info(f"[FacilityService] out-of-service area: {city}")
+        return FacilitySearchResult(out_of_service_area=True)
 
-        Args:
-                query  : 사용자 발화 원문
-                db     : AsyncSession
-                request: FastAPI Request (AIContainer 접근용)
-
-        Returns:
-                dict 또는 None.
-                반환 dict 는 `_to_dict` 결과 + `match_source`("name_exact" | "vector"),
-                `match_confidence`(0.0 ~ 1.0).
-    """
-    parsed = await _parse_query_with_llm(query, request=request)
-
-    requested_city = (parsed.objective.get("city") or "").strip()
-    if requested_city and requested_city != SEOUL:
-        logger.info(
-            f"[FacilityService] out-of-service area requested: {requested_city} -> None"
-        )
-        return None
-
-    name_candidates: list[str] = []
-    if parsed.landmark:
-        name_candidates.append(parsed.landmark.strip())
-
-    subjective = (parsed.subjective or "").strip()
-    if (
-        2 <= len(subjective) <= FACILITY_NAME_CANDIDATE_MAX_LEN
-        and subjective not in name_candidates
-    ):
-        name_candidates.append(subjective)
-
-    for cand in name_candidates:
-        if not cand:
-            continue
+    if facility_name:
         stmt = (
             select(PlaceModel)
             .where(
                 and_(
-                    PlaceModel.name.like(f"%{cand}%"),
+                    PlaceModel.name.like(f"%{facility_name}%"),
                     PlaceModel.address.like(f"%{SEOUL}%"),
                 )
             )
@@ -1020,18 +1028,14 @@ async def search_facility_by_name(
             payload = _to_dict(place)
             payload["match_source"] = "name_exact"
             payload["match_confidence"] = 1.0 if len(rows) == 1 else 0.8
-            payload["matched_keyword"] = cand
+            payload["matched_keyword"] = facility_name
             logger.info(
-                f"[FacilityService] name match '{cand}' -> {place.name} "
+                f"[FacilityService] name match '{facility_name}' -> {place.name} "
                 f"(candidates={len(rows)})"
             )
-            return payload
+            return FacilitySearchResult(facility=payload)
 
     try:
-        container = request.app.state.ai_container if request else None
-        if container is None:
-            logger.info("[FacilityService] AIContainer 없음 - 벡터 fallback 스킵")
-            return None
         vector_results = container._places_retriever.search(
             query=query,
             n_results=3,
@@ -1039,29 +1043,29 @@ async def search_facility_by_name(
         )
     except Exception as e:
         logger.warning(f"[FacilityService] ChromaDB search failed: {e}")
-        return None
+        return FacilitySearchResult()
 
     if not vector_results:
-        return None
+        return FacilitySearchResult()
 
     top = vector_results[0]
     similarity = float(top.get("similarity", 0.0) or 0.0)
     if similarity < FACILITY_VECTOR_MIN_SIMILARITY:
         logger.info(
             f"[FacilityService] top similarity {similarity:.3f} "
-            f"< {FACILITY_VECTOR_MIN_SIMILARITY} -> None"
+            f"< {FACILITY_VECTOR_MIN_SIMILARITY} -> 미매칭"
         )
-        return None
+        return FacilitySearchResult()
 
     cid = top.get("content_id")
     if not cid:
-        return None
+        return FacilitySearchResult()
 
     stmt = select(PlaceModel).where(PlaceModel.content_id == cid)
     result = await db.execute(stmt)
     place = result.scalar_one_or_none()
     if place is None:
-        return None
+        return FacilitySearchResult()
 
     payload = _to_dict(place)
     payload["match_source"] = "vector"
@@ -1070,7 +1074,7 @@ async def search_facility_by_name(
     logger.info(
         f"[FacilityService] vector match -> {place.name} (sim={similarity:.3f})"
     )
-    return payload
+    return FacilitySearchResult(facility=payload)
 
 
 async def search_places_from_db(
