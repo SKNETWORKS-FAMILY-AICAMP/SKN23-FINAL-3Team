@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────────
+#  운영(추론) 의존성
+#  - Docker 운영 이미지는 이 파일만 설치한다.
+#  - 학습/개발 전용 패키지(datasets, accelerate, scikit-learn, pandas,
+#    ipykernel 등)는 requirements-dev.txt 에서 관리한다.
+#  - torch 는 Dockerfile 에서 CPU-only wheel 로 선설치한다.
+#    로컬 개발 시 CUDA 버전이 필요하면 requirements-dev.txt 참조.
+# ─────────────────────────────────────────────────────────────────
+
+# Vector DB
+chromadb
+
+# 한국어 임베딩 모델
+sentence-transformers
+
+# 외부 API 호출 (The Dog API, Dog CEO API, 한국관광공사 OpenAPI)
+httpx
+requests
+
+# 공공데이터 파싱/수집 (현재 직접 사용처 없음 — dead dep 후보, 추후 제거 검토)
+beautifulsoup4
+
+# .env 파일 로드 (API 키 관리)
+python-dotenv
+
+# OpenAI API 클라이언트
+openai
+
+# FastAPI 백엔드
+fastapi
+uvicorn[standard]
+
+# 이미지 평가 (YOLOv8 견종 분류)
+ultralytics
+pillow
+
+# 비동기 SQLite (cost_tracker 레거시 — dead dep 후보)
+aiosqlite
+
+# DB 연결 (AWS RDS MySQL)
+pymysql
+sqlalchemy[asyncio]
+aiomysql
+
+# SSH 터널링 (로컬 환경에서 RDS 접근)
+sshtunnel
+paramiko<3.4.0     # 3.4.0부터 DSSKey 제거 → sshtunnel 호환 불가
+cryptography       # SSH PEM 키 파싱에 필요
+
+# Pydantic v2 (환경변수 관리 + 유효성 검사)
+pydantic-settings
+pydantic[email]
+
+# 인증 (JWT)
+python-jose[cryptography]
+
+# AWS S3 비동기 업로드
+aioboto3
+
+# APScheduler (탈퇴 Hard Delete 배치)
+apscheduler
+
+# multipart/form-data 파일 업로드
+python-multipart
+
+# 추론 스택
+#   torch 는 Dockerfile 에서 CPU-only wheel 로 선설치 → 여기서는 범위만 선언.
+#   (pip 가 이미 설치된 CPU wheel 을 재사용하므로 CUDA wheel 로 덮어쓰지 않음.)
+torch>=2.0.0
+transformers>=4.35.0
+numpy>=1.24.0
+tqdm                # 학습 진행률 표시 (transformers 의존성이지만 명시적 고정)
+
+# KMeans 유저 세그먼트 군집화 (ai/eval/train_kmeans.py)
+joblib
+matplotlib
+
+# 그림일기 이미지 자동 평가 / 평가셋 Excel 출력
+# openai, pillow, python-dotenv 는 위에서 이미 선언
+openpyxl
+pytest
+
+pandas              # 간접 의존 (chromadb 등) — 명시적 고정

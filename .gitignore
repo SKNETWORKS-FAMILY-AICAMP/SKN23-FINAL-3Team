@@ -351,12 +351,12 @@ sketch
 ### venv ###
 # Virtualenv
 # http://iamzed.com/2009/05/07/a-primer-on-virtualenv/
-[Bb]in
-[Ii]nclude
-[Ll]ib
-[Ll]ib64
-[Ll]ocal
-[Ss]cripts
+*venv*/[Bb]in
+*venv*/[Ii]nclude
+*venv*/[Ll]ib
+*venv*/[Ll]ib64
+*venv*/[Ll]ocal
+*venv*/[Ss]cripts
 pyvenv.cfg
 pip-selfcheck.json
 
@@ -528,3 +528,39 @@ fabric.properties
 
 # End of https://www.toptal.com/developers/gitignore/api/python,react,flutter,dart,visualstudiocode,windows,linux,android,androidstudio,venv,git
 
+# huggingface / sentence-transformers cache
+.cache/
+
+# local chroma vector database (zip으로만 공유)
+data/chroma_db/
+
+# 의도문류 모델
+ai/intent/model/model.safetensors
+
+# SQLite DB
+back/db/*.db
+
+# 프론트엔드 빌드 결과물
+front/dist/
+front/.vite/
+
+# Python 가상환경
+withdog_venv/
+
+# pytest 임시 캐시 폴더
+pytest-cache-files-*/
+
+# evaluation 임시 출력 파일
+temp_*.txt
+
+# evaluation 결과/로그 (로컬 실행 산출물)
+ai/evaluation/results/
+ai/evaluation/logs/
+data/eval/backup/
+
+# 평가용 eval 데이터 (로컬 실행 산출물)
+ai/eval_data/
+
+# 평가셋 엑셀 (용량 초과)
+data/eval/*.xlsx
+

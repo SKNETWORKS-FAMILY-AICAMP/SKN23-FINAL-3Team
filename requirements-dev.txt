@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────────
+#  학습·개발 전용 의존성
+#  - 운영 Docker 이미지에는 설치되지 않는다.
+#  - 로컬 학습/평가(ai/intent/train.py, evaluate.py) 및 seed/임베딩 스크립트
+#    (back/db/seeds/*_seed.py, data/embedding/embed_*.py), 노트북 개발 시 사용.
+#
+#  설치:
+#      pip install -r requirements-dev.txt
+#
+#  GPU 에서 학습하려면 torch 를 CUDA wheel 로 교체:
+#      pip uninstall -y torch
+#      pip install --index-url https://download.pytorch.org/whl/cu121 torch
+# ─────────────────────────────────────────────────────────────────
+
+# 운영 패키지 상속
+-r requirements.txt
+
+# Jupyter 노트북 / IPython 커널
+ipykernel
+
+# 모델 학습 전용 (ai/intent/train.py, ai/intent/evaluate.py)
+datasets>=2.14.0
+accelerate>=0.21.0    # transformers 학습 루프 가속
+scikit-learn>=1.3.0   # train_test_split, classification_report
