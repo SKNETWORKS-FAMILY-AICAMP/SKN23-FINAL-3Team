@@ -59,6 +59,13 @@ EXPLICIT_PURPOSE_KEYWORDS = (
 PET_SIZE_CONTEXT_WORDS = ("반려견", "강아지", "개", "아이", "댕댕이", "견")
 PLACE_SIZE_CONTEXT_WORDS = ("카페", "식당", "공원", "숙소", "호텔", "펜션", "놀이터", "공간", "매장")
 
+OUT_OF_SERVICE_KEYWORDS = (
+    "제주", "부산", "강원", "경주", "속초", "동해", "인천", "수원", "대전",
+    "가평", "경기", "충청", "전라", "경상", "울산", "광주", "대구", "세종",
+    "춘천", "강릉", "여수", "통영", "거제", "포항", "안동", "전주", "청주",
+    "해운대", "제주도", "고양", "성남", "용인", "평택", "화성",
+)
+
 
 class ParsedQuery:
     """Container for parsed place-search query conditions."""
@@ -263,6 +270,20 @@ def _normalize_supply_preferences(parsed: ParsedQuery) -> None:
     if any(re.search(pattern, query) for pattern in waste_bag_patterns):
         parsed.objective["waste_bag_preference"] = "provided_or_not_required"
         logger.info("[PlaceService] supply preference detected: waste bags provided or not required")
+
+
+def _normalize_indoor_outdoor_subjective(parsed: ParsedQuery) -> None:
+    """실내/실외 조건이 파싱된 경우 subjective 텍스트에도 반영해 임베딩 품질을 높인다."""
+    is_indoor = parsed.objective.get("is_indoor")
+    is_outdoor = parsed.objective.get("is_outdoor")
+    subjective = (parsed.subjective or "").strip()
+
+    if is_indoor is True and "실내" not in subjective:
+        parsed.subjective = f"실내 {subjective}".strip()
+        logger.info("[PlaceService] indoor condition injected into subjective")
+    elif is_outdoor is True and not any(kw in subjective for kw in ("실외", "야외")):
+        parsed.subjective = f"야외 실외 {subjective}".strip()
+        logger.info("[PlaceService] outdoor condition injected into subjective")
 
 
 def _has_fee_preferences(parsed: ParsedQuery) -> bool:
@@ -478,6 +499,7 @@ async def _parse_query_with_llm(query: str, request: Request = None) -> ParsedQu
     _normalize_fee_preferences(parsed)
     _normalize_supply_preferences(parsed)
     _relax_objective_for_restriction_focus(parsed)
+    _normalize_indoor_outdoor_subjective(parsed)
     return parsed
 
 
@@ -790,15 +812,33 @@ async def _search_by_chromadb(
             return []
 
         query_text = (parsed.subjective or "").strip() or parsed.raw_query
-        search_n_results = max(n_results, 20) if _has_fee_preferences(parsed) else n_results
 
-        return container._places_retriever.search(
+        # candidate_ids가 있으면 후처리 필터를 위해 여유롭게 더 가져온다
+        has_candidates = bool(candidate_ids)
+        fetch_n = max(n_results, 50) if has_candidates else n_results
+        search_n_results = max(fetch_n, 20) if _has_fee_preferences(parsed) else fetch_n
+
+        results = container._places_retriever.search(
             query=query_text,
             n_results=search_n_results,
             city=parsed.objective.get("city"),
             district=parsed.objective.get("district"),
             category=parsed.objective.get("sub_category"),
         )
+
+        # RDB 필터(is_indoor/is_outdoor/has_parking/pet_size/시간 등)로 좁힌 후보에만 제한
+        if has_candidates:
+            candidate_set = set(candidate_ids)
+            filtered = [r for r in results if r.get("content_id") in candidate_set]
+            logger.info(
+                "[PlaceService] ChromaDB candidate filter: %d -> %d (candidate_ids=%d)",
+                len(results),
+                len(filtered),
+                len(candidate_ids),
+            )
+            results = filtered
+
+        return results
     except Exception as e:
         logger.warning(f"[PlaceService] ChromaDB search failed: {e}")
         return []
@@ -974,6 +1014,14 @@ async def search_places_from_db(
                 f"[PlaceService] out-of-service area requested: {requested_city} -> return empty result"
             )
             return []
+
+        # LLM이 도시 파싱에 실패했더라도 쿼리에 서울 외 지역 키워드가 있으면 거부
+        if not requested_city or requested_city == SEOUL:
+            if any(kw in query for kw in OUT_OF_SERVICE_KEYWORDS):
+                logger.info(
+                    f"[PlaceService] keyword-based out-of-service detected: {query} -> return empty result"
+                )
+                return []
 
         if parsed.landmark:
             parsed.landmark_coords = await _get_landmark_coords(parsed.landmark)
