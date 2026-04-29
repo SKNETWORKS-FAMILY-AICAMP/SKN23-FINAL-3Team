@@ -324,6 +324,11 @@ function DiaryAlbum({
                   ✨ {selected.summary}
                 </div>
               )}
+              {selected.place && (
+                <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#F0F7FF] px-3 py-1 text-xs font-medium text-[#5B8DB8]">
+                  📍 {selected.place}
+                </div>
+              )}
             </div>
 
             {/* 이미지 */}
@@ -457,6 +462,9 @@ function DiaryAlbum({
                       <p className="truncate text-sm font-bold text-[#3D2B1F]">{entry.title}</p>
                       {entry.summary && (
                         <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#8B6355]">{entry.summary}</p>
+                      )}
+                      {entry.place && (
+                        <p className="mt-1 truncate text-[11px] leading-4 text-[#5B8DB8]">📍 {entry.place}</p>
                       )}
                     </div>
                   </div>
@@ -597,7 +605,7 @@ export default function HomePage({
     const t = new URLSearchParams(location.search).get('tab');
     return (t === 'diary' || t === 'map') ? t : null;
   });
-  const [autoPlace, setAutoPlace] = useState('');
+  const [autoPlace, setAutoPlace] = useState<PlaceResult | null>(null);
   const [showDiaryEditor, setShowDiaryEditor] = useState(false);
   const [showMapSearch, setShowMapSearch] = useState(false);
   const [mapPlaces, setMapPlaces] = useState<PlaceResult[]>([]);
@@ -615,6 +623,8 @@ export default function HomePage({
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [showPlacePanel, setShowPlacePanel] = useState(false);
+  const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -672,7 +682,7 @@ export default function HomePage({
     setShowDiaryEditor(false);
     setShowMapSearch(false);
     setShowAlbum(false);
-    setAutoPlace('');
+    setAutoPlace(null);
   }, [location.key]);
 
   const safePets = useMemo(() => {
@@ -696,10 +706,14 @@ export default function HomePage({
     setShowMapSearch(true);
   };
 
-  const handleUsePlace = (place: string) => {
+  const handleUsePlace = (place: PlaceResult) => {
     setAutoPlace(place);
-    setTab('diary');
     setDiaryResult(null);
+    // 채팅 기록에서 온 경우: 기록 닫고 챗봇 새 채팅으로 시작
+    if (showChatHistory) {
+      setShowChatHistory(false);
+      setChatKey((k) => k + 1);
+    }
     setDiaryTrigger((prev) => prev + 1);
   };
 
@@ -737,7 +751,7 @@ export default function HomePage({
               body: d.content ?? '',
               summary: d.summary ?? '',
               date: d.created_at.substring(0, 10),
-              place: '',
+              place: d.where_text ?? '',
               imageUrl,
             };
           })
@@ -777,6 +791,7 @@ export default function HomePage({
           content: diaryResult.diary.content,
           summary: diaryResult.diary.summary ?? '',
           emotion: diaryResult.diary.emotion ?? '',
+          where_text: autoPlace ? autoPlace.name : undefined,
         });
         setSavedDiaryId(saved.id);
         try {
@@ -793,7 +808,7 @@ export default function HomePage({
           body: diaryResult.diary.content,
           summary: diaryResult.diary.summary ?? '',
           date: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
-          place: autoPlace || '',
+          place: autoPlace ? autoPlace.name : '',
           imageUrl: diaryResult.imageUrl,
         });
         setAutoSaveState('done');
@@ -848,7 +863,7 @@ export default function HomePage({
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
                 }`}
-                onClick={handleOpenMapTab}
+                onClick={() => { setTab('map'); setShowMapSearch(false); setShowDiaryEditor(false); setShowAlbum(false); setDiaryResult(null); }}
               >
                 <Map className="h-4 w-4" />
                 지도
@@ -856,6 +871,7 @@ export default function HomePage({
             </div>
 
             <div className="flex-1 overflow-y-auto">
+
               {tab === null && (
                 <HomeIntro
                   onOpenMap={handleOpenMapTab}
@@ -900,15 +916,16 @@ export default function HomePage({
                   pet={currentPet}
                   user={safeUser!}
                   diaries={safeDiaries}
-                  autoPlace={autoPlace}
-                  onClearAutoPlace={() => setAutoPlace('')}
+                  autoPlace={autoPlace?.name ?? ''}
+                  onClearAutoPlace={() => setAutoPlace(null)}
                   onSave={handleSaveDiary}
                 />
               )}
 
 {tab === 'diary' && diaryResult && (
   <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
-    <div className="mx-auto w-full max-w-[720px]">
+    <div className={`mx-auto w-full flex gap-4 ${showPlacePanel ? 'max-w-[1100px]' : 'max-w-[720px]'}`}>
+    <div className="flex-1 min-w-0">
       {/* 상단 헤더 */}
       <div className="mb-4 flex items-center gap-3">
         <button
@@ -980,6 +997,17 @@ export default function HomePage({
               ✨ {diaryResult.diary.summary}
             </div>
           )}
+          {autoPlace && (
+            <button
+              onClick={() => setShowPlacePanel((prev) => !prev)}
+              className={`mt-2 rounded-2xl px-3 py-1.5 text-left transition ${showPlacePanel ? 'bg-[#5B8DB8] text-white' : 'bg-[#F0F7FF] text-[#5B8DB8] hover:bg-[#ddeeff]'}`}
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold">📍 {autoPlace.name}</span>
+                <span className="text-[11px] opacity-80">{autoPlace.address}</span>
+              </div>
+            </button>
+          )}
         </div>
 
         {/* 이미지 */}
@@ -1012,6 +1040,44 @@ export default function HomePage({
         )}
       </div>
     </div>
+
+    {/* 장소 정보 사이드 패널 */}
+    {showPlacePanel && autoPlace && (
+      <div className="w-72 shrink-0 rounded-[24px] border border-[#E9D9C9] bg-[#FFFDF8] p-5 shadow-[0_4px_16px_rgba(61,43,31,0.08)] self-start mt-14">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-bold text-[#3D2B1F]">📍 장소 정보</span>
+          <button onClick={() => setShowPlacePanel(false)} className="text-[#B08B7A] hover:text-[#3D2B1F] text-xs">✕</button>
+        </div>
+        <p className="text-sm font-bold text-[#3D2B1F] mb-1">{autoPlace.name}</p>
+        <p className="text-xs text-[#8B6355] mb-3">{autoPlace.address}</p>
+        <div className="flex flex-wrap gap-1 mb-3">
+          {autoPlace.category && <span className="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] text-[#F4845F]">{autoPlace.category}</span>}
+          {autoPlace.sub_category && <span className="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] text-[#F4845F]">{autoPlace.sub_category}</span>}
+          {autoPlace.indoor === 'Y' && <span className="rounded-full bg-[#E8F4FD] px-2 py-0.5 text-[11px] text-[#5B8DB8]">실내 가능</span>}
+          {autoPlace.outdoor === 'Y' && <span className="rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[11px] text-[#4CAF50]">야외 가능</span>}
+          {autoPlace.has_parking === 'Y' && <span className="rounded-full bg-[#F3E5F5] px-2 py-0.5 text-[11px] text-[#9C27B0]">주차 가능</span>}
+        </div>
+        {autoPlace.operation && (
+          <div className="mb-2">
+            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">운영시간</p>
+            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.operation}</p>
+          </div>
+        )}
+        {autoPlace.tel && (
+          <div className="mb-2">
+            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">연락처</p>
+            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.tel}</p>
+          </div>
+        )}
+        {autoPlace.conditions && (
+          <div>
+            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">이용조건</p>
+            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.conditions}</p>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
   </div>
 )}
 
@@ -1020,7 +1086,11 @@ export default function HomePage({
               )}
 
               {tab === 'map' && showMapSearch && (
-                <MapView places={mapPlaces} onUsePlace={handleUsePlace} />
+                <MapView
+                  places={mapPlaces}
+                  onUsePlace={handleUsePlace}
+                  initialSelectedId={historySelectedId ?? undefined}
+                />
               )}
             </div>
           </div>
@@ -1077,7 +1147,16 @@ export default function HomePage({
 
               <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
                 {showChatHistory ? (
-                  <ChatHistory onBack={() => setShowChatHistory(false)} />
+                  <ChatHistory
+                    onBack={() => setShowChatHistory(false)}
+                    onShowPlaces={(places, selected) => {
+                      setMapPlaces(places)
+                      setHistorySelectedId(selected.content_id ?? selected.name)
+                      setTab('map')
+                      setShowMapSearch(true)
+                      // 채팅 기록은 닫지 않음 — 일기쓰기 버튼 클릭 시 handleUsePlace에서 닫힘
+                    }}
+                  />
                 ) : (
                   <div className="h-full p-3">
                     <ChatBot
@@ -1089,6 +1168,7 @@ export default function HomePage({
                       onNavigateToMap={handleOpenMapTab}
                       onDiaryReady={handleDiaryReady}
                       diaryTrigger={diaryTrigger}
+                      diaryPlace={autoPlace?.name}
                       initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
                     />
                   </div>

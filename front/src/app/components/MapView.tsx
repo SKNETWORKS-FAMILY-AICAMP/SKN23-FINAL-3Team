@@ -11,13 +11,14 @@ declare global {
 
 interface Props {
   places: PlaceResult[];
-  onUsePlace: (place: string) => void;
+  onUsePlace: (place: PlaceResult) => void;
+  initialSelectedId?: string;
 }
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.9780 };
 
-export default function MapView({ places, onUsePlace }: Props) {
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+export default function MapView({ places, onUsePlace, initialSelectedId }: Props) {
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(initialSelectedId ?? null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -302,7 +303,7 @@ export default function MapView({ places, onUsePlace }: Props) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => onUsePlace(item.name)}
+                            onClick={() => onUsePlace(item)}
                             className="text-sm font-semibold text-orange-600 hover:text-orange-700"
                           >
                             이 장소로 일기 쓰기 →
@@ -427,7 +428,7 @@ export default function MapView({ places, onUsePlace }: Props) {
 
                 <button
                   type="button"
-                  onClick={() => onUsePlace(selectedPlace.name)}
+                  onClick={() => onUsePlace(selectedPlace)}
                   className="w-full rounded-2xl bg-[#F08A4B] py-3 text-sm font-bold text-white hover:bg-[#E67D3C]"
                 >
                   이 장소로 일기 쓰기 →

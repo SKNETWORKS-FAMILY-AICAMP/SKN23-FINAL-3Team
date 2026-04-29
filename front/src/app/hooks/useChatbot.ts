@@ -3,7 +3,8 @@ import type { Pet } from '../types'
 import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, saveMessage } from '../services/chatService'
+import { createChatRoom, saveMessage, type FacilityCard } from '../services/chatService'
+import type { PlaceResult } from '../services/placeService'
 
 // ── 메시지 타입 ──────────────────────────────────────
 export interface Message {
@@ -11,7 +12,7 @@ export interface Message {
   role: 'bot' | 'user'
   content: string
   action?: 'start_diary'
-  variant?: 'place'
+  variant?: 'place' | 'facility'
   places?: Array<{
     name: string
     address: string
@@ -22,6 +23,9 @@ export interface Message {
     has_parking: string
     reason?: string
   }>
+  facility?: FacilityCard
+  // variant?: 'place'
+  // places?: PlaceResult[]
 }
 
 // ── 챗봇 단계 ────────────────────────────────────────
@@ -56,7 +60,7 @@ export interface ChatbotState {
 export type ChatbotAction =
   | { type: 'START_DIARY' }
   | { type: 'UPDATE_PET'; pet: Pet }
-  | { type: 'FORCE_START_DIARY' }
+  | { type: 'FORCE_START_DIARY'; placeName?: string }
   | { type: 'SELECT_DIARY_TYPE'; id: DiaryTypeId }
   | { type: 'SUBMIT_MAIN_ANSWER'; answer: string }
   | { type: 'RESPOND_TO_PERSPECTIVE'; accepted: boolean }
@@ -69,21 +73,24 @@ export type ChatbotAction =
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
   | { type: 'TRIGGER_DIARY_FLOW' }
   | {
-      type: 'RECEIVE_BOT_MESSAGE'
-      text: string
-      action?: 'start_diary'
-      variant?: 'place'
-      places?: Array<{
-        name: string
-        address: string
-        category: string
-        sub_category: string
-        indoor: string
-        outdoor: string
-        has_parking: string
-        reason?: string
-      }>
-    }
+    type: 'RECEIVE_BOT_MESSAGE'
+    text: string
+    action?: 'start_diary'
+    variant?: 'place' | 'facility'
+    places?: Array<{
+      name: string
+      address: string
+      category: string
+      sub_category: string
+      indoor: string
+      outdoor: string
+      has_parking: string
+      reason?: string
+    }>
+    facility?: FacilityCard
+    // variant?: 'place'
+    // places?: PlaceResult[]
+  }
 
 // ── 헬퍼 ─────────────────────────────────────────────
 let _counter = 0
@@ -91,12 +98,12 @@ const nextId = () => `msg-${++_counter}`
 const botMsg = (content: string): Message => ({ id: nextId(), role: 'bot', content })
 const userMsg = (content: string): Message => ({ id: nextId(), role: 'user', content })
 const fmt = (tpl: string, name: string) => tpl.replace(/\{petName\}/g, name)
-const ACKS = ['그렇군요 😊', '아, 그랬군요!', '좋아요 🐾', '잘 알겠어요!', '기억해둘게요 🤍', '소중한 순간이네요.']
+const ACKS = ['그렇군요 😊', '아, 그랬군요!', '좋아요', '잘 알겠어요!', '기억해둘게요 🤍', '소중한 순간이네요.']
 const randomAck = () => ACKS[Math.floor(Math.random() * ACKS.length)]
 
 // ── 초기 상태 ────────────────────────────────────────
 function makeInitialState(pet: Pet, welcomeOverride?: string): ChatbotState {
-  const welcome = welcomeOverride ?? `안녕하세요! 저는 ${pet.name}의 반짝이는 하루와\n소중한 추억을 차곡차곡 담아드리는 AI 멍봇이에요 🐾\n\n추억을 함께 기록하고,\n어울리는 장소도 추천해드릴게요.\n\n오늘은 어떤 하루를 남겨볼까요?`
+  const welcome = welcomeOverride ?? `안녕하세요! 저는 ${pet.name}의 반짝이는 하루와\n소중한 추억을 차곡차곡 담아드리는 AI 멍봇이에요\n\n추억을 함께 기록하고,\n어울리는 장소도 추천해드릴게요.\n\n오늘은 어떤 하루를 남겨볼까요?`
   return {
     step: 'welcome',
     pet,
@@ -173,7 +180,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
         messages: [
           ...state.messages,
           userMsg(action.answer),
-          botMsg(`잘 기록됐어요! 🐾\n\n${fmt(dt.perspectiveSuggestion, petName)}`),
+          botMsg(`잘 기록됐어요!\n\n${fmt(dt.perspectiveSuggestion, petName)}`),
         ],
       }
     }
@@ -260,7 +267,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
         generatedDiary: diary,
         messages: [
           ...state.messages,
-          botMsg(`${petName}의 일기가 완성됐어요 🐾`),
+          botMsg(`${petName}의 일기가 완성됐어요`),
           botMsg(diaryMessage),
         ],
       }
@@ -279,6 +286,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       if (action.action) msg.action = action.action
       if (action.variant) msg.variant = action.variant
       if (action.places) msg.places = action.places
+      if (action.facility) msg.facility = action.facility
       return {
         ...state,
         isGenerating: false,
@@ -293,7 +301,7 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
         step: 'type_select',
         messages: [
           ...state.messages,
-          botMsg(`${petName}의 오늘 하루를 어떤 유형으로 기록할까요? 🐾`),
+          botMsg(`${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`),
         ],
       }
     }
@@ -303,13 +311,16 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
 
     case 'FORCE_START_DIARY': {
       const fresh = makeInitialState(state.pet)
+      const placeMsg = action.placeName
+        ? `좋아요! ${petName}와(과) ${action.placeName}에서 보낸 하루를 어떤 유형으로 기록할까요?`
+        : `좋아요! ${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`
       return {
         ...fresh,
         step: 'type_select',
         messages: [
           ...fresh.messages,
           userMsg('그림일기 쓸게요 📝'),
-          botMsg(`좋아요! ${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`),
+          botMsg(placeMsg),
         ],
       }
     }
@@ -360,7 +371,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
   // pet prop이 바뀌면 내부 state.pet도 동기화
   useEffect(() => {
     dispatch({ type: 'UPDATE_PET', pet })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pet.name, pet.breed, pet.ownerName, pet.birthDate])
 
   // 메시지가 초기화되면(RESET/FORCE_START) 저장 상태도 초기화
@@ -413,7 +424,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
     }
 
     persist()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.messages, state.step])
 
   useEffect(() => {
@@ -456,7 +467,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
 
   const actions = {
     startDiary: useCallback(() => dispatch({ type: 'START_DIARY' }), []),
-    forceStartDiary: useCallback(() => dispatch({ type: 'FORCE_START_DIARY' }), []),
+    forceStartDiary: useCallback((placeName?: string) => dispatch({ type: 'FORCE_START_DIARY', placeName }), []),
     triggerDiaryFlow: useCallback(() => dispatch({ type: 'TRIGGER_DIARY_FLOW' }), []),
     selectDiaryType: useCallback((id: DiaryTypeId) => dispatch({ type: 'SELECT_DIARY_TYPE', id }), []),
     submitMainAnswer: useCallback((answer: string) => dispatch({ type: 'SUBMIT_MAIN_ANSWER', answer }), []),
@@ -471,7 +482,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
       (
         text: string,
         action?: 'start_diary',
-        variant?: 'place',
+        variant?: 'place' | 'facility',
         places?: Array<{
           name: string
           address: string
@@ -482,7 +493,11 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
           has_parking: string
           reason?: string
         }>,
-      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
+        facility?: FacilityCard,
+      ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places, facility }),
+      //   variant?: 'place',
+      //   places?: PlaceResult[],
+      // ) => dispatch({ type: 'RECEIVE_BOT_MESSAGE', text, action, variant, places }),
       [],
     ),
   }

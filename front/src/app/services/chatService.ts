@@ -45,10 +45,34 @@ export function deleteChatRoom(id: number): Promise<void> {
 
 // ── 메시지 ────────────────────────────────────────────
 
+export interface FacilityCard {
+  name: string
+  address: string
+  category: string
+  sub_category: string
+  content_id: string
+  lat: number
+  lng: number
+  tel: string
+  operation: string
+  has_parking: string
+  indoor: string
+  outdoor: string
+  conditions: string
+  description: string
+  entrance_fee_amount: number | null
+  entrance_fee_type: string
+  extra_fee_amount: number | null
+  extra_fee_type: string
+  match_source: 'name_exact' | 'vector' | string
+  match_confidence: number
+}
+
 export interface ChatTurnResponse {
   user_message: ChatMessage
   assistant_message: ChatMessage
   intent: { intent: string; confidence: number }
+  facility: FacilityCard | null
 }
 
 /** POST /chat-rooms/{roomId}/messages — 의도분류 + AI 응답 포함 */
@@ -81,4 +105,13 @@ export function getMessages(roomId: number): Promise<ChatMessage[]> {
 /** GET /chat-rooms/{roomId}/messages?last_n={n} */
 export function getRecentMessages(roomId: number, n: number): Promise<ChatMessage[]> {
   return api.get(`/chat-rooms/${roomId}/messages?last_n=${n}`)
+}
+
+/** PATCH /chat-rooms/{roomId}/messages/{messageId} */
+export function updateMessageContent(
+  roomId: number,
+  messageId: number,
+  content: string,
+): Promise<ChatMessage> {
+  return api.patch(`/chat-rooms/${roomId}/messages/${messageId}`, { content })
 }

@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.deps import get_current_user, get_db
 from services import chat_message_service as msg_svc
 from fastapi import APIRouter, Depends, Query, Request, status
-from schemas.chat_message import (ChatTurnResponse, IntentInfo, MessageCreate, MessageResponse)
+from schemas.chat_message import (ChatTurnResponse, FacilityCard, IntentInfo, MessageCreate, MessageResponse, MessageUpdate)
 
 router = APIRouter(tags=["ChatMessages"])
 
@@ -58,7 +58,7 @@ async def create_message(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChatTurnResponse:
-    user_msg, assistant_msg, intent_result = await msg_svc.create_message_with_response(
+    user_msg, assistant_msg, intent_result, facility = await msg_svc.create_message_with_response(
         room_id, data, db, current_user.id, request=request
     )
     return ChatTurnResponse(
@@ -68,7 +68,27 @@ async def create_message(
             intent=intent_result.intent,
             confidence=intent_result.confidence,
         ),
+        facility=FacilityCard.model_validate(facility) if facility else None,
     )
+
+
+@router.patch(
+    "/{room_id}/messages/{message_id}",
+    response_model=MessageResponse,
+    summary="채팅 메시지 내용 수정",
+    description="assistant 메시지 내용을 수정합니다 (장소 추천 후 표시 내용 동기화용).",
+)
+async def update_message(
+    room_id: int,
+    message_id: int,
+    data: MessageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MessageResponse:
+    message = await msg_svc.update_message_content(
+        room_id, message_id, data.content, db, current_user.id
+    )
+    return MessageResponse.model_validate(message)
 
 
 @router.get(

@@ -33,48 +33,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.chat_room_service import get_room
 from services.intent_service import IntentResult
 from services import chat_response_service, intent_service
-from services.place_service import _parse_query_with_llm
-from services.diary_response_service import is_diary_button_action, is_diary_confirm_request
+from services.diary_response_service import is_diary_button_action, is_diary_confirm_request, is_diary_start_flow_request
 
 logger = logging.getLogger(__name__)
-
-_PLACE_LIKE_KEYWORDS = (
-    "추천",
-    "알려줘",
-    "알려주세요",
-    "근처",
-    "주변",
-    "숙소",
-    "호텔",
-    "펜션",
-    "카페",
-    "식당",
-    "공원",
-    "놀이터",
-    "가볼만한",
-    "갈만한",
-)
-
-
-async def _should_reroute_to_place(query: str) -> bool:
-    text = query or ""
-    if any(keyword in text for keyword in _PLACE_LIKE_KEYWORDS):
-        return True
-
-    try:
-        parsed = await _parse_query_with_llm(text)
-        return any(
-            [
-                parsed.objective.get("city"),
-                parsed.objective.get("district"),
-                parsed.objective.get("sub_category"),
-                parsed.landmark,
-            ]
-        )
-    except Exception as e:
-        logger.warning(f"[ChatMessage] place reroute check failed: {e}")
-        return False
-
 
 async def create_message(
     room_id: int,
@@ -138,7 +99,7 @@ async def create_message_with_response(
     db: AsyncSession,
     current_user_id: int,
     request: Request | None = None,
-) -> tuple[ChatMessage, ChatMessage, IntentResult]:
+) -> tuple[ChatMessage, ChatMessage, IntentResult, dict | None]:
     """
         사용자 메시지를 저장하고, 의도분류 → 도메인 서비스 디스패치를 거쳐
         assistant 응답 메시지를 저장한 뒤 세 값을 함께 반환합니다.
@@ -200,13 +161,6 @@ async def create_message_with_response(
     # 2) 의도 분류 → 도메인 서비스 디스패치
     try:
         intent_result = await intent_service.classify_intent_async(data.content)
-        if intent_result.intent == "기타" and await _should_reroute_to_place(data.content):
-            logger.info("[ChatMessage] 기타 -> 장소추천 후처리 재라우팅")
-            intent_result = IntentResult(
-                intent="장소추천",
-                confidence=intent_result.confidence,
-                strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
-            )
     except Exception as e:
         logger.error(f"[ChatMessage] 의도 분류 실패: {e}")
         # fallback: 기본 의도(장소추천)로 처리 — dispatch 가 fallback 로직 내장
@@ -216,10 +170,10 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP["장소추천"],
         )
         
-    # diary 버튼 액션/확인 요청은 dispatch 에서 바로 처리되므로
+    # diary 버튼 액션/확인/시작 요청은 dispatch 에서 바로 처리되므로
     # 클라이언트에 반환하는 intent 도 '다이어리 작성'으로 맞춰줌
     # (KoELECTRA 가 '장소추천' 등으로 잘못 분류해도 프론트가 searchPlaces 호출하지 않도록)
-    if is_diary_button_action(data.content) or is_diary_confirm_request(data.content):
+    if is_diary_button_action(data.content) or is_diary_confirm_request(data.content) or is_diary_start_flow_request(data.content):
         logger.info(f"[ChatMessage] diary 버튼/확인 액션 → intent 강제 재정의: {data.content!r}")
         intent_result = IntentResult(
             intent="다이어리 작성",
@@ -227,21 +181,15 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP.get("다이어리 작성", {}),
         )
 
-    ctx = chat_response_service.DispatchContext(
-        user_id=current_user_id,
-        db=db,
-        room_id=room_id,
-        pet_id=data.pet_id,
-    )
-
-    assistant_text = await chat_response_service.dispatch(
+    ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
+    dispatch_result = await chat_response_service.dispatch(
         intent_result,
         data.content,
         ctx,
         request=request,
     )
-    if not assistant_text:
-        assistant_text = "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
+    assistant_text = dispatch_result.text or "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
+    facility = dispatch_result.facility
 
     # 3) assistant 메시지 저장
     assistant_message = ChatMessage(
@@ -257,7 +205,7 @@ async def create_message_with_response(
     await db.flush()
     await db.refresh(assistant_message)
 
-    return user_message, assistant_message, intent_result
+    return user_message, assistant_message, intent_result, facility
 
 
 async def list_messages(
@@ -310,3 +258,33 @@ async def list_messages(
         .order_by(ChatMessage.created_at.asc())
     )
     return result.scalars().all()
+
+
+async def update_message_content(
+    room_id: int,
+    message_id: int,
+    new_content: str,
+    db: AsyncSession,
+    current_user_id: int,
+) -> ChatMessage:
+    """assistant 메시지 내용을 수정합니다 (장소 추천 후 표시 내용 동기화용)."""
+    from services.chat_room_service import _assert_owner, get_room
+
+    room = await get_room(room_id, db)
+    _assert_owner(room, current_user_id)
+
+    result = await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.room_id == room_id,
+        )
+    )
+    message = result.scalar_one_or_none()
+    if message is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="메시지를 찾을 수 없습니다.")
+
+    message.content = new_content
+    await db.flush()
+    await db.refresh(message)
+    return message
