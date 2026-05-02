@@ -1,10 +1,17 @@
 from typing import Annotated
-from core.deps import get_db
+from core.deps import get_current_user, get_db
+from models.user import User
 from schemas.chat_message import FacilityCard
+from schemas.place import (
+    PlaceFavoriteItem,
+    PlaceFavoriteResponse,
+    PlaceFavoriteToggleResponse,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.place_image_service import enrich_place_images
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from services.place_service import (lookup_facility_by_name, search_places_from_db)
+from services import favorite_place_service as fav_svc
 from services.chat_response_service import (DispatchContext, _load_place_preference_context, _rerank_places_with_profile, generate_place_reasons)
 
 router = APIRouter(tags=["places"])
@@ -82,3 +89,51 @@ async def get_facility_by_name(
         )
 
     return FacilityCard.model_validate(facility)
+
+
+@router.get(
+    "/favorites",
+    response_model=PlaceFavoriteResponse,
+    summary="즐겨찾기 장소 목록 조회",
+    description=(
+        "현재 로그인 사용자의 즐겨찾기 장소 목록을 반환한다.\n\n"
+        "응답 항목은 카드 식별·정렬에 필요한 최소 필드(`content_id`, `name`, "
+        "`sub_category`, `favorited_at`)만 포함한다. 이미지·주소 등 추가 정보는 "
+        "프론트가 별도 API(예: `/api/places/by-name?name=`)로 보강.\n\n"
+        "정렬: `favorited_at DESC` (최근 추가가 위)."
+    ),
+)
+async def list_favorite_places(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaceFavoriteResponse:
+    items = await fav_svc.list_favorite_places(db, current_user.id)
+    return PlaceFavoriteResponse(
+        items=[PlaceFavoriteItem(**item) for item in items],
+    )
+
+
+@router.patch(
+    "/{content_id}/favorite",
+    response_model=PlaceFavoriteToggleResponse,
+    summary="장소 즐겨찾기 토글",
+    description=(
+        "장소 즐겨찾기를 토글한다 — 미등록이면 INSERT, 등록되어 있으면 DELETE.\n\n"
+        "**입력**: 한국관광공사 콘텐츠 ID(`content_id`, 카드가 보유한 키).\n"
+        "**중복 차단**: DB UNIQUE (user_id, place_id)로 강제.\n"
+        "**일일 제한 없음** (다이어리 즐겨찾기와 차이)."
+    ),
+)
+async def toggle_favorite_place(
+    content_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaceFavoriteToggleResponse:
+    is_favorite, favorite = await fav_svc.toggle_favorite_place(
+        content_id, db, current_user.id
+    )
+    return PlaceFavoriteToggleResponse(
+        content_id=content_id,
+        is_favorite=is_favorite,
+        favorited_at=favorite.created_at if favorite else None,
+    )

@@ -18,6 +18,7 @@ from models.chat_room import ChatRoom
 from models.chat_message import ChatMessage
 from models.diary import Diary
 from models.place import Place
+from models.favorite_place import FavoritePlace
 
 __all__ = [
     "Image",
@@ -29,4 +30,5 @@ __all__ = [
     "ChatMessage",
     "Diary",
     "Place",
+    "FavoritePlace",
 ]

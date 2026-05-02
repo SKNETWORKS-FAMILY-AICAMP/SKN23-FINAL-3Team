@@ -124,6 +124,26 @@ CREATE TABLE `diaries` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `favorite_places`
+--
+
+DROP TABLE IF EXISTS `favorite_places`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `favorite_places` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `place_id` bigint NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_favorite_places_user_place` (`user_id`,`place_id`),
+  KEY `idx_favorite_places_user` (`user_id`,`created_at`),
+  CONSTRAINT `fk_favorite_places_place` FOREIGN KEY (`place_id`) REFERENCES `places` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_favorite_places_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='사용자별 즐겨찾기 장소 (N:M)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `images`
 --
 
