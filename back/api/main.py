@@ -445,7 +445,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     )
 
     response = await _get_openai_client().chat.completions.create(
-        model="gpt-4o",
+        model=settings.GPT_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.4,   # 낮출수록 일관성↑ 창의성↓
         top_p=0.9,         # P값: 확률 상위 90% 토큰만 선택
