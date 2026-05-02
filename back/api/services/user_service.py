@@ -19,6 +19,7 @@ services/user.py
 from __future__ import annotations
 
 from models.user import User
+from models.pet import Pet
 from sqlalchemy import select
 from core.utils import kst_now
 from models.image import Image
@@ -70,6 +71,39 @@ async def _verify_keyword_exists(keyword_id: int, db: AsyncSession) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"성향 키워드(id={keyword_id})를 찾을 수 없습니다.",
+        )
+
+
+async def _verify_primary_pet_ownership(
+    pet_id: int,
+    user_id: int,
+    db: AsyncSession,
+) -> None:
+    """primary_pet_id FK: 본인 소유의 활성 반려견인지 검증합니다.
+
+    Args:
+        pet_id : 대표로 지정하려는 반려견 ID.
+        user_id: 현재 로그인 사용자 ID (소유 검증용).
+        db     : AsyncSession.
+
+    Raises:
+        HTTPException 404: pets 에 존재하지 않거나 soft-deleted 된 반려견.
+        HTTPException 403: 본인 소유가 아닌 반려견.
+    """
+    result = await db.execute(
+        select(Pet).where(Pet.id == pet_id, Pet.deleted_at.is_(None))
+    )
+    pet = result.scalar_one_or_none()
+
+    if pet is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"반려견(id={pet_id})을 찾을 수 없습니다.",
+        )
+    if pet.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인의 반려견만 대표로 설정할 수 있습니다.",
         )
 
 
@@ -151,6 +185,11 @@ async def update_user(
 
     if "type_id" in update_data:
         await _verify_keyword_exists(update_data["type_id"], db)
+
+    if "primary_pet_id" in update_data and update_data["primary_pet_id"] is not None:
+        await _verify_primary_pet_ownership(
+            update_data["primary_pet_id"], current_user_id, db
+        )
 
     # ORM 필드 업데이트
     for field, value in update_data.items():

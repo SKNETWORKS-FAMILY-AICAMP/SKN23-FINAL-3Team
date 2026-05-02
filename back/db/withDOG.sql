@@ -270,6 +270,7 @@ CREATE TABLE `users` (
   `provider` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '소셜 로그인 제공자 (google/kakao/naver)',
   `provider_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'OAuth2.0 제공자 발급 고유 ID',
   `type_id` bigint DEFAULT NULL COMMENT '대표 성향 키워드 ID',
+  `primary_pet_id` bigint DEFAULT NULL COMMENT '대표 반려견 ID (마이페이지 카드·기본 컨텍스트용)',
   `selected_tags` json DEFAULT NULL COMMENT '선택한 여행 성향 태그 목록',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 일시',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정 일시',
@@ -278,9 +279,11 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_provider` (`provider`,`provider_id`),
   KEY `fk_users_profile_id` (`profile_id`),
   KEY `fk_users_type_id` (`type_id`),
+  KEY `fk_users_primary_pet` (`primary_pet_id`),
   KEY `idx_users_email` (`email`),
   CONSTRAINT `fk_users_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `images` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `fk_users_type_id` FOREIGN KEY (`type_id`) REFERENCES `keywords` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT `fk_users_type_id` FOREIGN KEY (`type_id`) REFERENCES `keywords` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_users_primary_pet` FOREIGN KEY (`primary_pet_id`) REFERENCES `pets` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='소셜 로그인 사용자 계정';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
