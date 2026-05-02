@@ -1,16 +1,15 @@
-import logging
 import re
-from copy import deepcopy
-from dataclasses import dataclass
-
 import httpx
-from fastapi import Request
-from sqlalchemy import and_, func, not_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
+from copy import deepcopy
+from fastapi import Request
+from dataclasses import dataclass
 from core.config import settings
 from core.type.place import PlaceType
 from models.place import Place as PlaceModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, func, not_, or_, select
 
 logger = logging.getLogger(__name__)
 
@@ -1076,6 +1075,66 @@ async def search_facility_by_name(
     )
     return FacilitySearchResult(facility=payload)
 
+async def lookup_facility_by_name(
+    name: str,
+    db: AsyncSession,
+) -> dict | None:
+    """장소 이름 기반 단일 시설정보 조회.
+
+    채팅 응답 카드에서 사용자가 장소 링크를 클릭했을 때, 카드에 표시된
+    장소명(예: "더포트", "바잇미", "반포 한강공원")을 그대로 받아 시설
+    상세를 반환한다. 카드의 `name` 은 `_to_dict` 가 `Place.name` 을
+    그대로 직렬화한 값이므로 정확 매칭이 1차 전략이고, 시드 갱신·공백
+    차이 등으로 정확 매칭이 미스인 케이스를 위해 LIKE fallback 을 둔다.
+    서비스 지역인 서울 한정으로 검색하여 동명 시설이 다른 도시에 있을
+    경우의 오매칭을 차단한다.
+
+    LLM·ChromaDB 호출 없이 RDB 단건 조회만 수행 — hallucinate 0.
+
+    Args:
+        name: 장소명 원문 (URL 디코딩 후, 트림 전 상태도 허용).
+        db  : AsyncSession.
+
+    Returns:
+        `FacilityCard` 직렬화 가능한 dict. 미존재 시 None.
+        동명 시설이 다수일 경우 가장 짧은 name → id 오름차순 으로 결정적
+        으로 1건 선택. 반환 dict 는 `match_source="name_exact"`,
+        `match_confidence=1.0` 으로 고정되어 약한 매칭 경고 UI 가
+        노출되지 않도록 한다.
+    """
+    cleaned = (name or "").strip()
+
+    if not cleaned:
+        return None
+
+    seoul_filter = PlaceModel.address.like(f"%{SEOUL}%")
+    base_order = (func.length(PlaceModel.name).asc(), PlaceModel.id.asc())
+
+    exact_stmt = (
+        select(PlaceModel)
+        .where(and_(PlaceModel.name == cleaned, seoul_filter))
+        .order_by(*base_order)
+        .limit(1)
+    )
+    place = (await db.execute(exact_stmt)).scalar_one_or_none()
+
+    if place is None:
+        like_stmt = (
+            select(PlaceModel)
+            .where(and_(PlaceModel.name.like(f"%{cleaned}%"), seoul_filter))
+            .order_by(*base_order)
+            .limit(1)
+        )
+        place = (await db.execute(like_stmt)).scalar_one_or_none()
+
+    if place is None:
+        return None
+
+    payload = _to_dict(place)
+    payload["match_source"] = "name_exact"
+    payload["match_confidence"] = 1.0
+
+    return payload
 
 async def search_places_from_db(
     query: str,
