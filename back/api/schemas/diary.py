@@ -15,7 +15,10 @@ schemas/diary.py
 
 from __future__ import annotations
 
-from datetime import datetime
+# `date` 는 흔히 필드명으로도 사용되어 (예: FavoriteCalendarItem.date) Pydantic v2
+# 가 클래스 namespace 에서 type annotation 을 해석할 때 충돌을 일으킨다.
+# alias 로 import 해서 필드명/타입명 충돌을 원천 차단한다.
+from datetime import date as _Date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,6 +48,12 @@ class DiaryCreate(BaseModel):
     emotion: str | None = Field(None, max_length=10, description="감정 이모지")
     image_id: int | None = Field(None, gt=0, description="AI 이미지 ID (생성 완료 후 입력)")
 
+    # 캘린더 키 (현 단계는 미입력 시 서비스에서 KST 오늘 자동 입력)
+    diary_date: _Date | None = Field(
+        None,
+        description="일기 날짜 YYYY-MM-DD. 미입력 시 작성 시점의 KST 날짜로 자동 입력.",
+    )
+
 
 class DiaryUpdate(BaseModel):
     """
@@ -71,6 +80,9 @@ class DiaryUpdate(BaseModel):
     emotion: str | None = Field(None, max_length=10)
     image_id: int | None = Field(None, gt=0, description="AI 이미지 ID 바인딩")
 
+    # 캘린더 키 (사용자 수정 가능 — 추후 UI 도입 시 사용)
+    diary_date: _Date | None = Field(None, description="일기 날짜 YYYY-MM-DD")
+
 
 class DiaryResponse(BaseModel):
     """다이어리 응답 스키마."""
@@ -96,5 +108,27 @@ class DiaryResponse(BaseModel):
     summary: str | None = None
     emotion: str | None = None
 
+    # 캘린더·즐겨찾기
+    diary_date: _Date = Field(..., description="일기 날짜 YYYY-MM-DD")
+    is_favorite: bool = Field(False, description="즐겨찾기 여부")
+
     created_at: datetime = Field(..., description="작성 일시")
     updated_at: datetime = Field(..., description="수정 일시")
+
+
+class FavoriteCalendarItem(BaseModel):
+    """캘린더 셀에 들어갈 즐겨찾기 일기 1건의 경량 페이로드."""
+
+    date: _Date = Field(..., description="일기 날짜 YYYY-MM-DD")
+    diary_id: int = Field(..., description="다이어리 ID (셀 클릭 시 상세 라우팅)")
+    emotion: str = Field("", description="감정 이모지 (캘린더 셀 표시용)")
+
+
+class FavoriteCalendarResponse(BaseModel):
+    """캘린더 화면에서 한 달치 즐겨찾기 일기를 한 번에 받는 응답 스키마."""
+
+    year: int = Field(..., ge=1900, le=2100, description="조회 연도")
+    month: int = Field(..., ge=1, le=12, description="조회 월 (1-12)")
+    items: list[FavoriteCalendarItem] = Field(
+        ..., description="해당 월의 즐겨찾기 일기 목록 (diary_date ASC)"
+    )

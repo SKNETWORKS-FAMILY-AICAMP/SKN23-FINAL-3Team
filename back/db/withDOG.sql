@@ -106,6 +106,8 @@ CREATE TABLE `diaries` (
   `content` text COLLATE utf8mb4_unicode_ci COMMENT '본문 (AI 자동 작성 가능)',
   `summary` varchar(300) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'AI 생성 요약문',
   `emotion` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '감정 이모지',
+  `diary_date` date NOT NULL COMMENT '일기 날짜 YYYY-MM-DD (현재 KST 자동 입력, 추후 사용자 선택 가능)',
+  `is_favorite` tinyint(1) NOT NULL DEFAULT '0' COMMENT '즐겨찾기 여부 (0/1). 하루 1개 제약은 application-level SWAP.',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '작성 일시',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 일시',
   `deleted_at` datetime DEFAULT NULL COMMENT '삭제 일시',
@@ -113,6 +115,8 @@ CREATE TABLE `diaries` (
   KEY `fk_diaries_image_id` (`image_id`),
   KEY `idx_diaries_user_id` (`user_id`,`deleted_at`),
   KEY `idx_diaries_pet_id` (`pet_id`),
+  KEY `idx_diaries_user_date` (`user_id`,`diary_date`,`deleted_at`),
+  KEY `idx_diaries_user_favorite` (`user_id`,`is_favorite`,`deleted_at`),
   CONSTRAINT `fk_diaries_image_id` FOREIGN KEY (`image_id`) REFERENCES `images` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_diaries_pet_id` FOREIGN KEY (`pet_id`) REFERENCES `pets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_diaries_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE

@@ -15,11 +15,17 @@ diaries 테이블 ORM 모델.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from core.database import Base
 from core.utils import kst_now
+from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import (BigInteger, DateTime, ForeignKey, Index, String, Text, func)
+from sqlalchemy import (BigInteger, Date, DateTime, ForeignKey, Index, String, Text, func)
+
+
+def _kst_today() -> date:
+    """KST 기준 오늘 날짜를 반환합니다 (`diary_date` default)."""
+    return kst_now().date()
 
 
 class Diary(Base):
@@ -29,6 +35,8 @@ class Diary(Base):
     __table_args__ = (
         Index("idx_diaries_user_id", "user_id", "deleted_at"),
         Index("idx_diaries_pet_id", "pet_id"),
+        Index("idx_diaries_user_date", "user_id", "diary_date", "deleted_at"),
+        Index("idx_diaries_user_favorite", "user_id", "is_favorite", "deleted_at"),
         {
             "comment": "반려견 동반 기록 다이어리 (6하원칙 구조)",
             "mysql_engine": "InnoDB",
@@ -71,6 +79,20 @@ class Diary(Base):
     content: Mapped[str | None] = mapped_column(Text, nullable=True, comment="본문 (AI 자동 작성)")
     summary: Mapped[str | None] = mapped_column(String(300), nullable=True, comment="AI 생성 요약문")
     emotion: Mapped[str | None] = mapped_column(String(10), nullable=True, comment="감정 이모지")
+
+    # ── 캘린더·즐겨찾기 ─────────────────────────────────────────────────────
+    # diary_date: 일기가 가리키는 날짜. 현 단계는 작성 시점의 KST 날짜를 자동 입력
+    # (서비스 create_diary 에서 채움). 추후 사용자가 화면에서 직접 선택 가능.
+    diary_date: Mapped[date] = mapped_column(
+        Date, nullable=False, default=_kst_today,
+        comment="일기 날짜 YYYY-MM-DD (현재 KST 자동 입력, 추후 사용자 선택 가능)",
+    )
+    # is_favorite: 즐겨찾기 플래그. "하루 1개" 제약은 service.toggle_favorite_diary
+    # 의 atomic SWAP 로 보장 (DB UNIQUE 제약 없음).
+    is_favorite: Mapped[bool] = mapped_column(
+        TINYINT(1), nullable=False, default=False, server_default="0",
+        comment="즐겨찾기 여부 (0/1). 하루 1개 제약은 application-level SWAP.",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
