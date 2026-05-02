@@ -35,11 +35,11 @@ from core.database import get_engine
 from sshtunnel import SSHTunnelForwarder
 from contextlib import asynccontextmanager
 from fastapi.responses import JSONResponse
-from fastapi import FastAPI, Request, status
 from logging.handlers import RotatingFileHandler
 from fastapi.middleware.cors import CORSMiddleware
 from services.intent_service import warmup_intent_model
 from core.database import close_db, init_db, init_engine
+from fastapi import FastAPI, HTTPException, Request, status
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from services.scheduler_service import hard_delete_withdrawn_users
 
