@@ -36,6 +36,7 @@ from services.place_service import (
     search_facility_by_name,
     search_places_from_db,
 )
+from services.place_image_service import enrich_place_images
 
 from services.diary_response_service import (
     detect_diary_sub_intent,
@@ -78,9 +79,11 @@ class DispatchResult:
 
         - text: 챗봇 응답 본문 (assistant 메시지 content 로 저장됨)
         - facility: 시설정보 의도일 때 단일 시설 카드 페이로드 (그 외 None)
+        - places: 장소추천 의도일 때 장소 카드 페이로드 (그 외 None)
     """
     text: str
     facility: dict | None = None
+    places: list[dict] | None = None
 
 
 _PLACES_SYSTEM_PROMPT = (
@@ -290,6 +293,7 @@ def _format_place_list_response(places: Sequence[dict]) -> str:
         name = place.get("name", "이름 미상")
         address = place.get("address", "")
         reason = (place.get("reason") or "").strip()
+        content_id = (place.get("content_id") or "").strip()
 
         lines.append(f"{idx}. {name}")
         lines.append("")
@@ -298,6 +302,9 @@ def _format_place_list_response(places: Sequence[dict]) -> str:
             lines.append("")
         if reason:
             lines.append(f"- 추천 이유: {reason}")
+            lines.append("")
+        if content_id:
+            lines.append(f"- _id: {content_id}")
             lines.append("")
 
     lines.append("세부 정보는 좌측 지도와 장소 카드에서 함께 확인해보세요.")
@@ -499,9 +506,14 @@ def _rerank_places_with_profile(
         return places
 
 # ── 의도별 핸들러 ────────────────────────────────────────────────────────────
-async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, request: Request = None) -> str:
+async def _handle_places(
+    query: str,
+    ctx: DispatchContext,
+    top_k: int = 5,
+    request: Request = None,
+) -> tuple[str, list[dict]]:
     if await _is_out_of_service_area(query, request=request):
-        return _OUT_OF_SERVICE_AREA_MESSAGE
+        return _OUT_OF_SERVICE_AREA_MESSAGE, []
 
     profile_ctx = await _load_place_preference_context(ctx)
 
@@ -516,10 +528,16 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, reque
     places = _rerank_places_with_profile(places, profile_ctx, request=request)
 
     if places:
-        return _format_place_list_response(places)
+        places = await enrich_place_images(places)
+        reasons = await generate_place_reasons(query, places)
+        for place in places:
+            place["reason"] = reasons.get(place.get("name", ""), "")
+        return _format_place_list_response(places), places
+
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
-    return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
+    text = await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
+    return text, []
 
 
 async def _handle_facility(
@@ -598,8 +616,8 @@ async def dispatch(
         return DispatchResult(text=await handle_diary_response(query, ctx))
 
     if intent == "장소추천":
-        text = await _handle_places(query, ctx, top_k=top_k, request=request)
-        return DispatchResult(text=text)
+        text, places = await _handle_places(query, ctx, top_k=top_k, request=request)
+        return DispatchResult(text=text, places=places)
 
     if intent == "시설정보":
         text, facility = await _handle_facility(query, ctx, request=request)

@@ -1,4 +1,5 @@
 import { api } from './apiClient'
+import type { PlaceResult } from './placeService'
 
 export interface ChatRoom {
   id: number
@@ -73,6 +74,7 @@ export interface ChatTurnResponse {
   assistant_message: ChatMessage
   intent: { intent: string; confidence: number }
   facility: FacilityCard | null
+  places: PlaceResult[] | null
 }
 
 /** POST /chat-rooms/{roomId}/messages — 의도분류 + AI 응답 포함 */
