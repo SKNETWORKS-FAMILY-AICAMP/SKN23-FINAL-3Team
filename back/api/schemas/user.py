@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from services.common_service import calculate_age
 
 from core.type.gender import GenderEnum
+from schemas.pet import PetResponse
 
 
 class UserResponse(BaseModel):
@@ -32,6 +33,10 @@ class UserResponse(BaseModel):
     profile_id: int | None = Field(None, description="프로필 이미지 ID (온보딩 전 NULL)")
     provider: str = Field(..., description="소셜 로그인 제공자 (kakao/google/naver)")
     type_id: int | None = Field(None, description="대표 성향 키워드 ID (온보딩 전 NULL)")
+    primary_pet_id: int | None = Field(None, description="대표 반려견 ID (미설정 시 NULL)")
+    primary_pet: PetResponse | None = Field(
+        None, description="대표 반려견 풀 페이로드 (마이페이지 카드 표시용)"
+    )
     selected_tags: list[Any] | None = Field(None, description="선택한 여행 성향 태그 목록")
     created_at: datetime = Field(..., description="가입 일시")
     updated_at: datetime = Field(..., description="최종 수정 일시")
@@ -70,6 +75,14 @@ class UserUpdate(BaseModel):
         None,
         gt=0,
         description="대표 성향 키워드 ID (keywords 테이블 참조)",
+    )
+    primary_pet_id: int | None = Field(
+        None,
+        gt=0,
+        description=(
+            "대표 반려견 ID (pets 테이블 참조). 본인 소유의 활성 반려견이어야 함. "
+            "명시적으로 null 을 보내 해제하려면 별도 처리 필요(현재는 미지원)."
+        ),
     )
     selected_tags: list[Any] | None = Field(
         None,

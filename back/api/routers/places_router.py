@@ -1,99 +1,20 @@
-import requests
-import os
-
-from core.deps import get_db
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from services.place_service import search_places_from_db
-from services.chat_response_service import (
-    DispatchContext,
-    _load_place_preference_context,
-    _rerank_places_with_profile,
-    generate_place_reasons,
+from typing import Annotated
+from core.deps import get_current_user, get_db
+from models.user import User
+from schemas.chat_message import FacilityCard
+from schemas.place import (
+    PlaceFavoriteItem,
+    PlaceFavoriteResponse,
+    PlaceFavoriteToggleResponse,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.place_image_service import enrich_place_images
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from services.place_service import (lookup_facility_by_name, search_places_from_db)
+from services import favorite_place_service as fav_svc
+from services.chat_response_service import (DispatchContext, _load_place_preference_context, _rerank_places_with_profile, generate_place_reasons)
 
 router = APIRouter(tags=["places"])
-
-TOUR_API_KEY = os.getenv("TOUR_API_KEY")
-KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY")
-BASE_URL = "https://apis.data.go.kr/B551011/KorPetTourService2"
-
-
-def get_place_image(content_id: str) -> str:
-    """한국관광공사 detailImage2 API로 장소 이미지 URL 조회.
-
-    searchKeyword2 → detailCommon2 두 단계 호출 방식에서
-    content_id 직접 사용으로 변경 (place_service에서 이미 content_id 반환).
-
-    Args:
-        content_id: 한국관광공사 콘텐츠 ID (place_service 반환값)
-
-    Returns:
-        이미지 URL 문자열. 없으면 빈 문자열.
-    """
-    if not content_id:
-        return ""
-
-    try:
-        res = requests.get(
-            f"{BASE_URL}/detailImage2",
-            params={
-                "serviceKey": TOUR_API_KEY,
-                "contentId":  content_id,
-                "imageYN":    "Y",
-                "subImageYN": "Y",
-                "MobileOS":   "ETC",
-                "MobileApp":  "WithDog",
-                "_type":      "json",
-            }
-        )
-        data  = res.json()
-        items = data["response"]["body"].get("items")
-
-        if not items or items == "":
-            return ""
-
-        item = items["item"]
-        item = item[0] if isinstance(item, list) else item
-        return item.get("originimgurl", "")
-
-    except Exception as e:
-        print(f"관광공사 detailImage2 오류 (content_id={content_id}): {e}")
-        return ""
-
-
-def get_kakao_image(place_name: str) -> str:
-    """카카오 이미지 검색 API로 장소 이미지 URL 조회 (fallback).
-
-    관광공사 API에서 이미지를 가져오지 못한 경우에만 호출.
-    https 이미지만 허용.
-
-    Args:
-        place_name: 장소명
-
-    Returns:
-        이미지 URL 문자열. 없으면 빈 문자열.
-    """
-    if not place_name:
-        return ""
-
-    try:
-        res = requests.get(
-            "https://dapi.kakao.com/v2/search/image",
-            headers={"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"},
-            params={"query": place_name, "size": 5},
-        )
-        data = res.json()
-        for doc in data.get("documents", []):
-            url = doc.get("image_url", "")
-            if url.startswith("https://"):
-                return url
-        return ""
-
-    except Exception as e:
-        print(f"카카오 이미지 오류 ({place_name}): {e}")
-        return ""
-
 
 @router.get("/search")
 async def search_places(
@@ -124,18 +45,95 @@ async def search_places(
     )
     places = _rerank_places_with_profile(places, profile_ctx, request=request)
 
-    for place in places:
-        # 1순위: 관광공사 detailImage2 (content_id 직접 사용, API 호출 1회로 단축)
-        image = get_place_image(place["content_id"])
-
-        # 2순위: 카카오 이미지 검색 fallback
-        if not image:
-            image = get_kakao_image(place["name"])
-
-        place["image"] = image
+    places = await enrich_place_images(places)
 
     reasons = await generate_place_reasons(query, places)
     for place in places:
         place["reason"] = reasons.get(place["name"], "")
 
     return {"places": places}
+
+
+@router.get(
+    "/by-name",
+    response_model=FacilityCard,
+    summary="시설정보 단건 조회 (장소명)",
+    description=(
+        "장소명(`name`)으로 단일 시설의 상세 정보를 반환한다.\n"
+        "채팅 응답 카드의 장소 링크 클릭 시 카드에 표시된 장소명(예: '더포트', "
+        "'바잇미', '반포 한강공원')을 그대로 query string 으로 전달하면 된다.\n"
+        "정확 매칭(name 동등) → LIKE fallback 순서로 서울 한정 검색."
+    ),
+)
+async def get_facility_by_name(
+    name: Annotated[str, Query(min_length=1, description="장소명 원문 (URL 인코딩)")],
+    db: AsyncSession = Depends(get_db),
+) -> FacilityCard:
+    """장소명으로 시설정보를 조회한다.
+
+    Args:
+        name: 카드에 표시된 장소명 (한글·공백 허용, URL 인코딩 자동 디코딩).
+        db  : 비동기 DB 세션.
+
+    Returns:
+        `FacilityCard` 직렬화된 시설 상세.
+
+    Raises:
+        HTTPException: 일치하는 시설이 없으면 404.
+    """
+    facility = await lookup_facility_by_name(name, db)
+    if facility is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="해당 시설을 찾을 수 없습니다.",
+        )
+
+    return FacilityCard.model_validate(facility)
+
+
+@router.get(
+    "/favorites",
+    response_model=PlaceFavoriteResponse,
+    summary="즐겨찾기 장소 목록 조회",
+    description=(
+        "현재 로그인 사용자의 즐겨찾기 장소 목록을 반환한다.\n\n"
+        "응답 항목은 카드 식별·정렬에 필요한 최소 필드(`content_id`, `name`, "
+        "`sub_category`, `favorited_at`)만 포함한다. 이미지·주소 등 추가 정보는 "
+        "프론트가 별도 API(예: `/api/places/by-name?name=`)로 보강.\n\n"
+        "정렬: `favorited_at DESC` (최근 추가가 위)."
+    ),
+)
+async def list_favorite_places(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaceFavoriteResponse:
+    items = await fav_svc.list_favorite_places(db, current_user.id)
+    return PlaceFavoriteResponse(
+        items=[PlaceFavoriteItem(**item) for item in items],
+    )
+
+
+@router.patch(
+    "/{content_id}/favorite",
+    response_model=PlaceFavoriteToggleResponse,
+    summary="장소 즐겨찾기 토글",
+    description=(
+        "장소 즐겨찾기를 토글한다 — 미등록이면 INSERT, 등록되어 있으면 DELETE.\n\n"
+        "**입력**: 한국관광공사 콘텐츠 ID(`content_id`, 카드가 보유한 키).\n"
+        "**중복 차단**: DB UNIQUE (user_id, place_id)로 강제.\n"
+        "**일일 제한 없음** (다이어리 즐겨찾기와 차이)."
+    ),
+)
+async def toggle_favorite_place(
+    content_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaceFavoriteToggleResponse:
+    is_favorite, favorite = await fav_svc.toggle_favorite_place(
+        content_id, db, current_user.id
+    )
+    return PlaceFavoriteToggleResponse(
+        content_id=content_id,
+        is_favorite=is_favorite,
+        favorited_at=favorite.created_at if favorite else None,
+    )

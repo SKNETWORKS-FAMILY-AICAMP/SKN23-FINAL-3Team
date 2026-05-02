@@ -18,8 +18,9 @@ services/pet.py
 from __future__ import annotations
 
 from models.pet import Pet
+from models.user import User
 from typing import Sequence
-from sqlalchemy import select
+from sqlalchemy import select, update
 from core.utils import kst_now
 from models.breed import Breed
 from models.keyword import Keyword
@@ -134,6 +135,19 @@ async def create_pet(
     await db.flush()
     await db.refresh(pet)
 
+    # 자동 대표 반려견 설정 — 사용자에게 대표가 아직 없으면 신규 pet 으로 채움.
+    # 온보딩 첫 등록 시 첫 반려견이 자연스럽게 대표가 되도록 하는 정책.
+    current_primary = await db.execute(
+        select(User.primary_pet_id).where(User.id == current_user_id)
+    )
+    if current_primary.scalar_one() is None:
+        await db.execute(
+            update(User)
+            .where(User.id == current_user_id)
+            .values(primary_pet_id=pet.id)
+        )
+        await db.flush()
+
     return pet
 
 
@@ -225,12 +239,40 @@ async def delete_pet(
     """
         반려견 Soft Delete.
 
+        삭제 대상이 사용자의 대표 반려견이면 다음 활성 반려견(같은 user_id,
+        deleted_at IS NULL, id ASC)으로 자동 승계한다. 다른 활성 반려견이
+        없으면 users.primary_pet_id 를 NULL 로 비운다.
+
         Raises:
                 HTTPException 403: 본인 반려견 아님
                 HTTPException 404: 반려견 없음
     """
     pet = await get_pet(pet_id, db)
     _assert_owner(pet, current_user_id)
+
+    # 대표 반려견 자동 승계 처리 — soft delete 는 FK ON DELETE 가 발동하지 않으므로
+    # service 단에서 명시적으로 다음 활성 pet 으로 갱신 (없으면 NULL).
+    current_primary = await db.execute(
+        select(User.primary_pet_id).where(User.id == current_user_id)
+    )
+    if current_primary.scalar_one() == pet.id:
+        next_primary_stmt = (
+            select(Pet.id)
+            .where(
+                Pet.user_id == current_user_id,
+                Pet.id != pet.id,
+                Pet.deleted_at.is_(None),
+            )
+            .order_by(Pet.id.asc())
+            .limit(1)
+        )
+        next_primary_id = (await db.execute(next_primary_stmt)).scalar_one_or_none()
+
+        await db.execute(
+            update(User)
+            .where(User.id == current_user_id)
+            .values(primary_pet_id=next_primary_id)
+        )
 
     pet.deleted_at = kst_now()
     await db.flush()

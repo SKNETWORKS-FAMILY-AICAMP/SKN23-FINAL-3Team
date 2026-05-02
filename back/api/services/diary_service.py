@@ -21,12 +21,14 @@ services/diary.py
 
 from __future__ import annotations
 
+from datetime import date
 from models.pet import Pet
 from typing import Sequence
-from sqlalchemy import select
 from core.utils import kst_now
 from models.diary import Diary
 from models.image import Image
+from calendar import monthrange
+from sqlalchemy import select, update
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.diary import DiaryCreate, DiaryUpdate
@@ -111,6 +113,10 @@ async def create_diary(
     if data.image_id is not None:
         await _verify_image(data.image_id, db)
 
+    # diary_date: 사용자가 명시 입력한 경우 그 값을 사용, 미입력이면 KST 오늘.
+    # 추후 화면에서 날짜 선택 UI 가 도입되면 클라이언트가 data.diary_date 를 채워서 전달.
+    diary_date = data.diary_date or kst_now().date()
+
     diary = Diary(
         user_id=current_user_id,
         pet_id=data.pet_id,
@@ -125,13 +131,13 @@ async def create_diary(
         content=data.content,
         summary=data.summary,
         emotion=data.emotion,
+        diary_date=diary_date,
     )
     db.add(diary)
     await db.flush()
     await db.refresh(diary)
 
     return diary
-
 
 async def list_diaries(
     db: AsyncSession,
@@ -168,7 +174,6 @@ async def list_diaries(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-
 async def get_diary(diary_id: int, db: AsyncSession) -> Diary:
     """
         다이어리 단건 조회.
@@ -191,7 +196,6 @@ async def get_diary(diary_id: int, db: AsyncSession) -> Diary:
         )
 
     return diary
-
 
 async def update_diary(
     diary_id: int,
@@ -235,7 +239,6 @@ async def update_diary(
 
     return diary
 
-
 async def delete_diary(
     diary_id: int,
     db: AsyncSession,
@@ -253,3 +256,119 @@ async def delete_diary(
 
     diary.deleted_at = kst_now()
     await db.flush()
+
+async def toggle_favorite_diary(
+    diary_id: int,
+    db: AsyncSession,
+    current_user_id: int,
+) -> Diary:
+    """
+        다이어리 즐겨찾기 토글 ("하루 1개" 제약 보장).
+
+        흐름:
+            1. 본인 다이어리 검증
+            2. 이미 즐겨찾기면 단순 해제 → return
+            3. 아니라면 같은 (user_id, diary_date) 의 기존 즐겨찾기를 모두 해제하고
+               대상 다이어리를 즐겨찾기로 설정 (atomic SWAP)
+
+        DB UNIQUE 제약은 두지 않음 — race 시 사용자 친화적 SWAP 보다 500 에러로
+        새는 게 부적절. 정상 흐름에서 동일 사용자가 같은 순간 두 일기를 동시에
+        토글할 가능성은 거의 없으므로 application-level 보장으로 충분.
+
+        Args:
+            diary_id       : 토글 대상 다이어리 ID
+            db             : AsyncSession
+            current_user_id: 현재 로그인 사용자 ID
+
+        Returns:
+            토글 후 최신 상태의 Diary ORM 객체
+
+        Raises:
+            HTTPException 403: 본인 다이어리 아님
+            HTTPException 404: 다이어리 없음 / soft-deleted
+    """
+    diary = await get_diary(diary_id, db)
+    _assert_owner(diary, current_user_id)
+
+    if diary.is_favorite:
+        diary.is_favorite = False
+
+        await db.flush()
+        await db.refresh(diary)
+
+        return diary
+
+    # 같은 날 다른 즐겨찾기를 일괄 해제 (대상 다이어리 자신은 어차피 0이므로 영향 없음)
+    await db.execute(
+        update(Diary)
+        .where(
+            Diary.user_id == current_user_id,
+            Diary.diary_date == diary.diary_date,
+            Diary.is_favorite.is_(True),
+            Diary.deleted_at.is_(None),
+            Diary.id != diary.id,
+        )
+        .values(is_favorite=False)
+    )
+
+    diary.is_favorite = True
+
+    await db.flush()
+    await db.refresh(diary)
+
+    return diary
+
+async def list_favorites_for_calendar(
+    user_id: int,
+    year: int,
+    month: int,
+    db: AsyncSession,
+) -> list[dict]:
+    """
+        한 달치 즐겨찾기 일기를 캘린더 셀용 경량 페이로드로 조회합니다.
+
+        응답에는 캘린더 셀 렌더에 필요한 최소 필드(`date`, `diary_id`, `emotion`)
+        만 포함합니다. 셀 클릭 시 상세 페이지는 기존 GET /diaries/{id} 재사용.
+
+        Args:
+            user_id: 조회 대상 사용자 ID
+            year   : 조회 연도 (예: 2026)
+            month  : 조회 월 (1~12)
+            db     : AsyncSession
+
+        Returns:
+            list[dict] — 각 항목 키: date(date), diary_id(int), emotion(str)
+            정렬: diary_date ASC.
+
+        Raises:
+            HTTPException 400: month 가 1~12 범위를 벗어난 경우
+    """
+    if not 1 <= month <= 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="month 는 1~12 범위여야 합니다.",
+        )
+
+    start_day = date(year, month, 1)
+    end_day = date(year, month, monthrange(year, month)[1])
+
+    stmt = (
+        select(Diary.id, Diary.diary_date, Diary.emotion)
+        .where(
+            Diary.user_id == user_id,
+            Diary.is_favorite.is_(True),
+            Diary.deleted_at.is_(None),
+            Diary.diary_date.between(start_day, end_day),
+        )
+        .order_by(Diary.diary_date.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    return [
+        {
+            "date": row.diary_date,
+            "diary_id": row.id,
+            "emotion": row.emotion or "",
+        }
+        for row in rows
+    ]
