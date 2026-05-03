@@ -100,6 +100,8 @@ async def search_places(
     query: str,
     request: Request,
     pet_id: int | None = None,
+    user_lat: float | None = None,
+    user_lng: float | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """장소 검색 엔드포인트.
@@ -118,7 +120,10 @@ async def search_places(
     Returns:
         {"places": [...]} 형태의 장소 목록
     """
-    places = await search_places_from_db(query, db, n_results=5, request=request)
+    places = await search_places_from_db(
+        query, db, n_results=5, request=request,
+        user_lat=user_lat, user_lng=user_lng,
+    )
     profile_ctx = await _load_place_preference_context(
         DispatchContext(db=db, pet_id=pet_id)
     )

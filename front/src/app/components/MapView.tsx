@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, Navigation, Phone } from 'lucide-react';
+import { MapPin, Navigation, Phone, LocateFixed } from 'lucide-react';
 import type { PlaceResult } from '../services/placeService';
 
 declare global {
@@ -13,17 +13,20 @@ interface Props {
   places: PlaceResult[];
   onUsePlace: (place: PlaceResult) => void;
   initialSelectedId?: string;
+  userLocation?: { lat: number; lng: number };
 }
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.9780 };
 
-export default function MapView({ places, onUsePlace, initialSelectedId }: Props) {
+export default function MapView({ places, onUsePlace, initialSelectedId, userLocation }: Props) {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(initialSelectedId ?? null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const infoWindowRef = useRef<any>(null);
   const relayoutTimerRef = useRef<number | null>(null);
+  const userOverlayRef = useRef<any>(null);
 
   const clearMarkers = () => {
     markersRef.current.forEach((marker) => marker.setMap(null));
@@ -55,6 +58,40 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
     }
 
     mapInstanceRef.current.relayout();
+  };
+
+  const renderUserOverlay = (loc: { lat: number; lng: number }) => {
+    if (!mapInstanceRef.current || !window.kakao?.maps) return;
+
+    if (userOverlayRef.current) {
+      userOverlayRef.current.setMap(null);
+    }
+
+    const position = new window.kakao.maps.LatLng(loc.lat, loc.lng);
+    const content = `
+      <div style="
+        width:16px;height:16px;border-radius:50%;
+        background:#4285F4;border:3px solid white;
+        box-shadow:0 0 0 4px rgba(66,133,244,0.25);
+      "></div>`;
+    userOverlayRef.current = new window.kakao.maps.CustomOverlay({
+      position,
+      content,
+      map: mapInstanceRef.current,
+      zIndex: 10,
+    });
+  };
+
+  const handleGpsClick = () => {
+    if (!userLocation) {
+      setGpsError('위치 권한을 허용해주세요.');
+      setTimeout(() => setGpsError(null), 3000);
+      return;
+    }
+    if (mapInstanceRef.current && window.kakao?.maps) {
+      mapInstanceRef.current.setCenter(new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng));
+      mapInstanceRef.current.setLevel(5);
+    }
   };
 
   const renderMarkers = () => {
@@ -136,6 +173,11 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
     setSelectedPlaceId(null);
     renderMarkers();
   }, [places]);
+
+  useEffect(() => {
+    if (!userLocation || !mapInstanceRef.current) return;
+    renderUserOverlay(userLocation);
+  }, [userLocation]);
 
   useEffect(() => {
     if (!mapInstanceRef.current) {
@@ -229,11 +271,24 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
         <div className="min-w-0">
           <div className="space-y-4 rounded-[24px] border border-[#F2E7DD] bg-white p-4 shadow-sm md:p-5">
             <div
-              className={`overflow-hidden rounded-2xl border border-[#EDE3DA] transition-all duration-300 ${
+              className={`relative overflow-hidden rounded-2xl border border-[#EDE3DA] transition-all duration-300 ${
                 selectedPlace ? 'h-[480px]' : 'h-[640px]'
               }`}
             >
               <div ref={mapRef} className="h-full w-full" />
+              <button
+                type="button"
+                onClick={handleGpsClick}
+                title="현재 위치로 이동"
+                className="absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md hover:bg-gray-50"
+              >
+                <LocateFixed className={`h-5 w-5 ${userLocation ? 'text-blue-500' : 'text-gray-400'}`} />
+              </button>
+              {gpsError && (
+                <div className="absolute bottom-16 right-4 z-10 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 shadow">
+                  {gpsError}
+                </div>
+              )}
             </div>
 
             <div>

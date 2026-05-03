@@ -772,6 +772,18 @@ def _check_time_condition(operation_info: str | None, time_condition: str) -> bo
     return True
 
 
+def _sort_by_time_certainty(places: list[dict], time_condition: str) -> list[dict]:
+    """시간 조건 검색 시 운영시간 확인된 장소를 미확인 장소 앞으로 재정렬."""
+    confirmed, uncertain = [], []
+    for p in places:
+        op_info = p.get("operation", "")
+        if op_info and NO_INFO not in op_info and _parse_operation_hours(op_info):
+            confirmed.append(p)
+        else:
+            uncertain.append(p)
+    return confirmed + uncertain
+
+
 async def _filter_by_time(
     candidate_ids: list[str],
     time_condition: str | None,
@@ -882,7 +894,7 @@ async def _fetch_and_score(
         place_dict["entrance_fee"] = vr.get("entrance_fee", "")
         place_dict["extra_fee"] = vr.get("extra_fee", "")
         place_dict["final_score"] = round(
-            rag_score * 0.7 + rule_score * 0.3 + category_bias,
+            rag_score * 0.5 + rule_score * 0.5 + category_bias,
             4,
         )
         places.append(place_dict)
@@ -1124,13 +1136,22 @@ async def search_places_from_db(
     category: str = None,
     city: str = None,
     request: Request = None,
+    search_mode: str = "combined",
+    user_lat: float = None,
+    user_lng: float = None,
 ) -> list[dict]:
-    """Run the hybrid place-search pipeline."""
+    """Run the hybrid place-search pipeline.
+
+    search_mode:
+        "combined" — RDB 필터 → ChromaDB 유사도 → 결합 스코어 (기본, 실서비스)
+        "rdb_only" — RDB 필터링 + rule score만 사용 (평가용)
+        "rag_only" — ChromaDB 의미 검색만 사용, RDB 사전 필터 없음 (평가용)
+
+    user_lat / user_lng: 사용자 GPS 좌표. landmark가 없고 GPS가 제공되면
+        현재 위치를 landmark_coords로 사용해 반경 검색을 수행.
+    """
     try:
         parsed = await _parse_query_with_llm(query, request)
-
-        if _should_prioritize_outing(parsed):
-            logger.info("[PlaceService] broad outing query detected, apply outing-first ranking")
 
         if city:
             parsed.objective["city"] = city
@@ -1144,7 +1165,6 @@ async def search_places_from_db(
             )
             return []
 
-        # LLM이 도시 파싱에 실패했더라도 쿼리에 서울 외 지역 키워드가 있으면 거부
         if not requested_city or requested_city == SEOUL:
             if any(kw in query for kw in OUT_OF_SERVICE_KEYWORDS):
                 logger.info(
@@ -1155,6 +1175,26 @@ async def search_places_from_db(
         if parsed.landmark:
             parsed.landmark_coords = await _get_landmark_coords(parsed.landmark)
 
+        if not parsed.landmark_coords and user_lat and user_lng:
+            parsed.landmark_coords = (user_lat, user_lng)
+            logger.info(f"[PlaceService] using GPS coords as landmark: ({user_lat}, {user_lng})")
+
+        if search_mode == "rdb_only":
+            candidate_ids, parsed = await _filter_with_relaxation(parsed, db, max_candidates=200)
+            if parsed.time_condition:
+                candidate_ids = await _filter_by_time(candidate_ids, parsed.time_condition, db)
+            return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
+
+        if search_mode == "rag_only":
+            vector_results = await _search_by_chromadb(parsed, [], n_results, request)
+            if vector_results:
+                return await _fetch_and_score(vector_results, parsed, db, n_results)
+            return []
+
+        # combined (기존 로직)
+        if _should_prioritize_outing(parsed):
+            logger.info("[PlaceService] broad outing query detected, apply outing-first ranking")
+
         candidate_ids, parsed = await _filter_with_relaxation(parsed, db, max_candidates=200)
 
         if parsed.time_condition:
@@ -1164,6 +1204,13 @@ async def search_places_from_db(
             logger.info("[PlaceService] subjective empty, use RDB fallback first")
             return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
 
+        if (
+            parsed.objective.get("is_indoor") is not None
+            or parsed.objective.get("is_outdoor") is not None
+        ):
+            logger.info("[PlaceService] indoor/outdoor condition detected, skip ChromaDB re-ranking")
+            return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
+
         vector_results = await _search_by_chromadb(
             parsed, candidate_ids, n_results, request
         )
@@ -1171,6 +1218,8 @@ async def search_places_from_db(
         if vector_results:
             places = await _fetch_and_score(vector_results, parsed, db, n_results)
             if places:
+                if parsed.time_condition:
+                    places = _sort_by_time_certainty(places, parsed.time_condition)
                 return places[:n_results]
 
         if _has_fee_preferences(parsed):

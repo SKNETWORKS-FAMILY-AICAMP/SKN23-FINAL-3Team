@@ -225,6 +225,7 @@ interface Props {
   diaryTrigger?: number
   diaryPlace?: string
   initialMessage?: string
+  userLocation?: { lat: number; lng: number }
 }
 
 const DEFAULT_PET: Pet = { name: '우리 아이', breed: '강아지' }
@@ -239,6 +240,7 @@ export default function ChatBot({
   diaryTrigger,
   diaryPlace,
   initialMessage,
+  userLocation,
 }: Props) {
   const navigate = useNavigate()
   const isLoggedIn = !!localStorage.getItem('access_token')
@@ -306,7 +308,12 @@ export default function ChatBot({
       } else if (intent === '장소추천') {
         let places: PlaceResult[] = []
         try {
-          places = await searchPlaces({ query: text, pet_id: selectedPetId })
+          places = await searchPlaces({
+            query: text,
+            pet_id: selectedPetId,
+            user_lat: userLocation?.lat,
+            user_lng: userLocation?.lng,
+          })
           onPlacesFound?.(places)
         } catch {
           onPlacesFound?.([])
