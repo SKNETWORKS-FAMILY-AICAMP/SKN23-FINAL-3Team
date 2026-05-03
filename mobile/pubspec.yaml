@@ -1,0 +1,94 @@
+name: withdog_app
+description: "withDOG — 반려견 동반 장소 추천 챗봇 + AI 그림일기 (Flutter 모바일)"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # 네트워크
+  dio: ^5.7.0
+
+  # 라우팅·상태
+  go_router: ^14.6.2
+  flutter_riverpod: ^2.6.1
+
+  # 저장소
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.3
+
+  # OAuth WebView + 카카오맵 JS SDK 임베드 (카카오·네이버용)
+  flutter_inappwebview: ^6.1.5
+
+  # OAuth 시스템 브라우저 — 구글 InstalledApp 분기 (WebView 차단 우회)
+  # flutter_appauth: ^7.0.0
+  flutter_appauth: ^6.0.6
+
+  # 이미지 업로드
+  image_picker: ^1.1.2
+
+  # 아이콘 (lucide-react 매핑)
+  lucide_icons: ^0.257.0
+
+  # 캘린더
+  table_calendar: ^3.1.2
+
+  # GPS
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+
+  # Toast
+  fluttertoast: ^8.2.10
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # 런처 아이콘 자동 생성 — front/assets/favicon.svg 를 1024x1024 PNG 로
+  # 변환 후 본 패키지가 Android `mipmap-*` + iOS `AppIcon.appiconset` 자동 생성.
+  # 실행: `dart run flutter_launcher_icons`
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/kakao_map.html
+    - assets/icon/
+
+  # 한국어 폰트 (Pretendard) — 자산 추가 시 활성화
+  # fonts:
+  #   - family: Pretendard
+  #     fonts:
+  #       - asset: assets/fonts/Pretendard-Regular.otf
+  #       - asset: assets/fonts/Pretendard-Bold.otf
+  #         weight: 700
+
+# ============================================================================
+# 런처 아이콘 (앱 목록·홈 화면 표시) — `front/assets/favicon.svg` 기반
+#
+# 원본 SVG 는 cairo native lib 부재로 Python 변환 실패. Chrome headless 로
+# 1024x1024 PNG 2종 사전 생성 (assets/icon/launcher_icon.png + _foreground.png).
+# 본 config 가 그 PNG 를 platform 별 size 로 자동 생성·배치한다.
+#
+# 실행: `dart run flutter_launcher_icons`
+# 결과: android/app/src/main/res/mipmap-* + ios/Runner/Assets.xcassets/AppIcon.appiconset
+# ============================================================================
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/icon/launcher_icon.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true
+
+  # Android 8.0+ Adaptive Icon — 둥근/사각/물방울 등 기기별 마스크 자동 적용
+  adaptive_icon_background: "#F4845F"  # brand orange
+  adaptive_icon_foreground: "assets/icon/launcher_icon_foreground.png"
