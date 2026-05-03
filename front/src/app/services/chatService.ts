@@ -1,4 +1,5 @@
 import { api } from './apiClient'
+import type { PlaceResult } from './placeService'
 
 export interface ChatRoom {
   id: number
@@ -73,6 +74,7 @@ export interface ChatTurnResponse {
   assistant_message: ChatMessage
   intent: { intent: string; confidence: number }
   facility: FacilityCard | null
+  places: PlaceResult[] | null
 }
 
 /** POST /chat-rooms/{roomId}/messages — 의도분류 + AI 응답 포함 */
@@ -80,11 +82,15 @@ export function sendMessageWithResponse(
   roomId: number,
   content: string,
   petId?: number | null,
+  userLat?: number | null,
+  userLng?: number | null,
 ): Promise<ChatTurnResponse> {
   return api.post(`/chat-rooms/${roomId}/messages`, {
     role: 'user',
     content,
     pet_id: petId ?? null,
+    user_lat: userLat ?? null,
+    user_lng: userLng ?? null,
   })
 }
 

@@ -78,12 +78,21 @@ _PARSE_SYSTEM = """\
     "공휴일"   → 공휴일, 연휴, 법정공휴일에도 영업
     "연중무휴" → 연중무휴, 365일 영업, 쉬는 날 없는
     "24시간"   → 24시간, 하루종일 오픈, 밤새 영업, 새벽까지
-- landmark: "근처", "주변", "앞", "옆" 표현과 함께 언급된 장소명 또는 지역명. 없으면 null
+- use_current_location: 사용자가 **현재 자신의 위치** 기준으로 검색을 원하면 true, 아니면 false.
+  다음과 같이 판단하세요:
+    true  → "내 주변", "내 근처", "내근처", "내주변", "여기", "지금 있는 곳", "현재 위치",
+             "이 근방", "이 동네", "나 지금 여기", "근처에", 오타·변형 포함 모든 '사용자 현재 위치' 표현
+    false → 특정 장소/지역명이 기준인 경우 ("경복궁 근처", "강남역 주변", "홍대 앞")
+  ※ use_current_location=true이면 landmark는 반드시 null로 설정하세요.
+- landmark: "근처", "주변", "앞", "옆" 표현과 함께 언급된 **구체적 장소명 또는 지역명**. 없으면 null.
+  use_current_location=true이면 항상 null.
   POI 뿐만 아니라 동네명도 포함됩니다:
-    "경복궁 근처"  → landmark: "경복궁",  district: null
-    "용산 근처"    → landmark: "용산",    district: null
-    "강남역 주변"  → landmark: "강남역",  district: null
-    "한강공원 근처" → landmark: "한강공원", district: null
+    "경복궁 근처"  → use_current_location: false, landmark: "경복궁",  district: null
+    "용산 근처"    → use_current_location: false, landmark: "용산",    district: null
+    "강남역 주변"  → use_current_location: false, landmark: "강남역",  district: null
+    "한강공원 근처" → use_current_location: false, landmark: "한강공원", district: null
+    "내 주변"      → use_current_location: true,  landmark: null
+    "여기 근처"    → use_current_location: true,  landmark: null
   ※ "근처/주변/앞/옆" 없이 단순 지역 언급이면 district로 처리 ("용산구에서" → district: "용산구")
 - subjective: 위 조건에 해당하지 않는 분위기·특성 (예: "조용한", "넓은 야외", "아늑한", "뷰 좋은"). 없으면 빈 문자열
 
@@ -101,6 +110,7 @@ _PARSE_SYSTEM = """\
   "extra_fee_preference": null,
   "waste_bag_preference": null,
   "time_condition": null,
+  "use_current_location": false,
   "landmark": null,
   "subjective": ""
 }

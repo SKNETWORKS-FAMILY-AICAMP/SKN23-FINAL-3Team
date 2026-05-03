@@ -18,13 +18,11 @@ import json
 import logging
 
 from dataclasses import dataclass
-from datetime import date
 from typing import Sequence
 
 from fastapi import Request
 from openai import AsyncOpenAI
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
@@ -38,13 +36,8 @@ from services.place_service import (
     search_facility_by_name,
     search_places_from_db,
 )
-from fastapi import Request
+from services.place_image_service import enrich_place_images
 
-# from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
-
-from ai.prompts.diary_prompt_builder import DiaryPromptBuilder
-_diary_prompt_builder = DiaryPromptBuilder()
-from services.place_service import search_places_from_db
 from services.diary_response_service import (
     detect_diary_sub_intent,
     get_diary_guide_response,
@@ -57,7 +50,6 @@ logger = logging.getLogger(__name__)
 
 _openai_client: AsyncOpenAI | None = None
 _GPT_MODEL = settings.GPT_MODEL
-_IMAGE_MODEL = settings.GPT_IMAGE_MODEL
 _OUT_OF_SERVICE_AREA_MESSAGE = "현재 서비스는 서울 지역만 지원하고 있습니다."
 
 
@@ -78,6 +70,8 @@ class DispatchContext:
     db: AsyncSession | None = None
     room_id: int | None = None
     pet_id: int | None = None
+    user_lat: float | None = None
+    user_lng: float | None = None
 
 
 @dataclass
@@ -87,9 +81,11 @@ class DispatchResult:
 
         - text: 챗봇 응답 본문 (assistant 메시지 content 로 저장됨)
         - facility: 시설정보 의도일 때 단일 시설 카드 페이로드 (그 외 None)
+        - places: 장소추천 의도일 때 장소 카드 페이로드 (그 외 None)
     """
     text: str
     facility: dict | None = None
+    places: list[dict] | None = None
 
 
 _PLACES_SYSTEM_PROMPT = (
@@ -299,6 +295,7 @@ def _format_place_list_response(places: Sequence[dict]) -> str:
         name = place.get("name", "이름 미상")
         address = place.get("address", "")
         reason = (place.get("reason") or "").strip()
+        content_id = (place.get("content_id") or "").strip()
 
         lines.append(f"{idx}. {name}")
         lines.append("")
@@ -307,6 +304,9 @@ def _format_place_list_response(places: Sequence[dict]) -> str:
             lines.append("")
         if reason:
             lines.append(f"- 추천 이유: {reason}")
+            lines.append("")
+        if content_id:
+            lines.append(f"- _id: {content_id}")
             lines.append("")
 
     lines.append("세부 정보는 좌측 지도와 장소 카드에서 함께 확인해보세요.")
@@ -507,201 +507,22 @@ def _rerank_places_with_profile(
         logger.warning(f"[ChatResponse] profile rerank failed: {e}")
         return places
 
-
-_DEFAULT_DIARY_PET = {
-    "pet_name": "우리 아이",
-    "breed": "강아지",
-    "breed_en": None,
-    "birth_date": None,
-    "personalities": [],
-    "owner_name": "",
-}
-_DEFAULT_DIARY_TYPE = "daily"
-_DEFAULT_DIARY_EMOTION = "😊"
-
-# 한글 이모티콘 후보 — 메시지에서 감정 이모지를 가볍게 감지
-_EMOTION_CANDIDATES = ["😊", "😌", "🥹", "😴", "😟", "🤍"]
-# diary_type 키워드 힌트
-_DIARY_TYPE_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "memory": ("여행", "처음", "추억", "기념", "특별"),
-    "owner":  ("나랑", "함께", "같이", "우리", "교감", "포근"),
-    "dog":    ("간식", "산책", "공놀이", "뛰어", "짖"),
-    "daily":  ("평범", "일상", "하루", "루틴"),
-}
-
-
-def _infer_emotion(text: str) -> str:
-    for emoji in _EMOTION_CANDIDATES:
-        if emoji in text:
-            return emoji
-    return _DEFAULT_DIARY_EMOTION
-
-
-def _infer_diary_type(text: str) -> str:
-    for dtype, keywords in _DIARY_TYPE_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            return dtype
-    return _DEFAULT_DIARY_TYPE
-
-
-async def _load_pet_context(ctx: DispatchContext) -> dict:
-    """
-        ctx.user_id 로 사용자의 첫 번째 반려견을 조회하여
-        diary_prompt 입력에 필요한 필드 딕셔너리로 변환합니다.
-        조회 실패 시 기본값을 반환합니다.
-    """
-    if ctx.user_id is None or ctx.db is None:
-        return dict(_DEFAULT_DIARY_PET)
-
-    try:
-        result = await ctx.db.execute(
-            select(Pet)
-            .where(Pet.user_id == ctx.user_id)
-            .options(selectinload(Pet.breed))
-            .order_by(Pet.id.asc())
-            .limit(1)
-        )
-        pet = result.scalar_one_or_none()
-    except Exception as e:
-        logger.warning(f"[Diary] 반려견 조회 실패: {e}")
-        return dict(_DEFAULT_DIARY_PET)
-
-    if pet is None:
-        return dict(_DEFAULT_DIARY_PET)
-
-    breed_ko = getattr(pet.breed, "name_ko", None) if pet.breed else None
-    breed_en = getattr(pet.breed, "name_en", None) if pet.breed else None
-    birth_str: str | None = None
-    if isinstance(pet.birth_date, date):
-        birth_str = pet.birth_date.strftime("%Y-%m-%d")
-
-    return {
-        "pet_name": pet.name or _DEFAULT_DIARY_PET["pet_name"],
-        "breed": breed_ko or _DEFAULT_DIARY_PET["breed"],
-        "breed_en": breed_en,
-        "birth_date": birth_str,
-        "personalities": list(pet.selected_tags or []),
-        "owner_name": "",
-    }
-
-
-async def _generate_diary_json(
-    pet_ctx: dict,
+# ── 의도별 핸들러 ────────────────────────────────────────────────────────────
+async def _handle_places(
     query: str,
     ctx: DispatchContext,
-) -> str | None:
-    """
-        이미지 프롬프트 결정 → 이미지 생성(DiaryChain 우선) → S3 업로드 → images 테이블 저장.
-        실패 시 None 반환.
-    """
-    # DiaryChain 경로는 image_prompt_final 포함, 없으면 build_final_image_prompt로 생성
-    image_prompt: str = diary_data.get("image_prompt_final") or _diary_prompt_builder.build_final_image_prompt(
-        image_prompt_base=diary_data.get("image_prompt_base", ""),
-        breed=pet_ctx["breed"],
-        breed_en=pet_ctx.get("breed_en"),
-        birth_date=pet_ctx.get("birth_date"),
-        personalities=pet_ctx.get("personalities", []),
-        all_answers=[diary_data.get("_conversation", "")],
-        emotion=diary_data.get("_emotion", _DEFAULT_DIARY_EMOTION),
-    )
-
-    # 1) 이미지 생성 — DiaryChain 우선, fallback: 직접 OpenAI 호출
-    b64: str | None = None
-    if _ai_container is not None:
-        try:
-            b64 = await _ai_container.diary_chain.generate_image(image_prompt_final=image_prompt)
-        except Exception as e:
-            logger.error(f"[Diary] DiaryChain.generate_image 실패, fallback: {e}")
-
-    if b64 is None:
-        try:
-            client = _get_openai_client()
-            resp = await client.images.generate(
-                model=_IMAGE_MODEL,
-                prompt=image_prompt,
-                size="1024x1024",
-                quality="low",
-                n=1,
-            )
-            b64 = resp.data[0].b64_json
-            if not b64:
-                logger.error("[Diary] 이미지 생성 실패: b64_json 누락")
-                return None
-        except Exception as e:
-            logger.error(f"[Diary] 이미지 생성 호출 실패: {e}")
-            return None
-
-    # 2) S3 업로드 + DB 저장 (ctx.db 있을 때만)
-    try:
-        image_bytes = base64.b64decode(b64)
-        file_url = await _upload_to_s3(image_bytes, "diary.png", "image/png")
-    except Exception as e:
-        logger.error(f"[Diary] S3 업로드 실패: {e}")
-        return None
-
-    if ctx.db is not None:
-        try:
-            image_row = Image(file_url=file_url, file_name="diary.png")
-            ctx.db.add(image_row)
-            await ctx.db.flush()
-        except Exception as e:
-            logger.warning(f"[Diary] images 테이블 저장 실패 (URL 만 반환): {e}")
-
-    return file_url
-
-
-# ── 의도별 핸들러 ────────────────────────────────────────────────────────────
-async def _handle_diary(query: str, ctx: DispatchContext) -> str:
-    """
-        사용자 메시지를 바탕으로 그림일기(텍스트 + 이미지)를 생성합니다.
-
-        흐름:
-            1. ctx.user_id 로 반려동물 컨텍스트 확보 (없으면 기본값)
-            2. build_diary_prompt → GPT (_GPT_MODEL) → 일기 JSON
-            3. build_final_image_prompt → OpenAI Images → base64
-            4. base64 → S3 업로드 → images 테이블 저장
-            5. 일기 텍스트 + 이미지 URL(마크다운)을 assistant 응답으로 반환
-
-        어떤 단계든 실패하면 가능한 만큼만 반환합니다
-        (텍스트 실패 → 안내 문구, 이미지 실패 → 텍스트만 반환).
-    """
-    pet_ctx = await _load_pet_context(ctx)
-    diary_data = await _generate_diary_json(pet_ctx, query, user_id=ctx.user_id)
-
-    if diary_data is None:
-        return (
-            "일기 생성에 실패했어요. 잠시 후 다시 시도하거나 "
-            "/api/diary/generate 엔드포인트에서 직접 작성해주세요."
-        )
-
-    title = diary_data.get("title", "오늘의 일기")
-    content = diary_data.get("content", "")
-    summary = diary_data.get("summary", "")
-
-    # 이미지 생성은 실패해도 텍스트 응답은 유지
-    image_url = await _generate_and_store_image(pet_ctx, diary_data, ctx)
-
-    lines = [f"📖 **{title}**", "", content]
-    if summary:
-        lines.extend(["", f"_요약_: {summary}"])
-    if image_url:
-        lines.extend(["", f"![{title}]({image_url})"])
-    else:
-        lines.extend(["", "(이미지 생성은 실패했어요. 나중에 다시 시도해주세요.)"])
-
-    return "\n".join(lines)
-
-
-async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, request: Request = None) -> str:
+    top_k: int = 5,
+    request: Request = None,
+) -> tuple[str, list[dict]]:
     if await _is_out_of_service_area(query, request=request):
-        return _OUT_OF_SERVICE_AREA_MESSAGE
+        return _OUT_OF_SERVICE_AREA_MESSAGE, []
 
     profile_ctx = await _load_place_preference_context(ctx)
 
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request)
+        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request, user_lat=ctx.user_lat, user_lng=ctx.user_lng)
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
@@ -709,10 +530,16 @@ async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, reque
     places = _rerank_places_with_profile(places, profile_ctx, request=request)
 
     if places:
-        return _format_place_list_response(places)
+        places = await enrich_place_images(places)
+        reasons = await generate_place_reasons(query, places)
+        for place in places:
+            place["reason"] = reasons.get(place.get("name", ""), "")
+        return _format_place_list_response(places), places
+
     places_text = _format_places_brief(places)
     user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
-    return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
+    text = await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
+    return text, []
 
 
 async def _handle_facility(
@@ -791,8 +618,8 @@ async def dispatch(
         return DispatchResult(text=await handle_diary_response(query, ctx))
 
     if intent == "장소추천":
-        text = await _handle_places(query, ctx, top_k=top_k, request=request)
-        return DispatchResult(text=text)
+        text, places = await _handle_places(query, ctx, top_k=top_k, request=request)
+        return DispatchResult(text=text, places=places)
 
     if intent == "시설정보":
         text, facility = await _handle_facility(query, ctx, request=request)

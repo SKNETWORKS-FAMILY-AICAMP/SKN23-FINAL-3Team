@@ -35,11 +35,11 @@ from core.database import get_engine
 from sshtunnel import SSHTunnelForwarder
 from contextlib import asynccontextmanager
 from fastapi.responses import JSONResponse
-from fastapi import FastAPI, Request, status
 from logging.handlers import RotatingFileHandler
 from fastapi.middleware.cors import CORSMiddleware
 from services.intent_service import warmup_intent_model
 from core.database import close_db, init_db, init_engine
+from fastapi import FastAPI, HTTPException, Request, status
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from services.scheduler_service import hard_delete_withdrawn_users
 
@@ -449,7 +449,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     )
 
     response = await _get_openai_client().chat.completions.create(
-        model="gpt-4o",
+        model=settings.GPT_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.4,   # 낮출수록 일관성↑ 창의성↓
         top_p=0.9,         # P값: 확률 상위 90% 토큰만 선택

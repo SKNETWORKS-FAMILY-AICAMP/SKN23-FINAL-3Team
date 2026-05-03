@@ -25,7 +25,13 @@ from core.deps import get_current_user, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from services import diary_service as diary_svc
 from fastapi import APIRouter, Depends, Query, status
-from schemas.diary import DiaryCreate, DiaryResponse, DiaryUpdate
+from schemas.diary import (
+    DiaryCreate,
+    DiaryResponse,
+    DiaryUpdate,
+    FavoriteCalendarItem,
+    FavoriteCalendarResponse,
+)
 
 router = APIRouter(tags=["Diaries"])
 
@@ -71,6 +77,33 @@ async def list_diaries(
 
 
 @router.get(
+    "/calendar",
+    response_model=FavoriteCalendarResponse,
+    summary="즐겨찾기 일기 캘린더 조회",
+    description=(
+        "특정 사용자의 한 달치 즐겨찾기 일기를 캘린더 셀용 경량 페이로드로 반환합니다.\n\n"
+        "응답 항목은 셀 렌더에 필요한 `date`/`diary_id`/`emotion` 만 포함합니다.\n"
+        "셀 클릭 시 상세는 `GET /api/diaries/{diary_id}` 를 호출하세요.\n\n"
+        "**라우트 등록 순서 주의**: `/calendar` 는 `/{diary_id}` 보다 먼저 정의되어야 합니다."
+    ),
+)
+async def list_favorite_calendar(
+    year: Annotated[int, Query(ge=1900, le=2100, description="조회 연도")],
+    month: Annotated[int, Query(ge=1, le=12, description="조회 월 (1-12)")],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FavoriteCalendarResponse:
+    items = await diary_svc.list_favorites_for_calendar(
+        current_user.id, year, month, db
+    )
+    return FavoriteCalendarResponse(
+        year=year,
+        month=month,
+        items=[FavoriteCalendarItem(**item) for item in items],
+    )
+
+
+@router.get(
     "/{diary_id}",
     response_model=DiaryResponse,
     summary="다이어리 단건 조회",
@@ -101,6 +134,27 @@ async def update_diary(
     current_user: User = Depends(get_current_user),
 ) -> DiaryResponse:
     diary = await diary_svc.update_diary(diary_id, data, db, current_user.id)
+    return DiaryResponse.model_validate(diary)
+
+
+@router.patch(
+    "/{diary_id}/favorite",
+    response_model=DiaryResponse,
+    summary="다이어리 즐겨찾기 토글",
+    description=(
+        "다이어리의 즐겨찾기 상태를 토글합니다.\n\n"
+        "**하루 1개 제약**: 같은 날짜(`diary_date`)의 다른 즐겨찾기는 자동으로 해제되고 "
+        "요청 다이어리가 즐겨찾기로 설정됩니다 (atomic SWAP). "
+        "이미 즐겨찾기인 경우 단순 해제됩니다.\n\n"
+        "**본인 다이어리만 토글 가능** (다른 작성자 접근 시 403)"
+    ),
+)
+async def toggle_favorite(
+    diary_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DiaryResponse:
+    diary = await diary_svc.toggle_favorite_diary(diary_id, db, current_user.id)
     return DiaryResponse.model_validate(diary)
 
 

@@ -82,7 +82,12 @@ class Pet(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="삭제 일시")
 
     # ── Relationships ──────────────────────────────────────────────────────
-    user: Mapped[User] = relationship("User", back_populates="pets")
+    # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 foreign_keys 명시 필수.
+    user: Mapped[User] = relationship(
+        "User",
+        back_populates="pets",
+        foreign_keys=[user_id],
+    )
     breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="select")
     keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="pet", cascade="all, delete-orphan")

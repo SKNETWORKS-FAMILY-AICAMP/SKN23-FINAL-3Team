@@ -106,6 +106,8 @@ CREATE TABLE `diaries` (
   `content` text COLLATE utf8mb4_unicode_ci COMMENT '본문 (AI 자동 작성 가능)',
   `summary` varchar(300) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'AI 생성 요약문',
   `emotion` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '감정 이모지',
+  `diary_date` date NOT NULL COMMENT '일기 날짜 YYYY-MM-DD (현재 KST 자동 입력, 추후 사용자 선택 가능)',
+  `is_favorite` tinyint(1) NOT NULL DEFAULT '0' COMMENT '즐겨찾기 여부 (0/1). 하루 1개 제약은 application-level SWAP.',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '작성 일시',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 일시',
   `deleted_at` datetime DEFAULT NULL COMMENT '삭제 일시',
@@ -113,10 +115,32 @@ CREATE TABLE `diaries` (
   KEY `fk_diaries_image_id` (`image_id`),
   KEY `idx_diaries_user_id` (`user_id`,`deleted_at`),
   KEY `idx_diaries_pet_id` (`pet_id`),
+  KEY `idx_diaries_user_date` (`user_id`,`diary_date`,`deleted_at`),
+  KEY `idx_diaries_user_favorite` (`user_id`,`is_favorite`,`deleted_at`),
   CONSTRAINT `fk_diaries_image_id` FOREIGN KEY (`image_id`) REFERENCES `images` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_diaries_pet_id` FOREIGN KEY (`pet_id`) REFERENCES `pets` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_diaries_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='반려동물 동반 기록 다이어리 (6하원칙 구조)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `favorite_places`
+--
+
+DROP TABLE IF EXISTS `favorite_places`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `favorite_places` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `place_id` bigint NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_favorite_places_user_place` (`user_id`,`place_id`),
+  KEY `idx_favorite_places_user` (`user_id`,`created_at`),
+  CONSTRAINT `fk_favorite_places_place` FOREIGN KEY (`place_id`) REFERENCES `places` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_favorite_places_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='사용자별 즐겨찾기 장소 (N:M)';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -246,6 +270,7 @@ CREATE TABLE `users` (
   `provider` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '소셜 로그인 제공자 (google/kakao/naver)',
   `provider_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'OAuth2.0 제공자 발급 고유 ID',
   `type_id` bigint DEFAULT NULL COMMENT '대표 성향 키워드 ID',
+  `primary_pet_id` bigint DEFAULT NULL COMMENT '대표 반려견 ID (마이페이지 카드·기본 컨텍스트용)',
   `selected_tags` json DEFAULT NULL COMMENT '선택한 여행 성향 태그 목록',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성 일시',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최종 수정 일시',
@@ -254,9 +279,11 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_provider` (`provider`,`provider_id`),
   KEY `fk_users_profile_id` (`profile_id`),
   KEY `fk_users_type_id` (`type_id`),
+  KEY `fk_users_primary_pet` (`primary_pet_id`),
   KEY `idx_users_email` (`email`),
   CONSTRAINT `fk_users_profile_id` FOREIGN KEY (`profile_id`) REFERENCES `images` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `fk_users_type_id` FOREIGN KEY (`type_id`) REFERENCES `keywords` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT `fk_users_type_id` FOREIGN KEY (`type_id`) REFERENCES `keywords` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_users_primary_pet` FOREIGN KEY (`primary_pet_id`) REFERENCES `pets` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='소셜 로그인 사용자 계정';
 /*!40101 SET character_set_client = @saved_cs_client */;
 

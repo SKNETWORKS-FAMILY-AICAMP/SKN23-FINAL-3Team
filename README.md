@@ -592,7 +592,7 @@ flowchart TD
 
     F -->|응 / 만들어줘| H["DiaryChain.run()"]
 
-    H --> I["견종 RAG<br>BreedRetriever → ChromaDB"]
+    H --> I["견종 정보<br>RDB breeds 테이블 조회"]
     H --> J["과거 일기 RAG<br>DiaryRetriever → ChromaDB (n=3)"]
 
     I --> K["DiaryPromptBuilder<br>프롬프트 구성"]
@@ -610,7 +610,7 @@ flowchart TD
 
 | 단계 | 내용 |
 |------|------|
-| Step 1 | `BreedRetriever.get_breed_context(breed)` — 견종 정보 ChromaDB 검색 |
+| Step 1 | 견종 정보 조회 — RDB `breeds` 테이블에서 직접 조회 (단일 출처화) |
 | Step 2 | `DiaryRetriever.search(query, user_id, n_results=3)` — 유사 과거 일기 검색 |
 | Step 3 | `DiaryPromptBuilder.build_diary_prompt()` — 일기 생성 프롬프트 구성 |
 | Step 4 | GPT-4.1-mini 호출 — JSON 형식 일기 생성 (제목·본문·요약·이미지 힌트) |
@@ -945,7 +945,7 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
 
   # 7. 서비스 아키텍처
 
-  ![image](./assets/시스템아키텍처.png)
+  ![시스템아키텍처](./assets/시스템아키텍처.png)
 
 </div>
 
@@ -953,57 +953,11 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
 
 ### 전체 구성도
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         사용자 브라우저                              │
-│                   https://withdog.kro.kr                            │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │ HTTPS (port 443, Let's Encrypt)
-                            ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                         AWS EC2 (Ubuntu)                           │
-│                                                                    │
-│  ┌─────────────────────── Docker Compose ──────────────────────┐   │
-│  │                    withdog-net (bridge)                     │   │
-│  │                                                             │   │
-│  │  ┌──────────────────────────────────────────────────────┐   │   │
-│  │  │           withdog-nginx  (port 80 → host)            │   │   │
-│  │  │                  Nginx 1.25-alpine                   │   │   │
-│  │  │                                                      │   │   │
-│  │  │  ┌──────────────────┐   ┌──────────────────────────┐ │   │   │
-│  │  │  │  정적 파일 서빙   │   │    API 리버스 프록시     │ │   │   │
-│  │  │  │  React SPA dist  │   │  /api/* → backend:8000   │ │   │   │
-│  │  │  │  (JS/CSS 1년캐시) │   │  SSE/스트리밍 지원       │ │   │   │
-│  │  │  │  SPA fallback    │   │  gzip 압축               │ │   │   │
-│  │  │  └──────────────────┘   └──────────────────────────┘ │   │   │
-│  │  └───────────────────────────────┬──────────────────────┘   │   │
-│  │                                  │ internal                 │   │
-│  │  ┌───────────────────────────────▼──────────────────────┐   │   │
-│  │  │          withdog-backend  (port 8000, internal)      │   │   │
-│  │  │               FastAPI + uvicorn (Python 3.12)        │   │   │
-│  │  │                                                      │   │   │
-│  │  │  ┌──────────────┐  ┌───────────────┐  ┌────────────┐ │   │   │
-│  │  │  │  API Routers │  │  AI Modules   │  │  ChromaDB  │ │   │   │
-│  │  │  │ auth/users   │  │ DiaryChain    │  │ (in-proc)  │ │   │   │
-│  │  │  │ pets/diaries │  │ PlacesChain   │  │  장소 RAG  │ │   │   │
-│  │  │  │ places/chat  │  │ BreedRetriever│  │  견종 RAG  │ │   │   │
-│  │  │  │ images/breeds│  │ Diary/PlacesR.│  │  일기 RAG  │ │   │   │
-│  │  │  └──────────────┘  └───────────────┘  └────────────┘ │   │   │
-│  │  └──────────────────────────────────────────────────────┘   │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────────┘
-         │               │                │              │
-         ▼               ▼                ▼              ▼
-  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────────┐
-  │ AWS RDS    │  │  AWS S3    │  │ OpenAI API │  │ OAuth 2.0    │
-  │  MySQL     │  │ (aioboto3) │  │            │  │              │
-  │            │  │ 이미지/    │  │ GPT-4.1-   │  │ Kakao        │
-  │ users      │  │ 프로필     │  │ mini       │  │ Google       │
-  │ pets       │  │ 업로드     │  │ gpt-image-1│  │ Naver        │
-  │ diaries    │  │            │  │            │  │              │
-  │ places ... │  │            │  │            │  │              │
-  └────────────┘  └────────────┘  └────────────┘  └──────────────┘
-```
+<div align="center">
+
+  ![전체구성도](./assets/전체구성도.png)
+
+</div>
 
 <br />
 

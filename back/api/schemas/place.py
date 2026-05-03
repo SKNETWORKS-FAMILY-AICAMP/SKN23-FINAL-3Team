@@ -41,9 +41,41 @@ class PlaceResponse(BaseModel):
     operation_info: Optional[str] = Field(None, description="운영시간 및 휴무일 정보")
     description: Optional[str] = Field(None, description="장소 통합 설명 텍스트")
     entrance_fee_amount: Optional[int] = Field(None, description="입장료(원). NULL=불명/변동/조건부")
-    entrance_fee_type: FeeType = Field(FeeType.UNKNOWN, description="입장료 정규화 타입 (free/fixed/variable/conditional/unknown)")
+    entrance_fee_type: FeeType = Field(FeeType.unknown, description="입장료 정규화 타입 (free/fixed/variable/conditional/unknown)")
     extra_fee_amount: Optional[int] = Field(None, description="추가요금(원). NULL=불명/변동/조건부")
-    extra_fee_type: FeeType = Field(FeeType.UNKNOWN, description="추가요금 정규화 타입")
+    extra_fee_type: FeeType = Field(FeeType.unknown, description="추가요금 정규화 타입")
     modified_time: Optional[datetime] = Field(None, description="한국관광공사 원본 데이터 최종 수정일")
     created_at: datetime = Field(..., description="수집 등록 일시")
     updated_at: datetime = Field(..., description="수집 갱신 일시")
+
+
+class PlaceFavoriteItem(BaseModel):
+    """
+        즐겨찾기 장소 목록 셀용 경량 페이로드.
+
+        프론트가 이미지·주소 등은 별도 API(GET /api/places/by-name 등) 로
+        보강하므로, 본 스키마에는 카드 식별·정렬에 필요한 최소 필드만 포함한다.
+    """
+
+    content_id: str = Field(..., description="한국관광공사 콘텐츠 ID (PATCH 호출 시 path param)")
+    name: str = Field(..., description="장소명")
+    sub_category: str = Field("", description="세부 분류 (카페/공원/숙박 등)")
+    favorited_at: datetime = Field(..., description="즐겨찾기 등록 시각")
+
+
+class PlaceFavoriteResponse(BaseModel):
+    """즐겨찾기 장소 목록 응답 스키마."""
+
+    items: list[PlaceFavoriteItem] = Field(
+        ..., description="즐겨찾기 장소 목록 (favorited_at DESC)"
+    )
+
+
+class PlaceFavoriteToggleResponse(BaseModel):
+    """즐겨찾기 토글 결과 응답 스키마."""
+
+    content_id: str = Field(..., description="대상 장소 콘텐츠 ID")
+    is_favorite: bool = Field(..., description="토글 후 상태 (True=즐겨찾기, False=해제)")
+    favorited_at: Optional[datetime] = Field(
+        None, description="즐겨찾기 등록 시각 (해제 시 None)"
+    )

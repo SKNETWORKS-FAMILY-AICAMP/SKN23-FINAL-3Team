@@ -64,6 +64,16 @@ class User(Base):
         comment="대표 성향 키워드 ID",
     )
 
+    # FK → pets (대표 반려견, 1:1 포인터). 본인 소유 pet 여야 함은 service 단 검증.
+    # ON DELETE SET NULL: 대표 pet 이 hard delete 되면 자동 NULL.
+    # soft delete 케이스는 pet_service.delete_pet 가 자동 승격으로 처리.
+    primary_pet_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("pets.id", onupdate="CASCADE", ondelete="SET NULL"),
+        nullable=True,
+        comment="대표 반려견 ID (마이페이지 카드·기본 컨텍스트용)",
+    )
+
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 여행 성향 태그 목록")
 
     created_at: Mapped[datetime] = mapped_column(
@@ -81,7 +91,19 @@ class User(Base):
     # ── Relationships ──────────────────────────────────────────────────────
     profile: Mapped[Image] = relationship("Image", foreign_keys=[profile_id], lazy="select")
     keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
-    pets: Mapped[list[Pet]] = relationship("Pet", back_populates="user", cascade="all, delete-orphan")
+    # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 SQLAlchemy 추론 모호 → foreign_keys 명시.
+    pets: Mapped[list[Pet]] = relationship(
+        "Pet",
+        back_populates="user",
+        foreign_keys="[Pet.user_id]",
+        cascade="all, delete-orphan",
+    )
+    # 대표 반려견 nested 응답용. async 환경이라 lazy="selectin" — UserResponse.model_validate 시 자동 로드.
+    primary_pet: Mapped[Pet | None] = relationship(
+        "Pet",
+        foreign_keys=[primary_pet_id],
+        lazy="selectin",
+    )
     chat_rooms: Mapped[list[ChatRoom]] = relationship("ChatRoom", back_populates="user", cascade="all, delete-orphan")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="user", cascade="all, delete-orphan")
 

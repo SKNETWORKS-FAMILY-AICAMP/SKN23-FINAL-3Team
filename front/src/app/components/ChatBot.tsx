@@ -6,8 +6,8 @@ import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse, updateMessageContent, type FacilityCard } from '../services/chatService'
-import { searchPlaces, type PlaceResult } from '../services/placeService'
+import { createChatRoom, sendMessageWithResponse, type FacilityCard } from '../services/chatService'
+import type { PlaceResult } from '../services/placeService'
 
 const BUTTONS_MARKER = '%%BUTTONS%%'
 const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
@@ -45,20 +45,6 @@ function renderBotText(content: string): React.ReactNode {
       </span>
     )
   })
-}
-
-// 표시된 장소 목록을 DB 저장용 텍스트로 포맷 (history에서 파싱 가능한 형식)
-function formatPlacesForStorage(places: PlaceResult[]): string {
-  const lines = ['반려견과 함께 가보기 좋은 장소를 정리했어요.', '']
-  places.forEach((place, i) => {
-    lines.push(`${i + 1}. ${place.name}`)
-    lines.push(`- 주소: ${place.address}`)
-    if (place.reason) lines.push(`- 추천 이유: ${place.reason}`)
-    if (place.content_id) lines.push(`- _id: ${place.content_id}`)
-    lines.push('')
-  })
-  lines.push('장소 이름을 누르면 상세 정보를 확인할 수 있어요.')
-  return lines.join('\n')
 }
 
 function splitPlaceMessage(text: string) {
@@ -286,7 +272,7 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
-      const result = await sendMessageWithResponse(roomId, text, selectedPetId)
+      const result = await sendMessageWithResponse(roomId, text, selectedPetId, userLocation?.lat, userLocation?.lng)
       const intent = result.intent.intent
       const botText = result.assistant_message.content
 
@@ -306,24 +292,9 @@ export default function ChatBot({
           actions.receiveBotMessage(botText)
         }
       } else if (intent === '장소추천') {
-        let places: PlaceResult[] = []
-        try {
-          places = await searchPlaces({
-            query: text,
-            pet_id: selectedPetId,
-            user_lat: userLocation?.lat,
-            user_lng: userLocation?.lng,
-          })
-          onPlacesFound?.(places)
-        } catch {
-          onPlacesFound?.([])
-        }
+        const places = result.places ?? []
+        onPlacesFound?.(places)
         actions.receiveBotMessage(botText, undefined, 'place', places)
-        // 화면에 표시된 장소 목록과 DB 저장 내용을 동기화 (채팅 기록과 일치)
-        if (places.length > 0 && roomId !== null && result.assistant_message.id) {
-          const formatted = formatPlacesForStorage(places)
-          updateMessageContent(roomId, result.assistant_message.id, formatted).catch(() => { })
-        }
         setTimeout(() => onNavigateToMap?.(), 800)
       } else if (intent === '시설정보') {
         const facility = result.facility
