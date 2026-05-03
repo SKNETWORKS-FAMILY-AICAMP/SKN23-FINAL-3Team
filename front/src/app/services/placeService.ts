@@ -34,11 +34,15 @@ export function searchPlaces(params: {
   category?: string
   city?: string
   pet_id?: number | null
+  user_lat?: number
+  user_lng?: number
 }): Promise<PlaceResult[]> {
   const qs = new URLSearchParams({ query: params.query })
   if (params.category) qs.set('category', params.category)
   if (params.city) qs.set('city', params.city)
   if (params.pet_id != null) qs.set('pet_id', String(params.pet_id))
+  if (params.user_lat != null) qs.set('user_lat', String(params.user_lat))
+  if (params.user_lng != null) qs.set('user_lng', String(params.user_lng))
   return api
     .get<SearchPlacesResponse>(`/places/search?${qs}`)
     .then((response) => response.places)

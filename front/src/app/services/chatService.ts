@@ -82,11 +82,15 @@ export function sendMessageWithResponse(
   roomId: number,
   content: string,
   petId?: number | null,
+  userLat?: number | null,
+  userLng?: number | null,
 ): Promise<ChatTurnResponse> {
   return api.post(`/chat-rooms/${roomId}/messages`, {
     role: 'user',
     content,
     pet_id: petId ?? null,
+    user_lat: userLat ?? null,
+    user_lng: userLng ?? null,
   })
 }
 

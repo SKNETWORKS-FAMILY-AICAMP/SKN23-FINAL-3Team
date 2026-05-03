@@ -625,6 +625,50 @@ export default function HomePage({
   const [editSaving, setEditSaving] = useState(false);
   const [showPlacePanel, setShowPlacePanel] = useState(false);
   const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // 홈 진입 시 GPS 자동 요청 + watchPosition으로 지속 추적
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    let watchId: number;
+
+    const startWatch = () => {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          localStorage.setItem('gps_permission', 'granted');
+        },
+        () => {
+          localStorage.removeItem('gps_permission');
+        },
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    };
+
+    // 이전에 허용한 적 있으면 바로 시작, 없으면 권한 요청 후 시작
+    if (localStorage.getItem('gps_permission') === 'granted') {
+      startWatch();
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          localStorage.setItem('gps_permission', 'granted');
+          startWatch();
+        },
+        () => {
+          localStorage.removeItem('gps_permission');
+        },
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    }
+
+    return () => {
+      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -1090,6 +1134,7 @@ export default function HomePage({
                   places={mapPlaces}
                   onUsePlace={handleUsePlace}
                   initialSelectedId={historySelectedId ?? undefined}
+                  userLocation={userLocation ?? undefined}
                 />
               )}
             </div>
@@ -1170,6 +1215,7 @@ export default function HomePage({
                       diaryTrigger={diaryTrigger}
                       diaryPlace={autoPlace?.name}
                       initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
+                      userLocation={userLocation ?? undefined}
                     />
                   </div>
                 )}

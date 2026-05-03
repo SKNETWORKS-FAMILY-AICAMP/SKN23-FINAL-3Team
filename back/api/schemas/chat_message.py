@@ -29,6 +29,8 @@ class MessageCreate(BaseModel):
     )
     content: str = Field(..., min_length=1, description="메시지 본문")
     pet_id: int | None = Field(default=None, description="현재 선택한 반려견 ID")
+    user_lat: float | None = Field(default=None, description="사용자 위도 (GPS)")
+    user_lng: float | None = Field(default=None, description="사용자 경도 (GPS)")
 
 
 class MessageResponse(BaseModel):

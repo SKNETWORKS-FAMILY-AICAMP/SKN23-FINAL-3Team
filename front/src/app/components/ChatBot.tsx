@@ -211,6 +211,7 @@ interface Props {
   diaryTrigger?: number
   diaryPlace?: string
   initialMessage?: string
+  userLocation?: { lat: number; lng: number }
 }
 
 const DEFAULT_PET: Pet = { name: '우리 아이', breed: '강아지' }
@@ -225,6 +226,7 @@ export default function ChatBot({
   diaryTrigger,
   diaryPlace,
   initialMessage,
+  userLocation,
 }: Props) {
   const navigate = useNavigate()
   const isLoggedIn = !!localStorage.getItem('access_token')
@@ -270,7 +272,7 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
-      const result = await sendMessageWithResponse(roomId, text, selectedPetId)
+      const result = await sendMessageWithResponse(roomId, text, selectedPetId, userLocation?.lat, userLocation?.lng)
       const intent = result.intent.intent
       const botText = result.assistant_message.content
 

@@ -315,6 +315,7 @@ from routers import (
     pets_router,
     users_router,
     places_router,
+    eval_router,
 )
 
 # /api prefix로 묶어 nginx proxy_pass 경로와 일치시킴
@@ -350,6 +351,9 @@ _api_router.include_router(keywords_router.router,      prefix="/keywords",   ta
 
 # 장소 검색 (Places)
 _api_router.include_router(places_router.router,        prefix="/places",     tags=["Places"])
+
+# 평가 전용 (Ablation — 실서비스 라우터와 분리)
+_api_router.include_router(eval_router.router,          prefix="/eval",       tags=["Eval"])
 
 app.include_router(_api_router)
 
