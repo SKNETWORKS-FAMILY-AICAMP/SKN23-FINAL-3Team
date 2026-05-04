@@ -28,6 +28,29 @@ interface SearchPlacesResponse {
   places: PlaceResult[]
 }
 
+export interface FavoritePlace {
+  content_id: string
+  name: string
+  sub_category: string
+  favorited_at: string
+}
+
+export interface ToggleFavoriteResponse {
+  content_id: string
+  is_favorite: boolean
+  favorited_at: string
+}
+
+/** PATCH /places/{content_id}/favorite — 즐겨찾기 토글 */
+export function togglePlaceFavorite(contentId: string): Promise<ToggleFavoriteResponse> {
+  return api.patch(`/places/${contentId}/favorite`, {})
+}
+
+/** GET /places/favorites — 즐겨찾기 목록 */
+export function getPlaceFavorites(): Promise<FavoritePlace[]> {
+  return api.get<{ items: FavoritePlace[] }>('/places/favorites').then((r) => r.items)
+}
+
 /** GET /places/search?query={q}&category={c}&city={c} */
 export function searchPlaces(params: {
   query: string

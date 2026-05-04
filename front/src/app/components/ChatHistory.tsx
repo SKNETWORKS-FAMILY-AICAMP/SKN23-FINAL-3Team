@@ -15,34 +15,32 @@ function isPlaceMessage(content: string): boolean {
 }
 
 // 텍스트에서 번호 + 장소명 추출
-function extractPlaceEntries(content: string): { name: string; address: string; contentId?: string }[] {
-  const entries: { name: string; address: string; contentId?: string }[] = []
+function extractPlaceEntries(content: string): { name: string; address: string }[] {
+  const entries: { name: string; address: string }[] = []
   const lines = content.split('\n')
   for (let i = 0; i < lines.length; i++) {
     const nameMatch = lines[i].match(/^\d+\.\s+(.+)$/)
     if (nameMatch) {
       const name = nameMatch[1].trim()
       let address = ''
-      let contentId: string | undefined
-      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      for (let j = i + 1; j < Math.min(i + 12, lines.length); j++) {
         if (!address) {
           const addrMatch = lines[j].match(/[-–]\s*주소:\s*(.+)/)
           if (addrMatch) address = addrMatch[1].trim()
         }
-        const idMatch = lines[j].match(/[-–]\s*_id:\s*(.+)/)
-        if (idMatch) { contentId = idMatch[1].trim(); break }
       }
-      entries.push({ name, address, contentId })
+      entries.push({ name, address })
     }
   }
   return entries
 }
 
-// 장소 메시지를 파싱해서 장소명만 링크로 렌더링 (_id 줄은 숨김)
+// 장소 메시지를 파싱해서 장소명만 링크로 렌더링
 function renderHistoryPlaceMessage(
   content: string,
   loadingName: string | null,
-  onPlaceClick: (entry: { name: string; address: string; contentId?: string }) => void,
+  notFoundName: string | null,
+  onPlaceClick: (entry: { name: string; address: string }) => void,
 ) {
   const entries = extractPlaceEntries(content)
   const lines = content.split('\n')
@@ -50,7 +48,6 @@ function renderHistoryPlaceMessage(
   return (
     <div className="space-y-0.5 text-sm leading-7">
       {lines.map((line, i) => {
-        // _id 줄은 사용자에게 표시하지 않음
         if (/^[-–]\s*_id:/.test(line)) return null
 
         const nameMatch = line.match(/^(\d+)\.\s+(.+)$/)
@@ -60,6 +57,7 @@ function renderHistoryPlaceMessage(
           const found = entries.find((e) => e.name === name)
           if (found) {
             const isLoading = loadingName === name
+            const isNotFound = notFoundName === name
             return (
               <p key={i}>
                 {num}.{' '}
@@ -70,6 +68,9 @@ function renderHistoryPlaceMessage(
                 >
                   {isLoading ? '불러오는 중...' : name}
                 </button>
+                {isNotFound && (
+                  <span className="ml-2 text-xs text-[#B08B7A]">정보를 찾을 수 없어요</span>
+                )}
               </p>
             )
           }
@@ -87,6 +88,8 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
   const [loading, setLoading] = useState(true)
   const [msgLoading, setMsgLoading] = useState(false)
   const [loadingPlace, setLoadingPlace] = useState<string | null>(null)
+  const [notFoundPlace, setNotFoundPlace] = useState<string | null>(null)
+
 
   useEffect(() => {
     getMe()
@@ -107,7 +110,7 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
       .finally(() => setMsgLoading(false))
   }
 
-  const handlePlaceClick = async ({ name }: { name: string; address: string; contentId?: string }) => {
+  const handlePlaceClick = async ({ name }: { name: string; address: string }) => {
     if (!onShowPlaces) return
     setLoadingPlace(name)
     try {
@@ -135,7 +138,8 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
       }
       onShowPlaces([place], place)
     } catch {
-      alert('해당 시설을 찾을 수 없습니다.')
+      setNotFoundPlace(name)
+      setTimeout(() => setNotFoundPlace(null), 3000)
     } finally {
       setLoadingPlace(null)
     }
@@ -179,7 +183,7 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
                 }`}
               >
                 {msg.role === 'assistant' && isPlaceMessage(msg.content)
-                  ? renderHistoryPlaceMessage(msg.content, loadingPlace, handlePlaceClick)
+                  ? renderHistoryPlaceMessage(msg.content, loadingPlace, notFoundPlace, handlePlaceClick)
                   : msg.content}
               </div>
             ))
