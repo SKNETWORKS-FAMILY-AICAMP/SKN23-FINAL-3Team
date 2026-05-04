@@ -7,6 +7,7 @@ import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/place.dart';
 import '../auth/auth_providers.dart';
+import 'map_focus_provider.dart';
 import 'place_providers.dart';
 import 'widgets/facility_modal_sheet.dart';
 import 'widgets/kakao_map_view.dart';
@@ -29,18 +30,26 @@ class _MapTabState extends ConsumerState<MapTab> {
   final _queryCtrl = TextEditingController();
   final _mapKey = GlobalKey<KakaoMapViewState>();
 
-  static const _categories = <_Category>[
-    _Category(id: '', label: '전체'),
-    _Category(id: '카페', label: '카페'),
-    _Category(id: '음식점', label: '음식점'),
-    _Category(id: '공원', label: '공원'),
-    _Category(id: '숙박', label: '숙박'),
-  ];
-  String _selectedCategory = '';
-
   List<PlaceCard> _results = const [];
   bool _searching = false;
   String? _searchError;
+
+  @override
+  void initState() {
+    super.initState();
+    // 사용자 요청 (2026-05-04 밤): 로그인 사용자의 즐겨찾기 contentId 집합을
+    // 미리 로드 → 검색 결과에 즐겨찾기한 장소가 포함되면 ❤️ 채워진 상태로 표시.
+    // 기존엔 옵티미스틱 토글 시점에만 set 갱신되어 검색 결과의 active 상태 부재.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = ref.read(authProvider);
+      if (auth is AuthAuthenticated) {
+        ref.read(favoriteContentIdsProvider.notifier).reload().catchError((_) {
+          // 백엔드 미응답·401 등 → 빈 set 유지 (graceful)
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -68,7 +77,6 @@ class _MapTabState extends ConsumerState<MapTab> {
     try {
       final results = await ref.read(placeApiProvider).search(
             query: q,
-            category: _selectedCategory.isEmpty ? null : _selectedCategory,
             petId: petId,
             lat: position?.latitude,
             lng: position?.longitude,
@@ -130,14 +138,62 @@ class _MapTabState extends ConsumerState<MapTab> {
     );
   }
 
-  void _onCardTap(PlaceCard place) {
-    if (place.lat != 0.0 && place.lng != 0.0) {
-      _mapKey.currentState?.focusLatLng(lat: place.lat, lng: place.lng, level: 4);
+  /// 카드/외부 요청으로 특정 장소를 지도에서 보여준다 (Bug #5/#6 권위 동작).
+  /// 1) 좌표 있으면 마커 + focusLatLng — 결과 리스트 비어있으면 단건 자체를 입력
+  /// 2) 시설정보 모달 오픈
+  /// 3) `mapFocusProvider` 소비 (1회 처리)
+  void _focusPlace(PlaceCard place) {
+    final mapState = _mapKey.currentState;
+    if (mapState != null && place.lat != 0.0 && place.lng != 0.0) {
+      // 결과 리스트에 없으면 단건 마커, 있으면 전체 마커 갱신 + focus
+      final inResults = _results
+          .any((r) => r.contentId == place.contentId && place.contentId.isNotEmpty);
+      mapState.setMarkers(inResults ? _results : [place]);
+      mapState.focusLatLng(lat: place.lat, lng: place.lng, level: 4);
     }
+    // 결과 리스트 갱신 — 카드 노출용 (검색 결과 없을 때 단건 표시)
+    if (place.contentId.isNotEmpty &&
+        !_results.any((r) => r.contentId == place.contentId)) {
+      setState(() => _results = [place, ..._results]);
+    }
+    if (mounted && place.name.isNotEmpty) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => FacilityModalSheet(
+          name: place.name,
+          imageUrl: place.imageUrl,
+        ),
+      );
+    }
+  }
+
+  void _consumePendingFocus() {
+    final pending = ref.read(mapFocusProvider.notifier).consume();
+    if (pending != null) _focusPlace(pending);
   }
 
   @override
   Widget build(BuildContext context) {
+    // 외부 요청 (채팅 → 지도) 발생 시 1회 처리. 지도 미준비면 setMarkers/focus 는
+    // 무시되지만 mapFocusProvider 가 그대로라 onMapReady 시 재시도 (consume).
+    ref.listen<PlaceCard?>(mapFocusProvider, (_, next) {
+      if (next == null) return;
+      // 지도 ready 여부 확실치 않으니 한번 시도. 실패하면 onMapReady 가 cover.
+      // 단, 여기선 consume 하지 않음 — onMapReady 가 권위.
+      if (_mapKey.currentState != null) {
+        // build 중 setState 금지 → 다음 프레임으로 미룸
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _consumePendingFocus();
+        });
+      }
+    });
+
     return SafeArea(
       child: Column(
         children: [
@@ -146,13 +202,15 @@ class _MapTabState extends ConsumerState<MapTab> {
             onSubmit: _search,
             searching: _searching,
           ),
-          _CategoryChips(
-            selected: _selectedCategory,
-            onSelected: (id) {
-              setState(() => _selectedCategory = id);
-              if (_queryCtrl.text.trim().isNotEmpty) _search();
-            },
-            categories: _categories,
+          // 사용자 정정 (2026-05-04 밤2): 결과 list 의 inner spinner 는
+          // `_results.isEmpty` 일 때만 표시 → 후속 검색 시 누락. 검색창 아래에
+          // LinearProgressIndicator 항상 박아 두 케이스 (초기·후속) 통합 커버.
+          // chat_screen 의 `state.isSending` LinearProgress 와 동일 패턴.
+          SizedBox(
+            height: 2,
+            child: _searching
+                ? const LinearProgressIndicator(minHeight: 2)
+                : const SizedBox.shrink(),
           ),
           SizedBox(
             height: 320,
@@ -162,8 +220,10 @@ class _MapTabState extends ConsumerState<MapTab> {
                   key: _mapKey,
                   onMarkerTap: _onMarkerTap,
                   onMapReady: (_) {
-                    // 지도 init 후 GPS 자동 시도 — 권한 거부 시 silent (디폴트 좌표 유지)
+                    // 지도 init 후 GPS 자동 시도 — 권한 거부 시 silent
                     _refreshLocation(silent: true);
+                    // 외부 focus 요청 보류 분 처리 (채팅 → 지도 진입 직후)
+                    _consumePendingFocus();
                   },
                   onError: (msg) => Fluttertoast.showToast(msg: msg),
                 ),
@@ -187,18 +247,12 @@ class _MapTabState extends ConsumerState<MapTab> {
             results: _results,
             searching: _searching,
             error: _searchError,
-            onCardTap: _onCardTap,
+            onCardTap: _focusPlace,
           )),
         ],
       ),
     );
   }
-}
-
-class _Category {
-  const _Category({required this.id, required this.label});
-  final String id;
-  final String label;
 }
 
 class _SearchBar extends StatelessWidget {
@@ -223,55 +277,13 @@ class _SearchBar extends StatelessWidget {
         decoration: InputDecoration(
           hintText: '예: 강남 카페, 한강공원',
           prefixIcon: const Icon(LucideIcons.search, size: 18),
-          suffixIcon: searching
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : IconButton(
-                  icon: const Icon(LucideIcons.send, size: 18),
-                  onPressed: onSubmit,
-                ),
+          // 사용자 요청 (2026-05-04 밤): 결과 영역에 이미 로딩바 있어 검색 버튼은
+          // 항상 send 아이콘 유지. 검색 중 disabled 만 적용.
+          suffixIcon: IconButton(
+            icon: const Icon(LucideIcons.send, size: 18),
+            onPressed: searching ? null : onSubmit,
+          ),
         ),
-      ),
-    );
-  }
-}
-
-class _CategoryChips extends StatelessWidget {
-  const _CategoryChips({
-    required this.selected,
-    required this.onSelected,
-    required this.categories,
-  });
-
-  final String selected;
-  final ValueChanged<String> onSelected;
-  final List<_Category> categories;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: [
-          for (final c in categories)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
-                label: Text(c.label),
-                selected: c.id == selected,
-                onSelected: (_) => onSelected(c.id),
-                selectedColor: AppColors.peach,
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -321,10 +333,11 @@ class _ResultList extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
       itemCount: results.length,
-      itemBuilder: (_, i) => GestureDetector(
-        onTap: () => onCardTap(results[i]),
-        behavior: HitTestBehavior.opaque,
-        child: PlaceCardTile(place: results[i]),
+      // PlaceCardTile 의 inner InkWell 이 outer GestureDetector 보다 우선 → onNameTap
+      // 으로 직접 hand-off (Bug #5 fix). 카드 tap = 지도 focus + 모달.
+      itemBuilder: (_, i) => PlaceCardTile(
+        place: results[i],
+        onNameTap: () => onCardTap(results[i]),
       ),
     );
   }

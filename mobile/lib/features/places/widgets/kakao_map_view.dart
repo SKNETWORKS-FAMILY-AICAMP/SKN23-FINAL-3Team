@@ -39,6 +39,16 @@ class KakaoMapViewState extends State<KakaoMapView> {
   InAppWebViewController? _controller;
   bool _ready = false;
   String? _loadError;
+  late final Future<String> _htmlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Future 를 build 외부 (initState) 에서 1회만 생성 — 부모 rebuild 마다
+    // 새 Future 가 생기면 FutureBuilder 가 loading 상태로 되돌아가 WebView
+    // 가 사라졌다 나타나며 검정 깜빡임 발생 (Bug #6 root cause).
+    _htmlFuture = _loadHtml();
+  }
 
   Future<String> _loadHtml() async {
     final raw = await rootBundle.loadString('assets/kakao_map.html');
@@ -150,7 +160,7 @@ class KakaoMapViewState extends State<KakaoMapView> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<String>(
-      future: _loadHtml(),
+      future: _htmlFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
@@ -175,6 +185,8 @@ class KakaoMapViewState extends State<KakaoMapView> {
                 useWideViewPort: true,
                 loadWithOverviewMode: true,
                 allowsInlineMediaPlayback: true,
+                // Bug #6 — Android WebView surface flip 시 검정 깜빡임 방지.
+                transparentBackground: false,
               ),
               onWebViewCreated: (controller) {
                 _controller = controller;

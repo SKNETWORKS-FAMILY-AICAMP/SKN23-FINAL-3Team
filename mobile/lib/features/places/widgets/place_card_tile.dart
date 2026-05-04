@@ -16,9 +16,13 @@ import 'facility_modal_sheet.dart';
 /// - 우측 상단: ❤️ 토글 (옵티미스틱 UI, 사용자 결정 #2)
 /// - 클릭: `GET /api/places/by-name` 모달 시트 (UI 디테일 #4)
 class PlaceCardTile extends ConsumerWidget {
-  const PlaceCardTile({super.key, required this.place});
+  const PlaceCardTile({super.key, required this.place, this.onNameTap});
 
   final PlaceCard place;
+
+  /// 카드 본문(이미지+이름+상세) 영역 탭 시 호출. 미지정 시 시설정보 모달 오픈.
+  /// 챗봇 응답 카드에서 지도 탭으로 라우팅용 (Bug #6, 2026-05-04).
+  final VoidCallback? onNameTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,7 +36,9 @@ class PlaceCardTile extends ConsumerWidget {
         children: [
           InkWell(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-            onTap: () => _openFacilityModal(context),
+            onTap: () => onNameTap != null
+                ? onNameTap!()
+                : _openFacilityModal(context),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
@@ -201,7 +207,10 @@ class PlaceCardTile extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => FacilityModalSheet(name: place.name),
+      builder: (_) => FacilityModalSheet(
+        name: place.name,
+        imageUrl: place.imageUrl,
+      ),
     );
   }
 }

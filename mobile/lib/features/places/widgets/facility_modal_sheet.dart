@@ -10,10 +10,19 @@ import '../place_providers.dart';
 ///
 /// UI 디테일 #4 (사용자 결정 2026-05-03): `showModalBottomSheet isScrollControlled: true`
 /// 90% 높이. 큰 일러스트(향후) + 본문 + 태그 2종 + 운영시간·주차·반려견 정보.
+///
+/// `imageUrl` 우선 (호출자가 PlaceCard.firstimage 등 보유 시 전달) — 없으면
+/// placeholder. `/by-name` 응답의 FacilityCard 스키마는 image 필드가 없어
+/// 이미지를 별도 source 로 받는 구조 (Bug #3, 2026-05-04 저녁).
 class FacilityModalSheet extends ConsumerWidget {
-  const FacilityModalSheet({super.key, required this.name});
+  const FacilityModalSheet({
+    super.key,
+    required this.name,
+    this.imageUrl,
+  });
 
   final String name;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,6 +48,7 @@ class FacilityModalSheet extends ConsumerWidget {
             final facility = snapshot.data!;
             return _Body(
               facility: facility,
+              imageUrl: imageUrl,
               scrollController: scrollController,
               onClose: () => Navigator.of(context).pop(),
             );
@@ -52,11 +62,13 @@ class FacilityModalSheet extends ConsumerWidget {
 class _Body extends StatelessWidget {
   const _Body({
     required this.facility,
+    required this.imageUrl,
     required this.scrollController,
     required this.onClose,
   });
 
   final FacilityCard facility;
+  final String? imageUrl;
   final ScrollController scrollController;
   final VoidCallback onClose;
 
@@ -92,6 +104,9 @@ class _Body extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Bug #3 — 상단 장소 이미지. URL 없으면 🐾 placeholder
+                _HeaderImage(imageUrl: imageUrl),
+                const SizedBox(height: 12),
                 if (facility.address.isNotEmpty)
                   _Row(icon: LucideIcons.mapPin, text: facility.address),
                 if (facility.tel.isNotEmpty)
@@ -156,6 +171,44 @@ class _Body extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HeaderImage extends StatelessWidget {
+  const _HeaderImage({required this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final has = imageUrl != null && imageUrl!.isNotEmpty;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: 200,
+        width: double.infinity,
+        child: has
+            ? Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const _ImagePlaceholder(),
+              )
+            : const _ImagePlaceholder(),
+      ),
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  const _ImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.peach,
+      alignment: Alignment.center,
+      child: const Text('🐾', style: TextStyle(fontSize: 48)),
     );
   }
 }
