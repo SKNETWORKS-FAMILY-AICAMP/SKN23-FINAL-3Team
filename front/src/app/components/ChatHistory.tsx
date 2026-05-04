@@ -48,6 +48,8 @@ function renderHistoryPlaceMessage(
   return (
     <div className="space-y-0.5 text-sm leading-7">
       {lines.map((line, i) => {
+        if (/^[-–]\s*_id:/.test(line)) return null
+
         const nameMatch = line.match(/^(\d+)\.\s+(.+)$/)
         if (nameMatch) {
           const num = nameMatch[1]
