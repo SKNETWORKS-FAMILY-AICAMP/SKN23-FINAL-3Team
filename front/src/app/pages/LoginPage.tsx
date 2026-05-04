@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router';
-import { Dog } from 'lucide-react';
 
 const REDIRECT_URI = `${window.location.origin}/oauth/callback`;
 
@@ -24,11 +23,8 @@ export function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo and Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 mb-4">
-            <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-3 rounded-2xl">
-              <Dog className="w-8 h-8 text-white" />
-            </div>
-            <span className="text-3xl font-bold text-gray-900">Dangda</span>
+          <div className="flex justify-center mb-4">
+            <img src="/logo.svg" alt="위드독" className="h-36 w-auto" />
           </div>
           <h1 className="text-gray-900 mx-[0px] mt-[0px] mb-[5px] p-[0px]">로그인</h1>
         </div>

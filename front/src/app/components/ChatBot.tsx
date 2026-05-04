@@ -6,7 +6,7 @@ import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse, type FacilityCard } from '../services/chatService'
+import { createChatRoom, sendMessageWithResponse, getPlaceByName, type FacilityCard } from '../services/chatService'
 import type { PlaceResult } from '../services/placeService'
 
 const BUTTONS_MARKER = '%%BUTTONS%%'
@@ -103,6 +103,7 @@ function renderPlaceMessage(
     has_parking: string
     reason?: string
   }>,
+  onPlaceClick?: (name: string) => void,
 ) {
   const blocks = splitPlaceMessage(text)
   const fallbackIntro = blocks[0]
@@ -117,9 +118,18 @@ function renderPlaceMessage(
             {places.map((place, index) => {
               return (
                 <div key={`${place.name}-${index}`} className="space-y-1">
-                  <p className="font-semibold text-[#2F241D]">
-                    {index + 1}. {place.name}
-                  </p>
+                  {onPlaceClick ? (
+                    <button
+                      onClick={() => onPlaceClick(place.name)}
+                      className="font-semibold text-[#F4845F] underline underline-offset-2 hover:text-[#e8764f] text-left"
+                    >
+                      {index + 1}. {place.name} 📍
+                    </button>
+                  ) : (
+                    <p className="font-semibold text-[#2F241D]">
+                      {index + 1}. {place.name}
+                    </p>
+                  )}
                   <p>- 주소: {place.address}</p>
                   <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
                 </div>
@@ -140,7 +150,7 @@ function renderPlaceMessage(
   )
 }
 
-function renderFacilityMessage(text: string, facility?: FacilityCard) {
+function renderFacilityMessage(text: string, facility?: FacilityCard, onShowOnMap?: () => void) {
   const lines = text.split('\n').map((l) => l.trim())
 
   return (
@@ -172,6 +182,14 @@ function renderFacilityMessage(text: string, facility?: FacilityCard) {
         <p className="pt-1 text-[12px] text-[#A89282]">
           (추정 매칭이라 다른 시설일 수 있어요. 정확한 이름을 알려주시면 다시 찾아드릴게요.)
         </p>
+      )}
+      {onShowOnMap && facility && (
+        <button
+          onClick={onShowOnMap}
+          className="mt-1 flex items-center gap-1 rounded-full border border-[#F4845F] px-3 py-1 text-[12px] font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
+        >
+          📍 지도에서 보기
+        </button>
       )}
     </div>
   )
@@ -211,6 +229,7 @@ interface Props {
   diaryTrigger?: number
   diaryPlace?: string
   initialMessage?: string
+  userLocation?: { lat: number; lng: number }
 }
 
 const DEFAULT_PET: Pet = { name: '우리 아이', breed: '강아지' }
@@ -225,6 +244,7 @@ export default function ChatBot({
   diaryTrigger,
   diaryPlace,
   initialMessage,
+  userLocation,
 }: Props) {
   const navigate = useNavigate()
   const isLoggedIn = !!localStorage.getItem('access_token')
@@ -270,7 +290,7 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
-      const result = await sendMessageWithResponse(roomId, text, selectedPetId)
+      const result = await sendMessageWithResponse(roomId, text, selectedPetId, userLocation?.lat, userLocation?.lng)
       const intent = result.intent.intent
       const botText = result.assistant_message.content
 
@@ -364,7 +384,13 @@ export default function ChatBot({
         {messages.map((msg) => {
           const { text: displayText, buttons: inlineButtons } = parseMessageButtons(msg.content)
           return (
-            <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+            <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              {msg.role === 'bot' && (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center mb-0.5">
+                  <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-8 w-8 object-contain" />
+                </div>
+              )}
+              <div className={`max-w-[80%]`}>
               <div
                 className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${msg.role === 'bot'
                   ? 'bg-white text-[#3D2B1F] shadow-sm'
@@ -373,9 +399,20 @@ export default function ChatBot({
               >
                 {msg.role === 'bot'
                   ? (msg.variant === 'place'
-                      ? renderPlaceMessage(displayText, msg.places)
+                      ? renderPlaceMessage(displayText, msg.places, async (name) => {
+                          try {
+                            const facility = await getPlaceByName(name)
+                            const place = facilityToPlaceResult(facility)
+                            onPlacesFound?.([place])
+                            setTimeout(() => onNavigateToMap?.(), 100)
+                          } catch { /* 장소를 찾지 못한 경우 무시 */ }
+                        })
                       : msg.variant === 'facility'
-                        ? renderFacilityMessage(displayText, msg.facility)
+                        ? renderFacilityMessage(displayText, msg.facility, msg.facility ? () => {
+                            const place = facilityToPlaceResult(msg.facility!)
+                            onPlacesFound?.([place])
+                            setTimeout(() => onNavigateToMap?.(), 100)
+                          } : undefined)
                         : renderBotText(displayText))
                   : displayText}
               </div>
@@ -408,6 +445,7 @@ export default function ChatBot({
                   그림일기 작성하기
                 </button>
               )}
+              </div>
             </div>
           )
         })}

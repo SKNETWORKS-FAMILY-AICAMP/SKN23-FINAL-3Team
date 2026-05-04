@@ -315,6 +315,7 @@ from routers import (
     pets_router,
     users_router,
     places_router,
+    eval_router,
 )
 
 # /api prefix로 묶어 nginx proxy_pass 경로와 일치시킴
@@ -350,6 +351,9 @@ _api_router.include_router(keywords_router.router,      prefix="/keywords",   ta
 
 # 장소 검색 (Places)
 _api_router.include_router(places_router.router,        prefix="/places",     tags=["Places"])
+
+# 평가 전용 (Ablation — 실서비스 라우터와 분리)
+_api_router.include_router(eval_router.router,          prefix="/eval",       tags=["Eval"])
 
 app.include_router(_api_router)
 
@@ -398,6 +402,7 @@ class DiaryRequest(BaseModel):
     birth_date: str | None = None
     personalities: list[str] = []
     owner_name: str = ""
+    owner_gender: str = ""
     main_answers: list[str]
     additional_answers: list[str] = []
     diary_type: str
@@ -439,6 +444,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
         birth_date=req.birth_date,
         personalities=req.personalities,
         owner_name=req.owner_name,
+        owner_gender=req.owner_gender,
         diary_type=req.diary_type,
         emotion=req.emotion_emoji,
         conversation_summary=conversation_summary,

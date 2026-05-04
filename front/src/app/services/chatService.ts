@@ -82,21 +82,30 @@ export function sendMessageWithResponse(
   roomId: number,
   content: string,
   petId?: number | null,
+  userLat?: number | null,
+  userLng?: number | null,
 ): Promise<ChatTurnResponse> {
   return api.post(`/chat-rooms/${roomId}/messages`, {
     role: 'user',
     content,
     pet_id: petId ?? null,
+    user_lat: userLat ?? null,
+    user_lng: userLng ?? null,
   })
 }
 
-/** POST /chat-rooms/{roomId}/messages */
-export function saveMessage(
+/** POST /chat-rooms/{roomId}/messages — AI 응답 없이 직접 저장 (그림일기 플로우용) */
+export function saveMessageDirect(
   roomId: number,
   role: 'user' | 'assistant',
   content: string,
 ): Promise<ChatMessage> {
-  return api.post(`/chat-rooms/${roomId}/messages`, { role, content })
+  return api.post(`/chat-rooms/${roomId}/messages/save`, { role, content })
+}
+
+/** GET /places/by-name?name={name} */
+export function getPlaceByName(name: string): Promise<FacilityCard> {
+  return api.get(`/places/by-name?name=${encodeURIComponent(name)}`)
 }
 
 /** GET /chat-rooms/{roomId}/messages */

@@ -59,6 +59,13 @@ EXPLICIT_PURPOSE_KEYWORDS = (
 PET_SIZE_CONTEXT_WORDS = ("반려견", "강아지", "개", "아이", "댕댕이", "견")
 PLACE_SIZE_CONTEXT_WORDS = ("카페", "식당", "공원", "숙소", "호텔", "펜션", "놀이터", "공간", "매장")
 
+OUT_OF_SERVICE_KEYWORDS = (
+    "제주", "부산", "강원", "경주", "속초", "동해", "인천", "수원", "대전",
+    "가평", "경기", "충청", "전라", "경상", "울산", "광주", "대구", "세종",
+    "춘천", "강릉", "여수", "통영", "거제", "포항", "안동", "전주", "청주",
+    "해운대", "제주도", "고양", "성남", "용인", "평택", "화성",
+)
+
 
 class ParsedQuery:
     """Container for parsed place-search query conditions."""
@@ -80,6 +87,7 @@ class ParsedQuery:
         }
         self.subjective: str = raw_query
         self.time_condition: str | None = None
+        self.use_current_location: bool = False
         self.landmark: str | None = None
         self.landmark_coords: tuple[float, float] | None = None
 
@@ -263,6 +271,20 @@ def _normalize_supply_preferences(parsed: ParsedQuery) -> None:
     if any(re.search(pattern, query) for pattern in waste_bag_patterns):
         parsed.objective["waste_bag_preference"] = "provided_or_not_required"
         logger.info("[PlaceService] supply preference detected: waste bags provided or not required")
+
+
+def _normalize_indoor_outdoor_subjective(parsed: ParsedQuery) -> None:
+    """실내/실외 조건이 파싱된 경우 subjective 텍스트에도 반영해 임베딩 품질을 높인다."""
+    is_indoor = parsed.objective.get("is_indoor")
+    is_outdoor = parsed.objective.get("is_outdoor")
+    subjective = (parsed.subjective or "").strip()
+
+    if is_indoor is True and "실내" not in subjective:
+        parsed.subjective = f"실내 {subjective}".strip()
+        logger.info("[PlaceService] indoor condition injected into subjective")
+    elif is_outdoor is True and not any(kw in subjective for kw in ("실외", "야외")):
+        parsed.subjective = f"야외 실외 {subjective}".strip()
+        logger.info("[PlaceService] outdoor condition injected into subjective")
 
 
 def _has_fee_preferences(parsed: ParsedQuery) -> bool:
@@ -470,6 +492,7 @@ async def _parse_query_with_llm(query: str, request: Request = None) -> ParsedQu
                     parsed.objective[key] = result[key]
             parsed.subjective = result.get("subjective", query)
             parsed.time_condition = result.get("time_condition")
+            parsed.use_current_location = bool(result.get("use_current_location", False))
             parsed.landmark = result.get("landmark")
             _normalize_size_interpretation(parsed)
     except Exception as e:
@@ -478,6 +501,7 @@ async def _parse_query_with_llm(query: str, request: Request = None) -> ParsedQu
     _normalize_fee_preferences(parsed)
     _normalize_supply_preferences(parsed)
     _relax_objective_for_restriction_focus(parsed)
+    _normalize_indoor_outdoor_subjective(parsed)
     return parsed
 
 
@@ -486,6 +510,7 @@ def _clone_parsed(parsed: ParsedQuery) -> ParsedQuery:
     cloned.objective = deepcopy(parsed.objective)
     cloned.subjective = parsed.subjective
     cloned.time_condition = parsed.time_condition
+    cloned.use_current_location = getattr(parsed, "use_current_location", False)
     cloned.landmark = getattr(parsed, "landmark", None)
     cloned.landmark_coords = getattr(parsed, "landmark_coords", None)
     return cloned
@@ -749,6 +774,18 @@ def _check_time_condition(operation_info: str | None, time_condition: str) -> bo
     return True
 
 
+def _sort_by_time_certainty(places: list[dict], time_condition: str) -> list[dict]:
+    """시간 조건 검색 시 운영시간 확인된 장소를 미확인 장소 앞으로 재정렬."""
+    confirmed, uncertain = [], []
+    for p in places:
+        op_info = p.get("operation", "")
+        if op_info and NO_INFO not in op_info and _parse_operation_hours(op_info):
+            confirmed.append(p)
+        else:
+            uncertain.append(p)
+    return confirmed + uncertain
+
+
 async def _filter_by_time(
     candidate_ids: list[str],
     time_condition: str | None,
@@ -790,15 +827,33 @@ async def _search_by_chromadb(
             return []
 
         query_text = (parsed.subjective or "").strip() or parsed.raw_query
-        search_n_results = max(n_results, 20) if _has_fee_preferences(parsed) else n_results
 
-        return container._places_retriever.search(
+        # candidate_ids가 있으면 후처리 필터를 위해 여유롭게 더 가져온다
+        has_candidates = bool(candidate_ids)
+        fetch_n = max(n_results, 50) if has_candidates else n_results
+        search_n_results = max(fetch_n, 20) if _has_fee_preferences(parsed) else fetch_n
+
+        results = container._places_retriever.search(
             query=query_text,
             n_results=search_n_results,
             city=parsed.objective.get("city"),
             district=parsed.objective.get("district"),
             category=parsed.objective.get("sub_category"),
         )
+
+        # RDB 필터(is_indoor/is_outdoor/has_parking/pet_size/시간 등)로 좁힌 후보에만 제한
+        if has_candidates:
+            candidate_set = set(candidate_ids)
+            filtered = [r for r in results if r.get("content_id") in candidate_set]
+            logger.info(
+                "[PlaceService] ChromaDB candidate filter: %d -> %d (candidate_ids=%d)",
+                len(results),
+                len(filtered),
+                len(candidate_ids),
+            )
+            results = filtered
+
+        return results
     except Exception as e:
         logger.warning(f"[PlaceService] ChromaDB search failed: {e}")
         return []
@@ -841,7 +896,7 @@ async def _fetch_and_score(
         place_dict["entrance_fee"] = vr.get("entrance_fee", "")
         place_dict["extra_fee"] = vr.get("extra_fee", "")
         place_dict["final_score"] = round(
-            rag_score * 0.7 + rule_score * 0.3 + category_bias,
+            rag_score * 0.5 + rule_score * 0.5 + category_bias,
             4,
         )
         places.append(place_dict)
@@ -1143,13 +1198,22 @@ async def search_places_from_db(
     category: str = None,
     city: str = None,
     request: Request = None,
+    search_mode: str = "combined",
+    user_lat: float = None,
+    user_lng: float = None,
 ) -> list[dict]:
-    """Run the hybrid place-search pipeline."""
+    """Run the hybrid place-search pipeline.
+
+    search_mode:
+        "combined" — RDB 필터 → ChromaDB 유사도 → 결합 스코어 (기본, 실서비스)
+        "rdb_only" — RDB 필터링 + rule score만 사용 (평가용)
+        "rag_only" — ChromaDB 의미 검색만 사용, RDB 사전 필터 없음 (평가용)
+
+    user_lat / user_lng: 사용자 GPS 좌표. landmark가 없고 GPS가 제공되면
+        현재 위치를 landmark_coords로 사용해 반경 검색을 수행.
+    """
     try:
         parsed = await _parse_query_with_llm(query, request)
-
-        if _should_prioritize_outing(parsed):
-            logger.info("[PlaceService] broad outing query detected, apply outing-first ranking")
 
         if city:
             parsed.objective["city"] = city
@@ -1163,8 +1227,41 @@ async def search_places_from_db(
             )
             return []
 
-        if parsed.landmark:
+        if not requested_city or requested_city == SEOUL:
+            if any(kw in query for kw in OUT_OF_SERVICE_KEYWORDS):
+                logger.info(
+                    f"[PlaceService] keyword-based out-of-service detected: {query} -> return empty result"
+                )
+                return []
+
+        if parsed.use_current_location:
+            # LLM이 현재 위치 기반 검색으로 판단 → GPS 우선 사용
+            parsed.landmark = None
+            if user_lat and user_lng:
+                parsed.landmark_coords = (user_lat, user_lng)
+                logger.info(f"[PlaceService] use_current_location=True, GPS: ({user_lat}, {user_lng})")
+        elif parsed.landmark:
             parsed.landmark_coords = await _get_landmark_coords(parsed.landmark)
+
+        if not parsed.landmark_coords and user_lat and user_lng:
+            parsed.landmark_coords = (user_lat, user_lng)
+            logger.info(f"[PlaceService] fallback GPS coords: ({user_lat}, {user_lng})")
+
+        if search_mode == "rdb_only":
+            candidate_ids, parsed = await _filter_with_relaxation(parsed, db, max_candidates=200)
+            if parsed.time_condition:
+                candidate_ids = await _filter_by_time(candidate_ids, parsed.time_condition, db)
+            return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
+
+        if search_mode == "rag_only":
+            vector_results = await _search_by_chromadb(parsed, [], n_results, request)
+            if vector_results:
+                return await _fetch_and_score(vector_results, parsed, db, n_results)
+            return []
+
+        # combined (기존 로직)
+        if _should_prioritize_outing(parsed):
+            logger.info("[PlaceService] broad outing query detected, apply outing-first ranking")
 
         candidate_ids, parsed = await _filter_with_relaxation(parsed, db, max_candidates=200)
 
@@ -1175,6 +1272,13 @@ async def search_places_from_db(
             logger.info("[PlaceService] subjective empty, use RDB fallback first")
             return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
 
+        if (
+            parsed.objective.get("is_indoor") is not None
+            or parsed.objective.get("is_outdoor") is not None
+        ):
+            logger.info("[PlaceService] indoor/outdoor condition detected, skip ChromaDB re-ranking")
+            return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
+
         vector_results = await _search_by_chromadb(
             parsed, candidate_ids, n_results, request
         )
@@ -1182,6 +1286,8 @@ async def search_places_from_db(
         if vector_results:
             places = await _fetch_and_score(vector_results, parsed, db, n_results)
             if places:
+                if parsed.time_condition:
+                    places = _sort_by_time_certainty(places, parsed.time_condition)
                 return places[:n_results]
 
         if _has_fee_preferences(parsed):

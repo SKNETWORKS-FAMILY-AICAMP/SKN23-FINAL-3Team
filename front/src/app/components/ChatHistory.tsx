@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, MessageSquare, Clock } from 'lucide-react'
 import { getMe } from '../services/userService'
-import { getChatRooms, getMessages, type ChatRoom, type ChatMessage } from '../services/chatService'
-import { searchPlaces, type PlaceResult } from '../services/placeService'
+import { getChatRooms, getMessages, getPlaceByName, type ChatRoom, type ChatMessage } from '../services/chatService'
+import { type PlaceResult } from '../services/placeService'
 
 interface Props {
   onBack: () => void
@@ -107,20 +107,35 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
       .finally(() => setMsgLoading(false))
   }
 
-  const handlePlaceClick = async ({ name, address, contentId }: { name: string; address: string; contentId?: string }) => {
+  const handlePlaceClick = async ({ name }: { name: string; address: string; contentId?: string }) => {
     if (!onShowPlaces) return
     setLoadingPlace(name)
     try {
-      const results = await searchPlaces({ query: name })
-      // content_id로 정확히 매칭 → 이름으로 매칭 → 폴백
-      const match =
-        (contentId ? results.find((r) => r.content_id === contentId) : null) ??
-        results.find((r) => r.name === name) ??
-        null
-      const selected = match ?? ({ name, address, content_id: contentId } as PlaceResult)
-      onShowPlaces(results.length > 0 ? results : [selected], selected)
+      const facility = await getPlaceByName(name)
+      const place: PlaceResult = {
+        name: facility.name,
+        address: facility.address,
+        category: facility.category,
+        sub_category: facility.sub_category,
+        content_id: facility.content_id,
+        lat: facility.lat,
+        lng: facility.lng,
+        tel: facility.tel,
+        conditions: facility.conditions,
+        pet_zone: '',
+        pet_size: '',
+        has_parking: facility.has_parking,
+        operation: facility.operation,
+        indoor: facility.indoor,
+        outdoor: facility.outdoor,
+        description: facility.description,
+        firstimage: '',
+        similarity: facility.match_confidence,
+        final_score: facility.match_confidence,
+      }
+      onShowPlaces([place], place)
     } catch {
-      onShowPlaces([{ name, address } as PlaceResult], { name, address } as PlaceResult)
+      alert('해당 시설을 찾을 수 없습니다.')
     } finally {
       setLoadingPlace(null)
     }

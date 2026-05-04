@@ -70,6 +70,8 @@ class DispatchContext:
     db: AsyncSession | None = None
     room_id: int | None = None
     pet_id: int | None = None
+    user_lat: float | None = None
+    user_lng: float | None = None
 
 
 @dataclass
@@ -520,7 +522,7 @@ async def _handle_places(
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request)
+        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request, user_lat=ctx.user_lat, user_lng=ctx.user_lng)
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []

@@ -186,6 +186,8 @@ async def create_message_with_response(
         db=db,
         room_id=room_id,
         pet_id=data.pet_id,
+        user_lat=data.user_lat,
+        user_lng=data.user_lng,
     )
     dispatch_result = await chat_response_service.dispatch(
         intent_result,

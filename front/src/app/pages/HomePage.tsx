@@ -317,10 +317,10 @@ function DiaryAlbum({
                   className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
                 />
               ) : (
-                <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">{selected.title}</h3>
+                <h3 className="mt-2 text-2xl font-bold text-[#F4845F] font-diary">{selected.title}</h3>
               )}
               {selected.summary && (
-                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F] font-diary">
                   ✨ {selected.summary}
                 </div>
               )}
@@ -354,7 +354,7 @@ function DiaryAlbum({
                 className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
                 style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
               >
-                <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+                <p className="whitespace-pre-wrap text-[17px] leading-[31px] text-[#3D2B1F] font-diary">
                   {selected.body || '내용이 없어요.'}
                 </p>
               </div>
@@ -625,6 +625,50 @@ export default function HomePage({
   const [editSaving, setEditSaving] = useState(false);
   const [showPlacePanel, setShowPlacePanel] = useState(false);
   const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // 홈 진입 시 GPS 자동 요청 + watchPosition으로 지속 추적
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    let watchId: number;
+
+    const startWatch = () => {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          localStorage.setItem('gps_permission', 'granted');
+        },
+        () => {
+          localStorage.removeItem('gps_permission');
+        },
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    };
+
+    // 이전에 허용한 적 있으면 바로 시작, 없으면 권한 요청 후 시작
+    if (localStorage.getItem('gps_permission') === 'granted') {
+      startWatch();
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          localStorage.setItem('gps_permission', 'granted');
+          startWatch();
+        },
+        () => {
+          localStorage.removeItem('gps_permission');
+        },
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    }
+
+    return () => {
+      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -988,12 +1032,12 @@ export default function HomePage({
               className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
             />
           ) : (
-            <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
+            <h3 className="mt-2 text-2xl font-bold text-[#F4845F] font-diary">
               {diaryResult.diary.title}
             </h3>
           )}
           {diaryResult.diary.summary && (
-            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F] font-diary">
               ✨ {diaryResult.diary.summary}
             </div>
           )}
@@ -1033,7 +1077,7 @@ export default function HomePage({
             className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
             style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
           >
-            <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+            <p className="whitespace-pre-wrap text-[17px] leading-[31px] text-[#3D2B1F] font-diary">
               {diaryResult.diary.content}
             </p>
           </div>
@@ -1090,6 +1134,7 @@ export default function HomePage({
                   places={mapPlaces}
                   onUsePlace={handleUsePlace}
                   initialSelectedId={historySelectedId ?? undefined}
+                  userLocation={userLocation ?? undefined}
                 />
               )}
             </div>
@@ -1106,11 +1151,8 @@ export default function HomePage({
                 style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-full"
-                    style={{ background: '#FFE8D6' }}
-                  >
-                    <span className="text-2xl">🐾</span>
+                  <div className="flex h-11 w-11 items-center justify-center">
+                    <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-11 w-11 object-contain" />
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -1170,6 +1212,7 @@ export default function HomePage({
                       diaryTrigger={diaryTrigger}
                       diaryPlace={autoPlace?.name}
                       initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
+                      userLocation={userLocation ?? undefined}
                     />
                   </div>
                 )}
