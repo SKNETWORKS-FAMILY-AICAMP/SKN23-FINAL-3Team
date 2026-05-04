@@ -1130,6 +1130,23 @@ async def search_facility_by_name(
     )
     return FacilitySearchResult(facility=payload)
 
+async def lookup_facility_by_content_id(
+    content_id: str,
+    db: AsyncSession,
+) -> dict | None:
+    """content_id로 단일 시설정보 조회. 없으면 None."""
+    if not content_id:
+        return None
+    stmt = select(PlaceModel).where(PlaceModel.content_id == content_id).limit(1)
+    place = (await db.execute(stmt)).scalar_one_or_none()
+    if place is None:
+        return None
+    payload = _to_dict(place)
+    payload["match_source"] = "content_id"
+    payload["match_confidence"] = 1.0
+    return payload
+
+
 async def lookup_facility_by_name(
     name: str,
     db: AsyncSession,
@@ -1165,6 +1182,7 @@ async def lookup_facility_by_name(
     seoul_filter = PlaceModel.address.like(f"%{SEOUL}%")
     base_order = (func.length(PlaceModel.name).asc(), PlaceModel.id.asc())
 
+    # 1순위: 서울 + 정확 매칭
     exact_stmt = (
         select(PlaceModel)
         .where(and_(PlaceModel.name == cleaned, seoul_filter))
@@ -1173,6 +1191,7 @@ async def lookup_facility_by_name(
     )
     place = (await db.execute(exact_stmt)).scalar_one_or_none()
 
+    # 2순위: 서울 + LIKE
     if place is None:
         like_stmt = (
             select(PlaceModel)
@@ -1181,6 +1200,50 @@ async def lookup_facility_by_name(
             .limit(1)
         )
         place = (await db.execute(like_stmt)).scalar_one_or_none()
+
+    # 3순위: 전국 + 정확 매칭 (서울 주소 형식 미일치 커버)
+    if place is None:
+        exact_stmt_all = (
+            select(PlaceModel)
+            .where(PlaceModel.name == cleaned)
+            .order_by(*base_order)
+            .limit(1)
+        )
+        place = (await db.execute(exact_stmt_all)).scalar_one_or_none()
+
+    # 4순위: 전국 + LIKE
+    if place is None:
+        like_stmt_all = (
+            select(PlaceModel)
+            .where(PlaceModel.name.like(f"%{cleaned}%"))
+            .order_by(*base_order)
+            .limit(1)
+        )
+        place = (await db.execute(like_stmt_all)).scalar_one_or_none()
+
+    # 5순위: 토큰 분리 검색 (공백 제거 후 LIKE, 또는 각 토큰 AND 검색)
+    if place is None:
+        tokens = [t for t in cleaned.split() if len(t) > 1]
+        if len(tokens) >= 2:
+            # 모든 토큰이 name에 포함되는 행 검색
+            token_conditions = [PlaceModel.name.like(f"%{t}%") for t in tokens]
+            token_stmt = (
+                select(PlaceModel)
+                .where(and_(*token_conditions))
+                .order_by(*base_order)
+                .limit(1)
+            )
+            place = (await db.execute(token_stmt)).scalar_one_or_none()
+        if place is None and tokens:
+            # 공백 제거 버전으로 검색 (DB명에 공백이 없는 경우 커버)
+            nospace = cleaned.replace(" ", "")
+            nospace_stmt = (
+                select(PlaceModel)
+                .where(PlaceModel.name.like(f"%{nospace}%"))
+                .order_by(*base_order)
+                .limit(1)
+            )
+            place = (await db.execute(nospace_stmt)).scalar_one_or_none()
 
     if place is None:
         return None

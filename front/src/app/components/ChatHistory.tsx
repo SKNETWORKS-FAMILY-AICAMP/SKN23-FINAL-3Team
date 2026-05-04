@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, MessageSquare, Clock } from 'lucide-react'
 import { getMe } from '../services/userService'
-import { getChatRooms, getMessages, getPlaceByName, type ChatRoom, type ChatMessage } from '../services/chatService'
+import { getChatRooms, getMessages, getPlaceByName, getPlaceByContentId, type ChatRoom, type ChatMessage } from '../services/chatService'
 import { type PlaceResult } from '../services/placeService'
 
 interface Props {
@@ -24,7 +24,7 @@ function extractPlaceEntries(content: string): { name: string; address: string; 
       const name = nameMatch[1].trim()
       let address = ''
       let contentId: string | undefined
-      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      for (let j = i + 1; j < Math.min(i + 12, lines.length); j++) {
         if (!address) {
           const addrMatch = lines[j].match(/[-–]\s*주소:\s*(.+)/)
           if (addrMatch) address = addrMatch[1].trim()
@@ -42,6 +42,7 @@ function extractPlaceEntries(content: string): { name: string; address: string; 
 function renderHistoryPlaceMessage(
   content: string,
   loadingName: string | null,
+  notFoundName: string | null,
   onPlaceClick: (entry: { name: string; address: string; contentId?: string }) => void,
 ) {
   const entries = extractPlaceEntries(content)
@@ -60,6 +61,7 @@ function renderHistoryPlaceMessage(
           const found = entries.find((e) => e.name === name)
           if (found) {
             const isLoading = loadingName === name
+            const isNotFound = notFoundName === name
             return (
               <p key={i}>
                 {num}.{' '}
@@ -70,6 +72,9 @@ function renderHistoryPlaceMessage(
                 >
                   {isLoading ? '불러오는 중...' : name}
                 </button>
+                {isNotFound && (
+                  <span className="ml-2 text-xs text-[#B08B7A]">정보를 찾을 수 없어요</span>
+                )}
               </p>
             )
           }
@@ -87,6 +92,7 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
   const [loading, setLoading] = useState(true)
   const [msgLoading, setMsgLoading] = useState(false)
   const [loadingPlace, setLoadingPlace] = useState<string | null>(null)
+  const [notFoundPlace, setNotFoundPlace] = useState<string | null>(null)
 
   useEffect(() => {
     getMe()
@@ -107,11 +113,11 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
       .finally(() => setMsgLoading(false))
   }
 
-  const handlePlaceClick = async ({ name }: { name: string; address: string; contentId?: string }) => {
+  const handlePlaceClick = async ({ name, contentId }: { name: string; address: string; contentId?: string }) => {
     if (!onShowPlaces) return
     setLoadingPlace(name)
     try {
-      const facility = await getPlaceByName(name)
+      const facility = contentId ? await getPlaceByContentId(contentId) : await getPlaceByName(name)
       const place: PlaceResult = {
         name: facility.name,
         address: facility.address,
@@ -135,7 +141,8 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
       }
       onShowPlaces([place], place)
     } catch {
-      alert('해당 시설을 찾을 수 없습니다.')
+      setNotFoundPlace(name)
+      setTimeout(() => setNotFoundPlace(null), 3000)
     } finally {
       setLoadingPlace(null)
     }
@@ -179,7 +186,7 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
                 }`}
               >
                 {msg.role === 'assistant' && isPlaceMessage(msg.content)
-                  ? renderHistoryPlaceMessage(msg.content, loadingPlace, handlePlaceClick)
+                  ? renderHistoryPlaceMessage(msg.content, loadingPlace, notFoundPlace, handlePlaceClick)
                   : msg.content}
               </div>
             ))

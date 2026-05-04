@@ -10,7 +10,7 @@ from schemas.place import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.place_image_service import enrich_place_images
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from services.place_service import (lookup_facility_by_name, search_places_from_db)
+from services.place_service import (lookup_facility_by_content_id, lookup_facility_by_name, search_places_from_db)
 from services import favorite_place_service as fav_svc
 from services.chat_response_service import (DispatchContext, _load_place_preference_context, _rerank_places_with_profile, generate_place_reasons)
 
@@ -116,6 +116,22 @@ async def list_favorite_places(
     return PlaceFavoriteResponse(
         items=[PlaceFavoriteItem(**item) for item in items],
     )
+
+
+@router.get(
+    "/{content_id}",
+    response_model=FacilityCard,
+    summary="시설정보 단건 조회 (content_id)",
+    description="한국관광공사 콘텐츠 ID로 단일 시설의 상세 정보를 반환한다.",
+)
+async def get_facility_by_content_id(
+    content_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> FacilityCard:
+    facility = await lookup_facility_by_content_id(content_id, db)
+    if facility is None:
+        raise HTTPException(status_code=404, detail="해당 시설을 찾을 수 없습니다.")
+    return FacilityCard.model_validate(facility)
 
 
 @router.patch(

@@ -108,6 +108,11 @@ export function getPlaceByName(name: string): Promise<FacilityCard> {
   return api.get(`/places/by-name?name=${encodeURIComponent(name)}`)
 }
 
+/** GET /places/{content_id} */
+export function getPlaceByContentId(contentId: string): Promise<FacilityCard> {
+  return api.get(`/places/${encodeURIComponent(contentId)}`)
+}
+
 /** GET /chat-rooms/{roomId}/messages */
 export function getMessages(roomId: number): Promise<ChatMessage[]> {
   return api.get(`/chat-rooms/${roomId}/messages`)

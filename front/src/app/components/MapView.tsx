@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, Navigation, Phone, LocateFixed } from 'lucide-react';
+import { MapPin, Navigation, Phone, LocateFixed, Star } from 'lucide-react';
 import type { PlaceResult } from '../services/placeService';
+import { togglePlaceFavorite, getPlaceFavorites } from '../services/placeService';
 
 declare global {
   interface Window {
@@ -21,6 +22,44 @@ const DEFAULT_CENTER = { lat: 37.5665, lng: 126.9780 };
 export default function MapView({ places, onUsePlace, initialSelectedId, userLocation }: Props) {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(initialSelectedId ?? null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    getPlaceFavorites()
+      .then((items) => setFavoriteIds(new Set(items.map((i) => i.content_id))))
+      .catch(() => {});
+  }, []);
+
+  const handleToggleFavorite = async (contentId: string) => {
+    console.log('[Star] clicked, content_id:', contentId);
+    if (!contentId) {
+      alert('content_id가 없습니다: ' + String(contentId));
+      return;
+    }
+    if (togglingIds.has(contentId)) return;
+    setTogglingIds((prev) => new Set(prev).add(contentId));
+    const wasFavorite = favoriteIds.has(contentId);
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      wasFavorite ? next.delete(contentId) : next.add(contentId);
+      return next;
+    });
+    try {
+      await togglePlaceFavorite(contentId);
+    } catch (err) {
+      alert('즐겨찾기 오류: ' + String(err));
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        wasFavorite ? next.add(contentId) : next.delete(contentId);
+        return next;
+      });
+    } finally {
+      setTogglingIds((prev) => { const next = new Set(prev); next.delete(contentId); return next; });
+    }
+  };
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -344,7 +383,7 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
                           {item.indoor === 'Y' && <span>실내</span>}
                           {item.outdoor === 'Y' && <span>실외</span>}
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => (isActive ? handleCloseDetail() : handleSelectPlace(itemId))}
@@ -362,6 +401,18 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
                             className="text-sm font-semibold text-orange-600 hover:text-orange-700"
                           >
                             이 장소로 일기 쓰기 →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFavorite(item.content_id)}
+                            disabled={togglingIds.has(item.content_id)}
+                            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4845F] transition hover:bg-[#e8764f] active:scale-95 disabled:opacity-50"
+                          >
+                            <Star
+                              className="h-5 w-5"
+                              fill={favoriteIds.has(item.content_id) ? 'white' : 'none'}
+                              stroke="white"
+                            />
                           </button>
                         </div>
                       </div>
@@ -389,7 +440,21 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
               )}
 
               <div className="border-b border-[#F5EAE1] p-5">
-                <div className="text-2xl font-bold text-[#2F241D]">{selectedPlace.name}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-2xl font-bold text-[#2F241D]">{selectedPlace.name}</div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFavorite(selectedPlace.content_id)}
+                    disabled={togglingIds.has(selectedPlace.content_id)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F4845F] transition hover:bg-[#e8764f] active:scale-95 disabled:opacity-50"
+                  >
+                    <Star
+                      className="h-5 w-5"
+                      fill={favoriteIds.has(selectedPlace.content_id) ? 'white' : 'none'}
+                      stroke="white"
+                    />
+                  </button>
+                </div>
                 <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
                   <MapPin className="h-4 w-4" />
                   <span>{selectedPlace.address}</span>

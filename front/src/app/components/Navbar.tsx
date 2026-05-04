@@ -15,6 +15,7 @@ import {
   BookOpen,
   Images,
   LogIn,
+  Star,
 } from "lucide-react";
 import { getMe } from "../services/userService";
 import { getPets } from "../services/petService";
@@ -126,6 +127,7 @@ export function Navbar() {
       subItems: [
         { label: "앨범", path: "/home?tab=diary&album=true", icon: Images, requiresAuth: true },
         { label: "캘린더", path: "/calendar", icon: Calendar, requiresAuth: true },
+        { label: "장소 즐겨찾기", path: "/place-favorites", icon: Star, requiresAuth: true },
       ],
     },
     { icon: User, label: "마이페이지", path: "/mypage", requiresAuth: true },

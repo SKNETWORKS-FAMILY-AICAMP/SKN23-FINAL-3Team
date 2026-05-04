@@ -472,8 +472,8 @@ function DiaryAlbum({
                     >
                       <Star
                         className="h-4 w-4"
-                        fill={favorites.has(entry.id) ? '#F4845F' : 'none'}
-                        stroke={favorites.has(entry.id) ? '#F4845F' : 'white'}
+                        fill={favorites.has(entry.id) ? 'white' : 'none'}
+                        stroke="white"
                       />
                     </button>
                     {/* 삭제 버튼 (우상단, hover 시 표시) */}
