@@ -3,7 +3,7 @@ import type { Pet } from '../types'
 import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, saveMessage, type FacilityCard } from '../services/chatService'
+import { createChatRoom, saveMessageDirect, type FacilityCard } from '../services/chatService'
 import type { PlaceResult } from '../services/placeService'
 
 // ── 메시지 타입 ──────────────────────────────────────
@@ -409,11 +409,9 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
           chatRoomIdRef.current = room.id
         }
         const roomId = chatRoomIdRef.current!
-        // 백엔드가 role='user'만 허용하므로 유저 메시지만 저장
         for (const msg of state.messages.slice(lastSavedCountRef.current)) {
-          if (msg.role === 'user') {
-            await saveMessage(roomId, 'user', msg.content)
-          }
+          const role = msg.role === 'user' ? 'user' : 'assistant'
+          await saveMessageDirect(roomId, role, msg.content)
           lastSavedCountRef.current++
         }
       } catch (e) {

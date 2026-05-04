@@ -402,6 +402,7 @@ class DiaryRequest(BaseModel):
     birth_date: str | None = None
     personalities: list[str] = []
     owner_name: str = ""
+    owner_gender: str = ""
     main_answers: list[str]
     additional_answers: list[str] = []
     diary_type: str
@@ -443,6 +444,7 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
         birth_date=req.birth_date,
         personalities=req.personalities,
         owner_name=req.owner_name,
+        owner_gender=req.owner_gender,
         diary_type=req.diary_type,
         emotion=req.emotion_emoji,
         conversation_summary=conversation_summary,
