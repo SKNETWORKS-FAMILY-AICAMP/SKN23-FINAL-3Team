@@ -41,6 +41,15 @@ class Diary {
   final DateTime updatedAt;
 
   factory Diary.fromJson(Map<String, dynamic> json) {
+    // 배포 백엔드 (2026-05-04 기준 stale) 가 5/2 신규 필드 (`diary_date`,
+    // `is_favorite`) 를 아직 미포함 → 누락 시 `created_at` 의 날짜 부분으로
+    // 폴백, `is_favorite` 는 false 로 폴백. 백엔드 재배포 후 자연 동작.
+    final createdAtStr = json['created_at'] as String?;
+    final updatedAtStr = json['updated_at'] as String?;
+    final diaryDateStr = json['diary_date'] as String?;
+    final fallbackDate = createdAtStr != null
+        ? DateTime.parse(createdAtStr)
+        : DateTime.now();
     return Diary(
       id: json['id'] as int,
       userId: json['user_id'] as int,
@@ -56,10 +65,12 @@ class Diary {
       content: json['content'] as String?,
       summary: json['summary'] as String?,
       emotion: json['emotion'] as String?,
-      diaryDate: DateTime.parse(json['diary_date'] as String),
+      diaryDate:
+          diaryDateStr != null ? DateTime.parse(diaryDateStr) : fallbackDate,
       isFavorite: json['is_favorite'] as bool? ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: fallbackDate,
+      updatedAt:
+          updatedAtStr != null ? DateTime.parse(updatedAtStr) : fallbackDate,
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/place.dart';
@@ -55,9 +56,17 @@ final favoriteContentIdsProvider =
 
 /// MyPage 즐겨찾기 장소 그리드용 — 풀 페이로드 (`PlaceFavoriteItem` 리스트).
 /// `favoriteContentIdsProvider` 와 별개 — 후자는 ❤️ 토글 시 빠른 set lookup 용.
+///
+/// 배포 백엔드 (2026-05-04 기준 stale) 가 `/api/places/favorites` 미포함 → 404
+/// 시 빈 리스트로 폴백 (UI 그레이스풀 표시). 백엔드 재배포 후 자연 동작.
 final favoritePlacesProvider =
     FutureProvider.autoDispose<List<PlaceFavoriteItem>>((ref) async {
   final auth = ref.watch(authProvider);
   if (auth is! AuthAuthenticated) return const [];
-  return ref.read(placeApiProvider).listFavorites();
+  try {
+    return await ref.read(placeApiProvider).listFavorites();
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 404) return const [];
+    rethrow;
+  }
 });

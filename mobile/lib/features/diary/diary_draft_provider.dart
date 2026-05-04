@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/models/diary.dart';
@@ -9,6 +10,20 @@ import 'diary_ai_api.dart';
 import 'diary_draft_state.dart';
 import 'diary_providers.dart';
 import 'diary_types.dart';
+
+/// DioException → 사람이 읽을 수 있는 에러 메시지. 백엔드 HTTPException detail
+/// 우선, 없으면 dio 에러 type + message.
+String _formatDioError(Object err, String prefix) {
+  if (err is DioException) {
+    final detail = err.response?.data is Map
+        ? (err.response!.data as Map)['detail']?.toString()
+        : null;
+    final code = err.response?.statusCode;
+    if (detail != null) return '$prefix ($code): $detail';
+    return '$prefix: ${err.type.name} ${err.message ?? ''}';
+  }
+  return '$prefix: $err';
+}
 
 final diaryAiApiProvider = Provider<DiaryAiApi>((ref) {
   return DiaryAiApi(ref.watch(apiClientProvider));
@@ -101,7 +116,7 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
     } catch (e) {
       state = state.copyWith(
         phase: DiaryDraftPhase.mainQuestions,
-        error: '생성 실패: $e',
+        error: _formatDioError(e, '생성 실패'),
       );
     }
   }
@@ -124,7 +139,7 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
     } catch (e) {
       state = state.copyWith(
         phase: DiaryDraftPhase.result,
-        error: '이미지 생성 실패: $e',
+        error: _formatDioError(e, '이미지 생성 실패'),
       );
     }
   }
@@ -177,7 +192,7 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
     } catch (e) {
       state = state.copyWith(
         phase: DiaryDraftPhase.result,
-        error: '저장 실패: $e',
+        error: _formatDioError(e, '저장 실패'),
       );
       return false;
     }
