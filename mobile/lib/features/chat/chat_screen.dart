@@ -8,8 +8,9 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/place.dart';
 import '../auth/auth_providers.dart';
+import '../home/home_tab_index.dart';
+import '../places/map_focus_provider.dart';
 import '../places/widgets/facility_modal_sheet.dart';
-import '../places/widgets/place_card_tile.dart';
 import 'chat_history_drawer.dart';
 import 'chat_providers.dart';
 import 'chat_state.dart';
@@ -67,6 +68,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  /// 채팅 닫기 — 홈 탭으로 복귀.
+  void _closeChat() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.home);
+    }
+  }
+
+  /// 지도 탭으로 빠져나가기 (Bug #2 — 채팅 → 지도 연결).
+  void _openMapTab() {
+    ref.read(homeTabIndexProvider.notifier).state = 2;
+    _closeChat();
+  }
+
+  /// 챗봇 응답 카드의 장소 이름 탭 → 지도 탭으로 이동 + 해당 장소 focus + 모달
+  /// (Bug #6 — 웹 동작 1:1 매핑).
+  void _focusPlaceOnMap(PlaceCard place) {
+    ref.read(mapFocusProvider.notifier).requestFocus(place);
+    ref.read(homeTabIndexProvider.notifier).state = 2;
+    _closeChat();
+  }
+
+  /// 다이어리 작성으로 빠져나가기 (Bug #3 — 채팅 → 다이어리 연결).
+  void _openDiaryDraft() {
+    context.push(AppRoutes.diaryDraft);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatProvider);
@@ -77,19 +106,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         backgroundColor: Colors.white,
         foregroundColor: AppColors.darkBrown,
         elevation: 0,
+        // 사용자 요청 (Bug #6 정정, 2026-05-04 저녁):
+        //  - leading = 햄버거 (drawer 진입 — 새 채팅·채팅방 목록 권위)
+        //  - actions = X 닫기 (홈 복귀)
+        //  - 우측 새채팅 IconButton 은 제거 (drawer 안 "+ 새 채팅" 으로 충분)
         leading: Builder(
           builder: (ctx) => IconButton(
-            tooltip: '채팅방 목록',
+            tooltip: '메뉴',
             icon: const Icon(LucideIcons.menu),
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
         actions: [
           IconButton(
-            tooltip: '새 채팅',
-            icon: const Icon(LucideIcons.plus),
-            onPressed: () =>
-                ref.read(chatProvider.notifier).resetForNewRoom(),
+            tooltip: '닫기',
+            icon: const Icon(LucideIcons.x),
+            onPressed: _closeChat,
           ),
         ],
       ),
@@ -105,10 +137,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemBuilder: (_, i) => _BubbleView(
                       bubble: state.messages[i],
                       onTapButton: _send,
+                      onOpenMap: _openMapTab,
+                      onOpenDiary: _openDiaryDraft,
+                      onPlaceTapToMap: _focusPlaceOnMap,
                     ),
                   ),
           ),
           if (state.isSending) const LinearProgressIndicator(minHeight: 2),
+          _QuickNavBar(
+            onMapTap: _openMapTab,
+            onDiaryTap: _openDiaryDraft,
+          ),
           _Composer(
             controller: _inputCtrl,
             onSubmit: () => _send(),
@@ -157,10 +196,19 @@ class _Welcome extends StatelessWidget {
 }
 
 class _BubbleView extends StatelessWidget {
-  const _BubbleView({required this.bubble, required this.onTapButton});
+  const _BubbleView({
+    required this.bubble,
+    required this.onTapButton,
+    required this.onOpenMap,
+    required this.onOpenDiary,
+    required this.onPlaceTapToMap,
+  });
 
   final ChatBubble bubble;
   final ValueChanged<String> onTapButton;
+  final VoidCallback onOpenMap;
+  final VoidCallback onOpenDiary;
+  final ValueChanged<PlaceCard> onPlaceTapToMap;
 
   @override
   Widget build(BuildContext context) {
@@ -195,13 +243,13 @@ class _BubbleView extends StatelessWidget {
                           ),
                         ],
                 ),
-                child: Text(
-                  bubble.text,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isUser ? Colors.white : AppColors.darkBrown,
-                    height: 1.5,
-                  ),
+                child: _BubbleText(
+                  text: bubble.text,
+                  isUser: isUser,
+                  // Bug #9 — places 첨부된 assistant 응답은 본문 안 "1. <장소명> 📍"
+                  // 패턴 line 을 클릭 가능한 링크로 렌더 (web ChatBot.tsx 1:1).
+                  places: !isUser ? bubble.places : null,
+                  onPlaceTap: onPlaceTapToMap,
                 ),
               ),
             if (bubble.buttons.isNotEmpty)
@@ -219,11 +267,6 @@ class _BubbleView extends StatelessWidget {
                       ),
                   ],
                 ),
-              ),
-            if (bubble.places != null && bubble.places!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: _PlaceList(places: bubble.places!),
               ),
             if (bubble.facility != null)
               Padding(
@@ -271,19 +314,165 @@ class _InlineButton extends StatelessWidget {
   }
 }
 
-class _PlaceList extends StatelessWidget {
-  const _PlaceList({required this.places});
+/// Bug #9 (web ChatBot.tsx 1:1) — assistant 응답 본문 텍스트 렌더.
+///
+/// `places` 가 있으면 본문 line 중 "숫자. 장소명 📍" 패턴을 검출 → 그 부분을
+/// 오렌지 underlined InkWell 로 감싸서 탭 → `onPlaceTap(place)` (지도 라우팅).
+/// `**bold**` 마크다운 처리 + `_요약_:` / 이미지 markdown line 필터 (React 1:1).
+/// `_id:`·`_score:` 등 백엔드 내부 메타가 본문에 섞여 들어와도 가시화 차단 (Bug #8).
+class _BubbleText extends StatelessWidget {
+  const _BubbleText({
+    required this.text,
+    required this.isUser,
+    this.places,
+    required this.onPlaceTap,
+  });
 
-  final List<PlaceCard> places;
+  final String text;
+  final bool isUser;
+  final List<PlaceCard>? places;
+  final ValueChanged<PlaceCard> onPlaceTap;
+
+  // 본문에서 숨겨야 할 line — 백엔드가 디버그·메타 정보를 흘려보낼 가능성 차단.
+  // React 의 `renderBotText` 도 `_요약_:` 와 image markdown 을 제거.
+  // 백엔드 chat_response_service `_format_place_list_response` 가 `- _id: <hex>`
+  // 를 명시적으로 emit (line 308-309) — `-`/공백 prefix 도 매칭 (Bug #8 정정).
+  static final _hideLinePatterns = <RegExp>[
+    RegExp(r'^_요약_:'),
+    RegExp(r'^[-\s]*_id\s*[:=]', caseSensitive: false),
+    RegExp(r'^[-\s]*_?score\s*[:=]', caseSensitive: false),
+    RegExp(r'^[-\s]*content_id\s*[:=]', caseSensitive: false),
+    RegExp(r'^[-\s]*session_id\s*[:=]', caseSensitive: false),
+    RegExp(r'^[-\s]*image_prompt', caseSensitive: false),
+  ];
+
+  // 이미지 markdown (`![alt](url)`) — Image.network 으로 렌더 (Bug #7 정정,
+  // 백엔드 `_finalize_diary_and_save` 가 그림일기 완성 시 image_url 을 markdown 으로 emit)
+  static final _imageMarkdownRegex = RegExp(r'^!\[(.*?)\]\((https?:\/\/[^\)]+)\)');
+
+  // "1. 장소명" / "1) 장소명" / "1. **장소명**" / 끝에 📍 옵션 (Bug #9 정정 —
+  // 운영 백엔드 `_format_place_list_response` 가 📍 emoji 미사용)
+  static final _placeLineRegex =
+      RegExp(r'^(\d+)[.)]\s*(?:\*\*)?(.+?)(?:\*\*)?\s*(?:📍\s*)?$');
 
   @override
   Widget build(BuildContext context) {
+    final color = isUser ? Colors.white : AppColors.darkBrown;
+    final placeMap = <String, PlaceCard>{
+      for (final p in places ?? const <PlaceCard>[]) p.name: p,
+    };
+
+    final lines = text
+        .split('\n')
+        .where((l) => !_hideLinePatterns.any((re) => re.hasMatch(l.trim())))
+        .toList();
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final p in places) PlaceCardTile(place: p),
+        for (var i = 0; i < lines.length; i++)
+          _renderLine(context, lines[i], color, placeMap, isLast: i == lines.length - 1),
       ],
     );
+  }
+
+  Widget _renderLine(
+    BuildContext context,
+    String line,
+    Color color,
+    Map<String, PlaceCard> placeMap, {
+    required bool isLast,
+  }) {
+    final padding = EdgeInsets.only(bottom: isLast ? 0 : 4);
+
+    // 이미지 markdown — `![alt](url)` 을 Image.network 으로 렌더 (Bug #7 정정).
+    final imgMatch = _imageMarkdownRegex.firstMatch(line.trim());
+    if (imgMatch != null) {
+      final url = imgMatch.group(2)!;
+      return Padding(
+        padding: padding,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.network(
+            url,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        ),
+      );
+    }
+
+    final placeMatch = _placeLineRegex.firstMatch(line);
+    if (placeMatch != null && placeMap.isNotEmpty) {
+      final num = placeMatch.group(1)!;
+      final name = placeMatch.group(2)!.trim();
+      final place = placeMap[name] ?? _bestMatch(name, placeMap);
+      if (place != null) {
+        return Padding(
+          padding: padding,
+          child: InkWell(
+            onTap: () => onPlaceTap(place),
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.brandOrange,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.brandOrange,
+                  height: 1.5,
+                ),
+                children: [
+                  TextSpan(text: '$num. $name 📍'),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    // 일반 line — `**bold**` 처리
+    return Padding(
+      padding: padding,
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(fontSize: 14, color: color, height: 1.5),
+          children: _boldSpans(line, color),
+        ),
+      ),
+    );
+  }
+
+  /// 부분 문자열 일치로 PlaceCard 찾기 — bullet 패턴 변형 대응.
+  PlaceCard? _bestMatch(String name, Map<String, PlaceCard> placeMap) {
+    for (final entry in placeMap.entries) {
+      if (entry.key.contains(name) || name.contains(entry.key)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  List<TextSpan> _boldSpans(String line, Color color) {
+    final spans = <TextSpan>[];
+    final pattern = RegExp(r'\*\*(.+?)\*\*');
+    int last = 0;
+    for (final m in pattern.allMatches(line)) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: line.substring(last, m.start)));
+      }
+      spans.add(TextSpan(
+        text: m.group(1),
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ));
+      last = m.end;
+    }
+    if (last < line.length) {
+      spans.add(TextSpan(text: line.substring(last)));
+    }
+    if (spans.isEmpty) return [TextSpan(text: line, style: TextStyle(color: color))];
+    return spans;
   }
 }
 
@@ -349,6 +538,50 @@ class _FacilityCardSummary extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 채팅 → 지도/다이어리 빠른 이동 바 (Composer 위에 상시 표시).
+/// 사용자 결정 2026-05-04: 채팅에서 다른 화면으로 이어지는 경로 항시 노출.
+class _QuickNavBar extends StatelessWidget {
+  const _QuickNavBar({required this.onMapTap, required this.onDiaryTap});
+
+  final VoidCallback onMapTap;
+  final VoidCallback onDiaryTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.beige)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton.icon(
+              onPressed: onMapTap,
+              icon: const Icon(LucideIcons.mapPin, size: 16),
+              label: const Text('지도'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.subBrown2,
+              ),
+            ),
+          ),
+          Expanded(
+            child: TextButton.icon(
+              onPressed: onDiaryTap,
+              icon: const Icon(LucideIcons.bookOpen, size: 16),
+              label: const Text('다이어리'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.subBrown2,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
