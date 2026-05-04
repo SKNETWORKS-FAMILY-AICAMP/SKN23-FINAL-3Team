@@ -26,4 +26,18 @@ class PetApi {
         .map(Pet.fromJson)
         .toList();
   }
+
+  /// `PATCH /api/pets/{pet_id}` — 본인 반려견 정보 수정
+  Future<Pet> update(int petId, PetUpdate data) async {
+    final response = await _client.raw.patch<Map<String, dynamic>>(
+      '/pets/$petId',
+      data: data.toJson(),
+    );
+    return Pet.fromJson(response.data!);
+  }
+
+  /// `DELETE /api/pets/{pet_id}` — Soft Delete (본인만)
+  Future<void> delete(int petId) async {
+    await _client.raw.delete('/pets/$petId');
+  }
 }

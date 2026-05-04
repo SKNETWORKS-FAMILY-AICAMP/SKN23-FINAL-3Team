@@ -79,6 +79,37 @@ class PetCreate {
       };
 }
 
+/// `PATCH /api/pets/{id}` 요청 페이로드 (`PetUpdate`).
+class PetUpdate {
+  const PetUpdate({
+    this.breedId,
+    this.name,
+    this.birthDate,
+    this.gender,
+    this.isNeutered,
+    this.typeId,
+    this.selectedTags,
+  });
+
+  final int? breedId;
+  final String? name;
+  final DateTime? birthDate;
+  final PetGender? gender;
+  final bool? isNeutered;
+  final int? typeId;
+  final List<dynamic>? selectedTags;
+
+  Map<String, dynamic> toJson() => {
+        if (breedId != null) 'breed_id': breedId,
+        if (name != null) 'name': name,
+        if (birthDate != null) 'birth_date': _formatDate(birthDate!),
+        if (gender != null) 'gender': gender!.wire,
+        if (isNeutered != null) 'is_neutered': isNeutered,
+        if (typeId != null) 'type_id': typeId,
+        if (selectedTags != null) 'selected_tags': selectedTags,
+      };
+}
+
 DateTime? _parseDate(Object? value) {
   if (value == null) return null;
   return DateTime.parse(value as String);

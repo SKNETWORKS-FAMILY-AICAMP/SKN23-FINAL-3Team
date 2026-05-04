@@ -15,7 +15,9 @@ import '../diary/widgets/diary_card_tile.dart';
 import '../onboarding/onboarding_providers.dart';
 import '../places/place_providers.dart';
 import '../places/widgets/facility_modal_sheet.dart';
+import 'widgets/pet_edit_modal.dart';
 import 'widgets/primary_pet_change_modal.dart';
+import 'widgets/user_edit_modal.dart';
 
 /// 마이페이지 탭 — 4 섹션 (사용자 결정 2026-05-03):
 /// 1. 대표 반려견 / 2. 반려견 목록 / 3. 즐겨찾기 장소 / 4. 즐겨찾기 다이어리
@@ -130,6 +132,18 @@ class _UserCard extends StatelessWidget {
   final User user;
   final Future<void> Function() onLogout;
 
+  void _openEditModal(BuildContext context) {
+    showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => UserEditModal(user: user),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -188,6 +202,11 @@ class _UserCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: '내 정보 수정',
+              icon: const Icon(LucideIcons.pencil, size: 18),
+              onPressed: () => _openEditModal(context),
             ),
             IconButton(
               tooltip: '로그아웃',
@@ -391,6 +410,18 @@ class _Chip extends StatelessWidget {
 class _PetListSection extends ConsumerWidget {
   const _PetListSection();
 
+  void _openEditModal(BuildContext context, Pet pet) {
+    showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => PetEditModal(pet: pet),
+    );
+  }
+
   Future<void> _confirmDelete(
     BuildContext context,
     WidgetRef ref,
@@ -418,11 +449,11 @@ class _PetListSection extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      // PetApi.delete 가 미구현 — 현재 구조엔 PATCH/DELETE 메서드만 listByUser·create.
-      // Step 4 1차 진척 = 메뉴 골격 박힘. 실제 API 호출은 PetApi 확장 후 (별도 작업).
-      Fluttertoast.showToast(
-        msg: '반려견 삭제 API 는 PetApi 확장 후 활성 (다음 작업)',
-      );
+      await ref.read(petApiProvider).delete(pet.id);
+      ref.invalidate(userPetsProvider);
+      // 대표 반려견 자동 승계는 백엔드 처리 — refreshUser 로 nested 동기화
+      await ref.read(authProvider.notifier).refreshUser();
+      Fluttertoast.showToast(msg: '"${pet.name}" 삭제됐어요');
     } catch (e) {
       Fluttertoast.showToast(msg: '삭제 실패: $e');
     }
@@ -475,6 +506,7 @@ class _PetListSection extends ConsumerWidget {
                   itemCount: list.length,
                   itemBuilder: (_, i) => _PetGridCard(
                     pet: list[i],
+                    onEdit: () => _openEditModal(context, list[i]),
                     onDelete: () => _confirmDelete(context, ref, list[i]),
                   ),
                 );
@@ -499,14 +531,22 @@ class _PetListSection extends ConsumerWidget {
 }
 
 class _PetGridCard extends StatelessWidget {
-  const _PetGridCard({required this.pet, required this.onDelete});
+  const _PetGridCard({
+    required this.pet,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final Pet pet;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: AppColors.beige),
@@ -544,9 +584,11 @@ class _PetGridCard extends StatelessWidget {
                   iconSize: 16,
                   padding: EdgeInsets.zero,
                   onSelected: (v) {
+                    if (v == 'edit') onEdit();
                     if (v == 'delete') onDelete();
                   },
                   itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('수정')),
                     PopupMenuItem(value: 'delete', child: Text('삭제')),
                   ],
                 ),
@@ -562,6 +604,7 @@ class _PetGridCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
