@@ -43,6 +43,31 @@ flutter analyze
 flutter test
 ```
 
+### PowerShell — 로그 파일 동시 저장
+
+`flutter run` 출력을 콘솔과 파일에 동시 기록 (디버깅·AI 검토용). `mobile/scripts/run.ps1` 래퍼 사용:
+
+```powershell
+# 기본 (debug, 자동 device)
+./scripts/run.ps1
+
+# 추가 인자 그대로 forward
+./scripts/run.ps1 --release
+./scripts/run.ps1 -d emulator-5554
+./scripts/run.ps1 --profile -v
+```
+
+산출물: `mobile/logs/flutter-run-YYYYMMDD-HHmmss.log` (UTF-8). `.gitignore` 의 `*.log` 매칭 → 커밋 차단. 매 실행 새 파일 — 누적 로그 보존, 세션별 분리.
+
+수동 one-liner 대안 (스크립트 없이, UTF-8 강제):
+
+```powershell
+flutter run --dart-define-from-file=../.env 2>&1 |
+    ForEach-Object { Write-Host $_; Add-Content -Path logs/flutter.log -Value $_ -Encoding utf8 }
+```
+
+> Windows PowerShell 5.1 의 `Tee-Object` 는 `-Encoding` 옵션 미지원이라 default UTF-16 LE 로 저장 → 외부 도구(AI/grep)가 못 읽음. 위 ForEach 패턴이 UTF-8 안전.
+
 ### VS Code 디버거
 
 `.vscode/launch.json` (저장소 root) 에 등록된 두 구성:
