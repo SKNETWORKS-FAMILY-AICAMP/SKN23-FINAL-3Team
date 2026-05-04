@@ -169,7 +169,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* 왼쪽: 로고 */}
           <Link to="/home" className="flex items-center select-none cursor-pointer hover:opacity-75 transition-opacity">
-            <img src="/logo.svg" alt="withDOG" className="h-16 w-auto" />
+            <img src="/logo2.svg" alt="withDOG" className="h-12 w-auto" />
           </Link>
 
           {/* 오른쪽: 메뉴 + 프로필/로그인 */}
