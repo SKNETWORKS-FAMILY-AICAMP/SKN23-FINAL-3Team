@@ -42,7 +42,11 @@ class HomeScreen extends ConsumerWidget {
         backgroundColor: AppColors.brandOrange,
         foregroundColor: Colors.white,
         tooltip: 'AI 멍봇',
-        child: const Icon(LucideIcons.messageCircle),
+        child: Image.asset(
+          'assets/chatbot_logo.png',
+          width: 40,
+          height: 40,
+        ),
       ),
     );
   }

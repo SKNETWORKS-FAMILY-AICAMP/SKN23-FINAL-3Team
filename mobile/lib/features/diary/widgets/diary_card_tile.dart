@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -111,7 +112,8 @@ class DiaryCardTile extends ConsumerWidget {
                 children: [
                   Text(
                     diary.title ?? '오늘의 일기',
-                    style: const TextStyle(
+                    // React commit 033a2db 정합성 — 다이어리 영역은 손글씨 폰트 (Gaegu).
+                    style: GoogleFonts.gaegu(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: AppColors.darkBrown,

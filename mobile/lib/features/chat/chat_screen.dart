@@ -213,66 +213,91 @@ class _BubbleView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = bubble.isUser;
+    // React commit 033a2db 정합성 — bot 메시지 좌측에 chatbot_logo prefix.
+    // Row(items-end) 패턴: prefix 32×32 + 8px gap + bubble Column.
+    // user 메시지는 prefix 없음. maxWidth 는 prefix 공간 고려 80% (assistant) /
+    // 88% (user). 기존 88% 유지하면 prefix 추가 시 우측 잘림 가능.
+    final bubbleMaxWidth =
+        MediaQuery.of(context).size.width * (isUser ? 0.88 : 0.80);
+    final bubbleColumn = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
+      child: Column(
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (bubble.text.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                color: isUser ? AppColors.brandOrange : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: isUser
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+              ),
+              child: _BubbleText(
+                text: bubble.text,
+                isUser: isUser,
+                // Bug #9 — places 첨부된 assistant 응답은 본문 안 "1. <장소명> 📍"
+                // 패턴 line 을 클릭 가능한 링크로 렌더 (web ChatBot.tsx 1:1).
+                places: !isUser ? bubble.places : null,
+                onPlaceTap: onPlaceTapToMap,
+              ),
+            ),
+          if (bubble.buttons.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var i = 0; i < bubble.buttons.length; i++)
+                    _InlineButton(
+                      label: bubble.buttons[i],
+                      primary: i == 0,
+                      onTap: () => onTapButton(bubble.buttons[i]),
+                    ),
+                ],
+              ),
+            ),
+          if (bubble.facility != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _FacilityCardSummary(facility: bubble.facility!),
+            ),
+        ],
+      ),
+    );
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.88,
-        ),
         margin: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment:
-              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (bubble.text.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: isUser ? AppColors.brandOrange : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: isUser
-                      ? null
-                      : [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                ),
-                child: _BubbleText(
-                  text: bubble.text,
-                  isUser: isUser,
-                  // Bug #9 — places 첨부된 assistant 응답은 본문 안 "1. <장소명> 📍"
-                  // 패턴 line 을 클릭 가능한 링크로 렌더 (web ChatBot.tsx 1:1).
-                  places: !isUser ? bubble.places : null,
-                  onPlaceTap: onPlaceTapToMap,
-                ),
-              ),
-            if (bubble.buttons.isNotEmpty)
+            if (!isUser) ...[
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (var i = 0; i < bubble.buttons.length; i++)
-                      _InlineButton(
-                        label: bubble.buttons[i],
-                        primary: i == 0,
-                        onTap: () => onTapButton(bubble.buttons[i]),
-                      ),
-                  ],
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Image.asset(
+                  'assets/chatbot_logo.png',
+                  width: 32,
+                  height: 32,
                 ),
               ),
-            if (bubble.facility != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: _FacilityCardSummary(facility: bubble.facility!),
-              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(child: bubbleColumn),
           ],
         ),
       ),

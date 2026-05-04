@@ -196,33 +196,14 @@ class _LogoHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFB923C), Color(0xFFEA580C)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                LucideIcons.dog,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'withDOG',
-              style: TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF111827),
-              ),
-            ),
-          ],
+        // React commit 033a2db 정합성 — Lucide Dog + 그라디언트 박스 + "Dangda"/
+        // "withDOG" 임시 텍스트 모두 제거 → logo.png 직접 표시.
+        // SVG 사용 시 fill 미명시로 검정 fallback (R1 회귀 #1, 2026-05-04 밤4) →
+        // PNG 로 전환. front/ 의 SVG 는 React currentColor 흐름이라 그대로 유지.
+        Image.asset(
+          'assets/logo.png',
+          height: 144,
+          semanticLabel: '위드독',
         ),
         const SizedBox(height: 16),
         Text(

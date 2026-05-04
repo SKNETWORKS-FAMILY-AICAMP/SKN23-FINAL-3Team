@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -100,7 +101,8 @@ class _Body extends ConsumerWidget {
               Expanded(
                 child: Text(
                   diary.title ?? '오늘의 일기',
-                  style: const TextStyle(
+                  // React commit 033a2db 정합성 — 다이어리 영역은 손글씨 폰트 (Gaegu).
+                  style: GoogleFonts.gaegu(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: AppColors.darkBrown,
@@ -164,7 +166,7 @@ class _Body extends ConsumerWidget {
                     ),
                     child: Text(
                       diary.summary!,
-                      style: const TextStyle(
+                      style: GoogleFonts.gaegu(
                         fontSize: 12,
                         color: AppColors.brandOrange,
                       ),
@@ -174,8 +176,8 @@ class _Body extends ConsumerWidget {
                   const SizedBox(height: 16),
                   Text(
                     diary.content!,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: GoogleFonts.gaegu(
+                      fontSize: 16,
                       color: AppColors.darkBrown,
                       height: 1.7,
                     ),
