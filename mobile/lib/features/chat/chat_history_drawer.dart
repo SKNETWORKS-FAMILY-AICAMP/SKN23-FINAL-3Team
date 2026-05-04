@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../core/api/dio_error_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/chat.dart';
 import 'chat_providers.dart';
@@ -72,7 +73,7 @@ class _DrawerHeader extends StatelessWidget {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFFFF7ED), Color(0xFFFFEDD5)],
+          colors: [AppColors.gradientPeachStart, AppColors.gradientPeachEnd],
         ),
       ),
       child: const Row(
@@ -98,12 +99,27 @@ class _EmptyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(20),
-      child: Text(
-        '아직 채팅 기록이 없어요.\n새 채팅을 시작해보세요.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.mutedForeground),
+    // R3 Empty placeholder — chatbot_logo (chat 영역 우선순위 1).
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Opacity(
+            opacity: 0.4,
+            child: Image.asset(
+              'assets/chatbot_logo.png',
+              width: 64,
+              height: 64,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '아직 채팅 기록이 없어요.\n새 채팅을 시작해보세요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.mutedForeground),
+          ),
+        ],
       ),
     );
   }
@@ -195,7 +211,7 @@ class _RoomTile extends ConsumerWidget {
     try {
       await ref.read(chatProvider.notifier).renameRoom(room.id, newTitle);
     } catch (e) {
-      Fluttertoast.showToast(msg: '이름 변경 실패: $e');
+      Fluttertoast.showToast(msg: formatDioError(e, '이름 변경 실패'));
     }
   }
 
@@ -222,7 +238,7 @@ class _RoomTile extends ConsumerWidget {
     try {
       await ref.read(chatProvider.notifier).deleteRoom(room.id);
     } catch (e) {
-      Fluttertoast.showToast(msg: '삭제 실패: $e');
+      Fluttertoast.showToast(msg: formatDioError(e, '삭제 실패'));
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -327,13 +328,31 @@ class _ListView extends ConsumerWidget {
     return list.when(
       data: (diaries) {
         if (diaries.isEmpty) {
-          return const Center(
+          // R3 Empty — 다이어리 영역은 Gaegu 톤 + chatbot_logo (챗봇 흐름 안내).
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                '아직 작성된 일기가 없어요.\n챗봇이나 장소 카드에서 시작해보세요.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.mutedForeground),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Opacity(
+                    opacity: 0.4,
+                    child: Image.asset(
+                      'assets/chatbot_logo.png',
+                      width: 80,
+                      height: 80,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '아직 작성된 일기가 없어요.\n챗봇이나 장소 카드에서 시작해보세요.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.gaegu(
+                      fontSize: 16,
+                      color: AppColors.mutedForeground,
+                    ),
+                  ),
+                ],
               ),
             ),
           );

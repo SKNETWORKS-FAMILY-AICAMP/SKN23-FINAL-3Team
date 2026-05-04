@@ -99,6 +99,8 @@ class FacilityCard {
     this.outdoor = '',
     this.conditions = '',
     this.description = '',
+    this.firstimage = '',
+    this.image = '',
     this.entranceFeeAmount,
     this.entranceFeeType = 'unknown',
     this.extraFeeAmount,
@@ -121,12 +123,23 @@ class FacilityCard {
   final String outdoor;
   final String conditions;
   final String description;
+  /// 백엔드 by-name 응답이 image 필드를 추가할 시 자동 picking (R3 #56, 2026-05-05).
+  /// 현재 운영 응답엔 부재 — 빈 문자열 fallback. 향후 백엔드 확장 시 mobile 변경 X.
+  final String firstimage;
+  final String image;
   final int? entranceFeeAmount;
   final String entranceFeeType;
   final int? extraFeeAmount;
   final String extraFeeType;
   final String matchSource;
   final double matchConfidence;
+
+  /// PlaceCard.imageUrl 와 동일한 우선순위 — image > firstimage > null.
+  String? get imageUrl {
+    if (image.isNotEmpty) return image;
+    if (firstimage.isNotEmpty) return firstimage;
+    return null;
+  }
 
   factory FacilityCard.fromJson(Map<String, dynamic> json) {
     return FacilityCard(
@@ -144,6 +157,8 @@ class FacilityCard {
       outdoor: json['outdoor'] as String? ?? '',
       conditions: json['conditions'] as String? ?? '',
       description: json['description'] as String? ?? '',
+      firstimage: json['firstimage'] as String? ?? '',
+      image: json['image'] as String? ?? '',
       entranceFeeAmount: json['entrance_fee_amount'] as int?,
       entranceFeeType: json['entrance_fee_type'] as String? ?? 'unknown',
       extraFeeAmount: json['extra_fee_amount'] as int?,

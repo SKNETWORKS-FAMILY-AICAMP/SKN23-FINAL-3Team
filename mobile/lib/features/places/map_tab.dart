@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../core/api/dio_error_format.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/place.dart';
@@ -87,11 +88,12 @@ class _MapTabState extends ConsumerState<MapTab> {
       });
       _mapKey.currentState?.setMarkers(results);
     } catch (e) {
+      final msg = formatDioError(e, '검색 실패');
       setState(() {
         _searching = false;
-        _searchError = '$e';
+        _searchError = msg;
       });
-      Fluttertoast.showToast(msg: '검색 실패: $e');
+      Fluttertoast.showToast(msg: msg);
     }
   }
 
@@ -319,13 +321,25 @@ class _ResultList extends StatelessWidget {
       );
     }
     if (results.isEmpty) {
-      return const Center(
+      // R3 Empty — 브랜드 logo placeholder + 안내 텍스트.
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            '검색어를 입력하면 반려견 동반 가능 장소를 추천해드려요.\n예: "성수 카페", "한강공원"',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.mutedForeground, height: 1.5),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Opacity(
+                opacity: 0.35,
+                child: Image.asset('assets/logo.png', height: 64),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '검색어를 입력하면 반려견 동반 가능 장소를 추천해드려요.\n예: "성수 카페", "한강공원"',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(color: AppColors.mutedForeground, height: 1.5),
+              ),
+            ],
           ),
         ),
       );

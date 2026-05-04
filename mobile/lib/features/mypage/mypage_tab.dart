@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../core/api/dio_error_format.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/pet.dart';
@@ -455,7 +457,7 @@ class _PetListSection extends ConsumerWidget {
       await ref.read(authProvider.notifier).refreshUser();
       Fluttertoast.showToast(msg: '"${pet.name}" 삭제됐어요');
     } catch (e) {
-      Fluttertoast.showToast(msg: '삭제 실패: $e');
+      Fluttertoast.showToast(msg: formatDioError(e, '삭제 실패'));
     }
   }
 
@@ -614,7 +616,25 @@ class _PetGridCard extends StatelessWidget {
 class _FavoritePlacesSection extends ConsumerWidget {
   const _FavoritePlacesSection();
 
-  void _openFacility(BuildContext context, PlaceFavoriteItem item) {
+  /// R3 #56 (R1 회귀 #2) — `/api/places/favorites` 응답이 경량 페이로드라
+  /// image_url 부재 → caller 가 by-name 으로 image 보강 후 modal prop 전달.
+  /// 현재 운영 백엔드 by-name 응답에도 image 필드가 없을 가능성이 있어 silent
+  /// fallback (모달 placeholder 그대로). 백엔드 응답에 firstimage / image 키
+  /// 가 추가되면 자동 picking — `FacilityCard.imageUrl` getter 정합.
+  Future<void> _openFacility(
+    BuildContext context,
+    WidgetRef ref,
+    PlaceFavoriteItem item,
+  ) async {
+    String? imageUrl;
+    try {
+      final facility = await ref.read(placeApiProvider).byName(item.name);
+      imageUrl = facility.imageUrl;
+    } catch (_) {
+      // 호출 실패 = 모달 placeholder. modal 자체가 by-name 다시 호출하므로
+      // 본문(주소·운영시간 등)은 정상 표시.
+    }
+    if (!context.mounted) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -622,7 +642,7 @@ class _FavoritePlacesSection extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => FacilityModalSheet(name: item.name),
+      builder: (_) => FacilityModalSheet(name: item.name, imageUrl: imageUrl),
     );
   }
 
@@ -642,11 +662,25 @@ class _FavoritePlacesSection extends ConsumerWidget {
             favorites.when(
               data: (list) {
                 if (list.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      '아직 즐겨찾기한 장소가 없어요.\n장소 카드의 ❤️ 토글로 추가해보세요.',
-                      style: TextStyle(color: AppColors.mutedForeground),
+                  // R3 Empty placeholder — logo (브랜드 영역).
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      children: [
+                        Opacity(
+                          opacity: 0.35,
+                          child: Image.asset(
+                            'assets/logo.png',
+                            height: 56,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '아직 즐겨찾기한 장소가 없어요.\n장소 카드의 ❤️ 토글로 추가해보세요.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.mutedForeground),
+                        ),
+                      ],
                     ),
                   );
                 }
@@ -655,7 +689,7 @@ class _FavoritePlacesSection extends ConsumerWidget {
                     for (final item in list)
                       _FavoritePlaceTile(
                         item: item,
-                        onTap: () => _openFacility(context, item),
+                        onTap: () => _openFacility(context, ref, item),
                       ),
                   ],
                 );
@@ -752,11 +786,16 @@ class _FavoriteDiariesSection extends ConsumerWidget {
               data: (list) {
                 final favs = list.where((d) => d.isFavorite).toList();
                 if (favs.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
+                  // R3 Empty — 다이어리 영역은 Gaegu 톤 일관 (R1 효과 보존).
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
                       '즐겨찾기한 일기가 없어요.\n캘린더·목록의 ⭐ 토글로 추가해보세요.',
-                      style: TextStyle(color: AppColors.mutedForeground),
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.gaegu(
+                        fontSize: 14,
+                        color: AppColors.mutedForeground,
+                      ),
                     ),
                   );
                 }
