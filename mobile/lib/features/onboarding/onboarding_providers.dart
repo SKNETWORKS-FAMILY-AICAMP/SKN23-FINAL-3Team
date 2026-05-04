@@ -35,6 +35,11 @@ final popularBreedsProvider = FutureProvider<List<Breed>>((ref) async {
   return ref.read(breedApiProvider).list(top10: true);
 });
 
+/// 전체 견종 (`/breeds`) — Pet edit modal 의 breed 변경 dropdown 용.
+final allBreedsProvider = FutureProvider<List<Breed>>((ref) async {
+  return ref.read(breedApiProvider).list();
+});
+
 /// 보호자 라이프스타일 (`/keywords?category=USER`) — max 5
 final userKeywordsProvider = FutureProvider<List<Keyword>>((ref) async {
   return ref.read(keywordApiProvider).list(KeywordCategory.user);
@@ -50,4 +55,14 @@ final userPetsProvider = FutureProvider.autoDispose<List<Pet>>((ref) async {
   final auth = ref.watch(authProvider);
   if (auth is! AuthAuthenticated) return const [];
   return ref.read(petApiProvider).listByUser(auth.user.id);
+});
+
+/// 다이어리 이미지 URL — `GET /api/images/{id}` 응답의 `file_url`.
+/// `family<imageId>` 캐시 — 같은 image 가 목록·상세에서 중복 fetch 안 되도록.
+/// keepAlive 미설정 (autoDispose) — 메모리 절약.
+final diaryImageUrlProvider =
+    FutureProvider.autoDispose.family<String?, int>((ref, imageId) async {
+  if (imageId <= 0) return null;
+  final meta = await ref.read(imageApiProvider).get(imageId);
+  return meta.fileUrl.isEmpty ? null : meta.fileUrl;
 });

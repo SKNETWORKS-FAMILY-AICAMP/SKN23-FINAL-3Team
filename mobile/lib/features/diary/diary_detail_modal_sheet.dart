@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/diary.dart';
+import '../onboarding/onboarding_providers.dart';
 import 'diary_providers.dart';
 
 /// 다이어리 상세 모달 시트 — 캘린더 셀 / 목록 카드 클릭 진입 공용.
@@ -75,7 +76,7 @@ class _DiaryDetailModalSheetState
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({
     required this.diary,
     required this.scrollController,
@@ -89,7 +90,7 @@ class _Body extends StatelessWidget {
   final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
         Padding(
@@ -130,6 +131,12 @@ class _Body extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Bug #1 — imageId 있으면 상단 그림 이미지. autoDispose family
+                // 캐시 (`diaryImageUrlProvider`) 라 grid 와 detail 간 중복 fetch X.
+                if (diary.imageId != null)
+                  _DetailImage(imageId: diary.imageId!),
+                if (diary.imageId != null)
+                  const SizedBox(height: 16),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -184,6 +191,41 @@ class _Body extends StatelessWidget {
 
   String _formatDate(DateTime d) =>
       '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
+}
+
+class _DetailImage extends ConsumerWidget {
+  const _DetailImage({required this.imageId});
+
+  final int imageId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final urlAsync = ref.watch(diaryImageUrlProvider(imageId));
+    return urlAsync.when(
+      data: (url) {
+        if (url == null || url.isEmpty) return const SizedBox.shrink();
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.network(
+            url,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+        );
+      },
+      loading: () => Container(
+        height: 200,
+        decoration: BoxDecoration(
+          color: AppColors.peach,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.center,
+        child: const CircularProgressIndicator(),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+    );
+  }
 }
 
 class _Tag extends StatelessWidget {

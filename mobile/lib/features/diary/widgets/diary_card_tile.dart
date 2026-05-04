@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -5,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/diary.dart';
+import '../../onboarding/onboarding_providers.dart';
 import '../diary_detail_modal_sheet.dart';
 import '../diary_list_provider.dart';
 import '../diary_providers.dart';
@@ -24,6 +26,18 @@ class DiaryCardTile extends ConsumerWidget {
       await ref.read(diaryApiProvider).toggleFavorite(diary.id);
       ref.invalidate(diaryListProvider);
       ref.invalidate(favoriteCalendarProvider);
+    } on DioException catch (e) {
+      // 백엔드 detail (HTTPException 메시지) 가 있으면 우선 노출 — Toast 만으론
+      // 원인 추적 어려워 device-side 진단 도와주는 패턴.
+      final detail = e.response?.data is Map
+          ? (e.response!.data as Map)['detail']?.toString()
+          : null;
+      final code = e.response?.statusCode;
+      Fluttertoast.showToast(
+        msg: detail != null
+            ? '즐겨찾기 토글 실패 ($code): $detail'
+            : '즐겨찾기 토글 실패: ${e.type.name} ${e.message ?? ''}',
+      );
     } catch (e) {
       Fluttertoast.showToast(msg: '즐겨찾기 토글 실패: $e');
     }
@@ -58,17 +72,17 @@ class DiaryCardTile extends ConsumerWidget {
             Expanded(
               child: Stack(
                 children: [
-                  Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: AppColors.peach,
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(12)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      diary.emotion ?? '🐾',
-                      style: const TextStyle(fontSize: 36),
+                  // Bug #2 — imageId 있으면 그림 이미지 우선, 없으면 감정 emoji.
+                  // diaryImageUrlProvider 가 family 캐시 — 같은 image 가 grid 에서
+                  // 중복 fetch 안 됨.
+                  ClipRRect(
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(12)),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: diary.imageId != null
+                          ? _DiaryImage(imageId: diary.imageId!, fallbackEmoji: diary.emotion)
+                          : _EmotionPlaceholder(emoji: diary.emotion ?? '🐾'),
                     ),
                   ),
                   Positioned(
@@ -124,4 +138,56 @@ class DiaryCardTile extends ConsumerWidget {
 
   static String _formatDate(DateTime d) =>
       '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
+}
+
+/// imageId 로 S3 file_url 받아 Image.network. URL fetch 실패 / 이미지 로드 실패
+/// 시 감정 emoji placeholder 로 graceful degrade.
+class _DiaryImage extends ConsumerWidget {
+  const _DiaryImage({required this.imageId, this.fallbackEmoji});
+
+  final int imageId;
+  final String? fallbackEmoji;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final urlAsync = ref.watch(diaryImageUrlProvider(imageId));
+    return urlAsync.when(
+      data: (url) {
+        if (url == null || url.isEmpty) {
+          return _EmotionPlaceholder(emoji: fallbackEmoji ?? '🐾');
+        }
+        return Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) =>
+              _EmotionPlaceholder(emoji: fallbackEmoji ?? '🐾'),
+        );
+      },
+      loading: () => Container(
+        color: AppColors.peach,
+        alignment: Alignment.center,
+        child: const SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (_, _) => _EmotionPlaceholder(emoji: fallbackEmoji ?? '🐾'),
+    );
+  }
+}
+
+class _EmotionPlaceholder extends StatelessWidget {
+  const _EmotionPlaceholder({required this.emoji});
+
+  final String emoji;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.peach,
+      alignment: Alignment.center,
+      child: Text(emoji, style: const TextStyle(fontSize: 36)),
+    );
+  }
 }

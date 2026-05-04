@@ -44,6 +44,18 @@ class _DiaryTabState extends ConsumerState<DiaryTab> {
   DateTime? _selectedDay;
 
   @override
+  void initState() {
+    super.initState();
+    // Bug #7 — 다이어리 탭 진입할 때마다 목록·캘린더 invalidate.
+    // 일기 생성 후 곧장 들어와도 최신 데이터를 보장 (autoDispose 라 새로 fetch).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.invalidate(diaryListProvider);
+      ref.invalidate(favoriteCalendarProvider);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     if (auth is! AuthAuthenticated) {
@@ -202,6 +214,21 @@ class _CalendarView extends ConsumerWidget {
                   shape: BoxShape.circle,
                 ),
                 todayTextStyle: TextStyle(color: AppColors.brandOrange),
+              ),
+              // Bug #1 fix — default daysOfWeekHeight=16 이 디스플레이 한국 폰트
+              // descender(g/p) 잘림 발생. 32px + 명시 lineHeight 1.4 로 안전 마진.
+              daysOfWeekHeight: 32,
+              daysOfWeekStyle: const DaysOfWeekStyle(
+                weekdayStyle: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: AppColors.subBrown2,
+                ),
+                weekendStyle: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: AppColors.subBrown2,
+                ),
               ),
               headerStyle: const HeaderStyle(
                 formatButtonVisible: false,

@@ -38,4 +38,12 @@ class ImageApi {
     );
     return ImageUploadResponse.fromJson(response.data!);
   }
+
+  /// `GET /api/images/{image_id}` — 이미지 메타 (S3 file_url 포함).
+  Future<ImageUploadResponse> get(int imageId) async {
+    final response = await _client.raw.get<Map<String, dynamic>>(
+      '/images/$imageId',
+    );
+    return ImageUploadResponse.fromJson(response.data!);
+  }
 }
