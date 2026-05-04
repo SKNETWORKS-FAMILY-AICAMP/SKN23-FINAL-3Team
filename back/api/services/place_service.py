@@ -1130,23 +1130,6 @@ async def search_facility_by_name(
     )
     return FacilitySearchResult(facility=payload)
 
-async def lookup_facility_by_content_id(
-    content_id: str,
-    db: AsyncSession,
-) -> dict | None:
-    """content_id로 단일 시설정보 조회. 없으면 None."""
-    if not content_id:
-        return None
-    stmt = select(PlaceModel).where(PlaceModel.content_id == content_id).limit(1)
-    place = (await db.execute(stmt)).scalar_one_or_none()
-    if place is None:
-        return None
-    payload = _to_dict(place)
-    payload["match_source"] = "content_id"
-    payload["match_confidence"] = 1.0
-    return payload
-
-
 async def lookup_facility_by_name(
     name: str,
     db: AsyncSession,
