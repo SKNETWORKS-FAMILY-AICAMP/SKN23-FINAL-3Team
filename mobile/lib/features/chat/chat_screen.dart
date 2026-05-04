@@ -322,7 +322,7 @@ class _InlineButton extends StatelessWidget {
         ? FilledButton(
             onPressed: onTap,
             style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               backgroundColor: AppColors.brandOrange,
             ),
             child: Text(label),
@@ -330,7 +330,7 @@ class _InlineButton extends StatelessWidget {
         : OutlinedButton(
             onPressed: onTap,
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               side: const BorderSide(color: AppColors.beige),
               foregroundColor: AppColors.subBrown2,
             ),
@@ -579,7 +579,7 @@ class _QuickNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: AppColors.beige)),

@@ -94,7 +94,11 @@ class _IntroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFFFF7ED), Colors.white, Color(0xFFFFEDD5)],
+          colors: [
+            AppColors.gradientPeachStart,
+            Colors.white,
+            AppColors.gradientPeachEnd,
+          ],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.beige),
@@ -111,7 +115,7 @@ class _IntroCard extends StatelessWidget {
             child: const Text(
               'AI 맞춤 반려견 도우미',
               style: TextStyle(
-                color: Color(0xFFB86A2E),
+                color: AppColors.subBrown,
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
               ),

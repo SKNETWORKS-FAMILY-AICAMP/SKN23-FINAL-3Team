@@ -21,5 +21,10 @@ class AppColors {
   static const gradientStart = Color(0xFFF1F1F3);
   static const gradientEnd = Color(0xFFECEDEA);
 
+  // peach 톤 그라디언트 — 로그인·홈·드로어 헤더 공유 (Tailwind orange-50/100 1:1).
+  // R2 추출 (2026-05-04 밤6) — login_screen / home_tab / chat_history_drawer 의 inline hex 통합.
+  static const gradientPeachStart = Color(0xFFFFF7ED);
+  static const gradientPeachEnd = Color(0xFFFFEDD5);
+
   AppColors._();
 }

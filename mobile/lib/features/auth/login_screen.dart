@@ -107,9 +107,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Color(0xFFFFF7ED), // orange-50
+                AppColors.gradientPeachStart, // orange-50
                 Colors.white,
-                Color(0xFFFFEDD5), // orange-100
+                AppColors.gradientPeachEnd, // orange-100
               ],
             ),
           ),
@@ -210,7 +210,7 @@ class _LogoHeader extends StatelessWidget {
           busy ? '로그인 중...' : '로그인',
           style: const TextStyle(
             fontSize: 18,
-            color: Color(0xFF111827),
+            color: AppColors.darkBrown,
           ),
         ),
       ],
