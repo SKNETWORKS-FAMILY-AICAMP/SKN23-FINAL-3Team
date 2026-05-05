@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from api_client import search_places_eval as search_places
+from api_client import parse_query_eval, search_places_eval as search_places
 from load_evalset import load_evalset
 from metrics import calc_hit_at_k, calc_recall_at_k
 from save_results import save_ablation_results
@@ -85,6 +85,13 @@ def run(
         len(retrieval_items), len(MODES), K_VALUES,
     )
 
+    # 모든 질문을 LLM으로 한 번만 파싱해서 캐싱 (모드 루프에서 재사용)
+    logger.info("쿼리 사전 파싱 시작: %d건", len(retrieval_items))
+    parsed_cache: dict[str, dict | None] = {}
+    for item in tqdm(retrieval_items, desc="pre-parse ", unit="건"):
+        parsed_cache[item["query_id"]] = parse_query_eval(item["question"])
+    logger.info("쿼리 사전 파싱 완료")
+
     all_records = []
 
     for mode in MODES:
@@ -95,7 +102,13 @@ def run(
 
             try:
                 # MAX_K개를 한 번만 조회하고 k별 메트릭은 슬라이싱으로 계산
-                top_results = search_places(item["question"], n_results=MAX_K, mode=mode)
+                # 사전 파싱된 결과를 전달해 서버에서 LLM 파싱 호출을 생략
+                top_results = search_places(
+                    item["question"],
+                    n_results=MAX_K,
+                    mode=mode,
+                    parsed=parsed_cache.get(item["query_id"]),
+                )
             except Exception as e:
                 logger.warning("  ERROR (%s) %s: %s", mode, item["query_id"], e)
                 error = str(e)

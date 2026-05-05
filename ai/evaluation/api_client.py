@@ -1,10 +1,31 @@
+import json
 import logging
 
 import requests
 
-from config import REQUEST_TIMEOUT, SEARCH_ENDPOINT
+from config import BASE_URL, REQUEST_TIMEOUT, SEARCH_ENDPOINT
 
 logger = logging.getLogger(__name__)
+
+
+def parse_query_eval(query: str) -> dict | None:
+    """GET /api/eval/parse 호출 — 쿼리 파싱 결과 반환 (ablation 사전 파싱용).
+
+    Returns:
+        파싱된 조건 dict. 오류 시 None.
+    """
+    parse_endpoint = f"{BASE_URL}/api/eval/parse"
+    try:
+        resp = requests.get(
+            parse_endpoint,
+            params={"query": query},
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.warning("parse_query_eval failed for query=%r: %s", query, e)
+        return None
 
 
 def search_places(query: str) -> list[str]:
@@ -26,22 +47,30 @@ def search_places(query: str) -> list[str]:
     return names
 
 
-def search_places_eval(query: str, n_results: int = 5, mode: str = "combined") -> list[str]:
+def search_places_eval(
+    query: str,
+    n_results: int = 5,
+    mode: str = "combined",
+    parsed: dict = None,
+) -> list[str]:
     """GET /api/eval/places/search 호출 — ablation 평가 전용.
 
     Args:
         query:     사용자 검색 쿼리
         n_results: 반환받을 최대 장소 수 (최대 20)
         mode:      검색 모드 — "combined" | "rdb_only" | "rag_only"
+        parsed:    사전 파싱된 쿼리 결과 dict (제공 시 서버에서 LLM 파싱 생략)
 
     Returns:
         장소 이름 리스트. 오류 시 예외를 그대로 전파.
     """
-    from config import BASE_URL
     eval_endpoint = f"{BASE_URL}/api/eval/places/search"
+    params: dict = {"query": query, "n": n_results, "mode": mode}
+    if parsed is not None:
+        params["parsed"] = json.dumps(parsed, ensure_ascii=False)
     resp = requests.get(
         eval_endpoint,
-        params={"query": query, "n": n_results, "mode": mode},
+        params=params,
         timeout=REQUEST_TIMEOUT,
     )
     resp.raise_for_status()
