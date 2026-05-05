@@ -179,7 +179,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -563,4 +563,5 @@ ai/eval_data/
 
 # 평가셋 엑셀 (용량 초과)
 data/eval/*.xlsx
-
+
+# ========== 개인 ==============

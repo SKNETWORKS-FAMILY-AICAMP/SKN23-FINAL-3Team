@@ -73,6 +73,8 @@ class FacilityCard(BaseModel):
     outdoor: str = Field("", description="실외 가능 (Y/N)")
     conditions: str = Field("", description="반려견 동반 시 제한사항 원문")
     description: str = Field("", description="장소 설명 텍스트")
+    firstimage: str = Field("", description="대표 이미지 URL")
+    image: str = Field("", description="보강된 이미지 URL")
     entrance_fee_amount: int | None = Field(None, description="입장료 (원). 미상이면 null")
     entrance_fee_type: str = Field("unknown", description="free/fixed/variable/conditional/unknown")
     extra_fee_amount: int | None = Field(None, description="강아지 추가요금 (원). 미상이면 null")

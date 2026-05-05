@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getDiariesByUser, getDiary, type DiaryRecord } from '../services/dbDiaryService';
+import { getDiary, getDiaryCalendar, type DiaryRecord } from '../services/dbDiaryService';
 import { getImage } from '../services/imageService';
-import { getMe } from '../services/userService';
 
 interface DayEmotion {
   date: string;   // 'YYYY-MM-DD'
@@ -53,24 +52,23 @@ export default function CalendarPage() {
       .finally(() => setDiaryLoading(false));
   };
 
-  // 로그인한 유저의 일기 목록을 불러와 날짜별 감정 이모지를 세팅
+  // 월이 바뀔 때마다 캘린더 API 재조회
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
-    getMe()
-      .then((me) => getDiariesByUser(me.id))
-      .then((diaries) => {
-        const mapped: DayEmotion[] = diaries
-          .filter((d) => d.emotion)
-          .map((d) => ({
-            date: d.created_at.substring(0, 10),  // 'YYYY-MM-DD'
-            emotion: d.emotion!,
-            diaryId: d.id,
-          }));
+    const y = currentDate.getFullYear();
+    const m = currentDate.getMonth() + 1; // API는 1-indexed
+    getDiaryCalendar(y, m)
+      .then((res) => {
+        const mapped: DayEmotion[] = res.items.map((item) => ({
+          date: item.date,
+          emotion: item.emotion,
+          diaryId: item.diary_id,
+        }));
         setEmotions(mapped);
       })
-      .catch(() => {/* 로그인 안 된 경우 등 무시 */});
-  }, []);
+      .catch(() => {});
+  }, [currentDate]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();

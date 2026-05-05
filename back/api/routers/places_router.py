@@ -93,7 +93,12 @@ async def get_facility_by_name(
             detail="해당 시설을 찾을 수 없습니다.",
         )
 
-    return FacilityCard.model_validate(facility)
+    # /search 라우터(line 53) 와 동일 패턴 — 응답 직전 외부 API 2단 fallback
+    # (TourAPI detailImage2 → Kakao 이미지 검색) 으로 image 키 보강. 단건이라
+    # [single] wrap 후 [0] 추출. enrich 가 timeout·예외를 빈 문자열 fallback
+    # 처리하므로 추가 try/except 불필요. 매칭 부재(404) 분기는 enrich 호출 전.
+    enriched = await enrich_place_images([facility])
+    return FacilityCard.model_validate(enriched[0])
 
 
 @router.get(

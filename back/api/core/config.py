@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # ── 소셜 로그인 (OAuth2) ────────────────────────────────────────────────
     GOOGLE_CLIENT_ID: str = Field(default="")
     GOOGLE_CLIENT_SECRET: str = Field(default="")
+    # Android InstalledApp client (PKCE 기반, client_secret 없음).
+    # 모바일 앱이 `flutter_appauth` 로 발급한 code 를 백엔드가 token 교환할 때 사용.
+    GOOGLE_ANDROID_CLIENT_ID: str = Field(default="")
     KAKAO_CLIENT_ID: str = Field(default="")
     KAKAO_CLIENT_SECRET: str = Field(default="")
     NAVER_CLIENT_ID: str = Field(default="")

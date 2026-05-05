@@ -15,6 +15,7 @@ import {
   BookOpen,
   Images,
   LogIn,
+  Star,
 } from "lucide-react";
 import { getMe } from "../services/userService";
 import { getPets } from "../services/petService";
@@ -126,6 +127,7 @@ export function Navbar() {
       subItems: [
         { label: "앨범", path: "/home?tab=diary&album=true", icon: Images, requiresAuth: true },
         { label: "캘린더", path: "/calendar", icon: Calendar, requiresAuth: true },
+        { label: "장소 즐겨찾기", path: "/place-favorites", icon: Star, requiresAuth: true },
       ],
     },
     { icon: User, label: "마이페이지", path: "/mypage", requiresAuth: true },
@@ -169,7 +171,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* 왼쪽: 로고 */}
           <Link to="/home" className="flex items-center select-none cursor-pointer hover:opacity-75 transition-opacity">
-            <img src="/logo.svg" alt="withDOG" className="h-16 w-auto" />
+            <img src="/logo2.svg" alt="withDOG" className="h-12 w-auto" />
           </Link>
 
           {/* 오른쪽: 메뉴 + 프로필/로그인 */}

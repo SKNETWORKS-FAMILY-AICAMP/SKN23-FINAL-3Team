@@ -42,6 +42,13 @@ async def social_login_endpoint(
     code: str = Query(..., description="OAuth authorization_code"),
     redirect_uri: str = Query(default="", description="OAuth 리디렉션 URI (kakao/google 필수)"),
     state: str = Query(default="", description="CSRF 검증용 state (naver 필수)"),
+    code_verifier: str | None = Query(
+        default=None,
+        description=(
+            "PKCE code_verifier — Google Android InstalledApp 흐름 만 사용. "
+            "redirect_uri 가 `com.googleusercontent.apps.` 로 시작하면 필수."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     result = await social_login(
@@ -50,5 +57,6 @@ async def social_login_endpoint(
         db=db,
         redirect_uri=redirect_uri,
         state=state,
+        code_verifier=code_verifier,
     )
     return TokenResponse(**result)

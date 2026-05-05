@@ -8,7 +8,7 @@ import ChatBot from '../components/ChatBot';
 import ChatHistory from '../components/ChatHistory';
 import type { GeneratedDiary } from '../services/diaryService';
 import type { PlaceResult } from '../services/placeService';
-import { createDiary, updateDiary, deleteDiary } from '../services/dbDiaryService';
+import { createDiary, updateDiary, deleteDiary, toggleFavorite as toggleFavoriteApi } from '../services/dbDiaryService';
 import { uploadImage } from '../services/imageService';
 import { getMe } from '../services/userService';
 import { getPets } from '../services/petService';
@@ -219,32 +219,60 @@ function DiaryAlbum({
   onBack,
   onDelete,
   onUpdate,
+  initialFavoriteIds,
 }: {
   diaries: DiaryEntry[];
   onBack: () => void;
   onDelete: (id: string) => void;
   onUpdate?: (id: string, title: string, body: string) => Promise<void>;
+  initialFavoriteIds?: Set<string>;
 }) {
   const [selected, setSelected] = useState<DiaryEntry | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('diary_favorites');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
 
-  const toggleFavorite = (e: React.MouseEvent, id: string) => {
+  useEffect(() => {
+    if (initialFavoriteIds) setFavorites(new Set(initialFavoriteIds));
+  }, [initialFavoriteIds]);
+
+  const handleToggleFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setFavorites(prev => {
+    const isFavoriting = !favorites.has(id);
+
+    // 같은 날 다른 일기가 즐겨찾기 중이면 자동 해제 안내
+    if (isFavoriting) {
+      const thisDiary = diaries.find((d) => d.id === id);
+      const sameDateFavorited = diaries.find(
+        (d) => d.id !== id && d.date === thisDiary?.date && favorites.has(d.id),
+      );
+      if (sameDateFavorited) {
+        setToast('다른 일기의 즐겨찾기가 해제되었습니다');
+        setTimeout(() => setToast(null), 3000);
+        setFavorites((prev) => { const next = new Set(prev); next.delete(sameDateFavorited.id); return next; });
+      }
+    }
+
+    // 낙관적 업데이트
+    setFavorites((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem('diary_favorites', JSON.stringify([...next]));
       return next;
     });
+
+    try {
+      await toggleFavoriteApi(Number(id));
+    } catch {
+      // 실패 시 되돌리기
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (isFavoriting) next.delete(id); else next.add(id);
+        return next;
+      });
+    }
   };
 
   const handleSaveAlbumEdit = async () => {
@@ -317,10 +345,10 @@ function DiaryAlbum({
                   className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
                 />
               ) : (
-                <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">{selected.title}</h3>
+                <h3 className="mt-2 text-2xl font-bold text-[#F4845F] font-diary">{selected.title}</h3>
               )}
               {selected.summary && (
-                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F] font-diary">
                   ✨ {selected.summary}
                 </div>
               )}
@@ -354,7 +382,7 @@ function DiaryAlbum({
                 className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
                 style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
               >
-                <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+                <p className="whitespace-pre-wrap text-[17px] leading-[31px] text-[#3D2B1F] font-diary">
                   {selected.body || '내용이 없어요.'}
                 </p>
               </div>
@@ -402,6 +430,11 @@ function DiaryAlbum({
 
   return (
     <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+      {toast && (
+        <div className="fixed top-4 left-1/2 z-50 -translate-x-1/2 rounded-full bg-[#3D2B1F] px-4 py-2 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      )}
       <div className="mx-auto w-full max-w-[720px]">
         <div className="mb-5 flex items-center gap-3">
           <button
@@ -434,13 +467,13 @@ function DiaryAlbum({
                   >
                     {/* 즐겨찾기 버튼 (좌상단) */}
                     <button
-                      onClick={(e) => toggleFavorite(e, entry.id)}
+                      onClick={(e) => handleToggleFavorite(e, entry.id)}
                       className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 transition hover:bg-black/50"
                     >
                       <Star
                         className="h-4 w-4"
-                        fill={favorites.has(entry.id) ? '#F4845F' : 'none'}
-                        stroke={favorites.has(entry.id) ? '#F4845F' : 'white'}
+                        fill={favorites.has(entry.id) ? 'white' : 'none'}
+                        stroke="white"
                       />
                     </button>
                     {/* 삭제 버튼 (우상단, hover 시 표시) */}
@@ -617,6 +650,7 @@ export default function HomePage({
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [albumFavoriteIds, setAlbumFavoriteIds] = useState<Set<string>>(new Set());
   const [chatKey, setChatKey] = useState(0);
   const [savedDiaryId, setSavedDiaryId] = useState<number | null>(null);
   const [isEditingDiary, setIsEditingDiary] = useState(false);
@@ -800,6 +834,7 @@ export default function HomePage({
             };
           })
         );
+        setAlbumFavoriteIds(new Set(records.filter((d) => d.is_favorite).map((d) => String(d.id))));
         setAlbumDiaries(entries.reverse());
       })
       .catch(() => {});
@@ -937,6 +972,7 @@ export default function HomePage({
               {tab === 'diary' && showAlbum && !diaryResult && (
                 <DiaryAlbum
                   diaries={albumDiaries}
+                  initialFavoriteIds={albumFavoriteIds}
                   onBack={() => setShowAlbum(false)}
                   onDelete={async (id) => {
                     try {
@@ -1032,12 +1068,12 @@ export default function HomePage({
               className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
             />
           ) : (
-            <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
+            <h3 className="mt-2 text-2xl font-bold text-[#F4845F] font-diary">
               {diaryResult.diary.title}
             </h3>
           )}
           {diaryResult.diary.summary && (
-            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
+            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F] font-diary">
               ✨ {diaryResult.diary.summary}
             </div>
           )}
@@ -1077,7 +1113,7 @@ export default function HomePage({
             className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
             style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
           >
-            <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
+            <p className="whitespace-pre-wrap text-[17px] leading-[31px] text-[#3D2B1F] font-diary">
               {diaryResult.diary.content}
             </p>
           </div>
@@ -1151,11 +1187,8 @@ export default function HomePage({
                 style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-full"
-                    style={{ background: '#FFE8D6' }}
-                  >
-                    <span className="text-2xl">🐾</span>
+                  <div className="flex h-11 w-11 items-center justify-center">
+                    <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-11 w-11 object-contain" />
                   </div>
 
                   <div className="min-w-0 flex-1">

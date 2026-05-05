@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>withDOG Map</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #ffffff; }
+    #map { width: 100%; height: 100vh; background: #ffffff; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey={{KAKAO_KEY}}&libraries=services,clusterer"></script>
+  <script>
+    let map = null;
+    let markers = [];
+    let currentLocationMarker = null;
+
+    function callDart(name, payload) {
+      try {
+        if (window.flutter_inappwebview) {
+          window.flutter_inappwebview.callHandler(name, payload);
+        }
+      } catch (e) { console.error('callDart err', e); }
+    }
+
+    function initMap() {
+      const seoul = new kakao.maps.LatLng(37.5665, 126.9780);
+      map = new kakao.maps.Map(document.getElementById('map'), {
+        center: seoul,
+        level: 5,
+      });
+      kakao.maps.event.addListener(map, 'idle', () => {
+        const c = map.getCenter();
+        callDart('onMapMoved', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() });
+      });
+      callDart('onMapReady', { lat: 37.5665, lng: 126.9780 });
+    }
+
+    /** Dart → JS: 마커 일괄 갱신 */
+    function setMarkers(places) {
+      // places = [{contentId, name, lat, lng, subCategory}]
+      markers.forEach(m => m.setMap(null));
+      markers = [];
+      if (!places || places.length === 0) return;
+
+      const bounds = new kakao.maps.LatLngBounds();
+      places.forEach(p => {
+        const pos = new kakao.maps.LatLng(p.lat, p.lng);
+        const marker = new kakao.maps.Marker({ position: pos, map, title: p.name });
+        kakao.maps.event.addListener(marker, 'click', () => {
+          callDart('onMarkerTap', {
+            contentId: p.contentId,
+            name: p.name,
+            lat: p.lat,
+            lng: p.lng,
+          });
+        });
+        markers.push(marker);
+        bounds.extend(pos);
+      });
+      if (places.length > 1) map.setBounds(bounds);
+      else map.setCenter(new kakao.maps.LatLng(places[0].lat, places[0].lng));
+    }
+
+    /** Dart → JS: 단일 좌표 포커스 */
+    function focusLatLng(lat, lng, level) {
+      if (!map) return;
+      map.setCenter(new kakao.maps.LatLng(lat, lng));
+      if (typeof level === 'number') map.setLevel(level);
+    }
+
+    /** Dart → JS: 현재 위치 마커 (GPS) — 별도 색상 SVG. setMarkers 와 독립. */
+    function setCurrentLocationMarker(lat, lng) {
+      if (!map) return;
+      const pos = new kakao.maps.LatLng(lat, lng);
+      // 인라인 SVG = 파란 원 + 흰색 외곽 (Material You 위치 마커 패턴)
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
+        + '<circle cx="12" cy="12" r="10" fill="#4285F4" stroke="#fff" stroke-width="3"/>'
+        + '</svg>';
+      const imageSrc = 'data:image/svg+xml;base64,' + btoa(svg);
+      const markerImage = new kakao.maps.MarkerImage(
+        imageSrc,
+        new kakao.maps.Size(24, 24),
+        { offset: new kakao.maps.Point(12, 12) }
+      );
+      if (currentLocationMarker) {
+        currentLocationMarker.setPosition(pos);
+        currentLocationMarker.setImage(markerImage);
+      } else {
+        currentLocationMarker = new kakao.maps.Marker({
+          position: pos,
+          map,
+          image: markerImage,
+          zIndex: 100,
+        });
+      }
+    }
+
+    // SDK 로드 검증
+    if (typeof kakao === 'undefined') {
+      callDart('onMapError', { message: 'kakao SDK 로드 실패 (도메인 등록 / API key 확인)' });
+    } else {
+      kakao.maps.load(initMap);
+    }
+  </script>
+</body>
+</html>

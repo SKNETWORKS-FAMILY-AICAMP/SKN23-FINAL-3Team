@@ -81,6 +81,27 @@ async def create_message(
     )
 
 
+@router.post(
+    "/{room_id}/messages/save",
+    response_model=MessageResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="채팅 메시지 직접 저장 (AI 응답 없음)",
+    description=(
+        "user / assistant / system 역할의 메시지를 그대로 저장합니다.\n\n"
+        "AI 의도 분류나 응답 생성 없이 순수 저장만 합니다.\n"
+        "그림일기 로컬 플로우의 대화를 히스토리에 남기는 용도로 사용합니다."
+    ),
+)
+async def save_message_direct(
+    room_id: int,
+    data: MessageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MessageResponse:
+    message = await msg_svc.create_message(room_id, data, db, current_user.id)
+    return MessageResponse.model_validate(message)
+
+
 @router.patch(
     "/{room_id}/messages/{message_id}",
     response_model=MessageResponse,
