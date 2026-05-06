@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Settings,
   Plus,
@@ -11,9 +11,10 @@ import {
   BadgeCheck,
   Lock,
   LogIn,
-  Save,
+  Star,
+  Check,
 } from "lucide-react";
-import { getMe, type UserProfile } from "../services/userService";
+import { getMe, updateUser, type UserProfile } from "../services/userService";
 import { getPets, type Pet } from "../services/petService";
 import { getAllBreeds, type Breed } from "../services/breedService";
 import { getImage } from "../services/imageService";
@@ -122,10 +123,10 @@ export default function MyPage() {
   const [selectedPetId, setSelectedPetId] = useState<number | null>(
     () => Number(localStorage.getItem('selected_pet_id')) || null
   );
+  const [primaryPetId, setPrimaryPetId] = useState<number | null>(null);
+  const [settingPrimary, setSettingPrimary] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [detailPet, setDetailPet] = useState<PetCard | null>(null);
-  const [savedPetId, setSavedPetId] = useState<number | null>(
-    () => Number(localStorage.getItem('selected_pet_id')) || null
-  );
 
   // auth-change 이벤트(토큰 만료/로그아웃) 감지
   useEffect(() => {
@@ -147,6 +148,7 @@ export default function MyPage() {
       try {
         const [me, breeds] = await Promise.all([getMe(), getAllBreeds()]);
         setUser(me);
+        setPrimaryPetId(me.primary_pet_id ?? null);
         const savedPhoto = localStorage.getItem(`profile_photo_${me.id}`);
         if (savedPhoto) setProfilePhoto(savedPhoto);
 
@@ -166,9 +168,11 @@ export default function MyPage() {
         }));
         setPets(cards);
         if (cards.length) {
+          const primaryId = me.primary_pet_id ?? null;
           const savedId = Number(localStorage.getItem('selected_pet_id')) || null;
-          const initialPet = savedId ? cards.find((c) => c.id === savedId) : null;
-          setSelectedPetId(initialPet?.id ?? cards[0].id);
+          const initialId = primaryId ?? savedId ?? cards[0].id;
+          setSelectedPetId(initialId);
+          localStorage.setItem('selected_pet_id', String(initialId));
         }
 
         // localStorage 우선, 없으면 profile_id로 백엔드에서 가져와 캐시
@@ -202,19 +206,27 @@ export default function MyPage() {
     load();
   }, [isLoggedIn]);
 
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
-  // 외부 저장 버튼 클릭 → localStorage 갱신 + 전체 컴포넌트 동기화
-  const handleSavePet = () => {
-    if (!selectedPetId) return;
-    setSavedPetId(selectedPetId);
-    localStorage.setItem('selected_pet_id', String(selectedPetId));
-    const currentPhoto = petPhotos[selectedPetId];
-    if (currentPhoto) {
-      localStorage.setItem(`pet_photo_${selectedPetId}`, currentPhoto);
+  const handleSetPrimary = async (petId: number) => {
+    if (!user || settingPrimary !== null) return;
+    setSettingPrimary(petId);
+    try {
+      const updated = await updateUser(user.id, { primary_pet_id: petId });
+      setPrimaryPetId(updated.primary_pet_id ?? null);
+      setSelectedPetId(petId);
+      localStorage.setItem('selected_pet_id', String(petId));
+      window.dispatchEvent(new Event('pet-select-change'));
+      const petName = pets.find((p) => p.id === petId)?.name ?? '';
+      showToast(`${petName}이(가) 대표 반려견으로 설정되었습니다`);
+    } catch {
+      showToast('설정에 실패했어요. 다시 시도해주세요.');
+    } finally {
+      setSettingPrimary(null);
     }
-    window.dispatchEvent(new Event('pet-select-change'));
-    setSaveSuccess(true);
   };
 
   const selectedPet = useMemo(
@@ -332,9 +344,6 @@ export default function MyPage() {
                     );
                   })()}
                 </div>
-                <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-orange-500 text-sm shadow">
-                  🐾
-                </span>
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -351,32 +360,47 @@ export default function MyPage() {
                 {user?.email && (
                   <p className="mt-1 text-sm text-slate-400">{user.email}</p>
                 )}
+                {user?.selected_tags && user.selected_tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {user.selected_tags.map((tag) => (
+                      <span key={tag} className="inline-flex items-center rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* 오른쪽: 요약 + 수정 버튼 */}
-            <div className="flex flex-col items-start gap-3 lg:items-end">
+            {/* 오른쪽: 픽토그램 + 수정 버튼 */}
+            <div className="flex flex-col items-start gap-4 lg:items-end lg:pt-16">
+              <div className="flex items-center gap-8">
+                <div className="flex flex-col items-center gap-1.5">
+                  <Dog className="h-7 w-7 text-slate-400" />
+                  <span className="text-xs text-slate-400">반려견 수</span>
+                  <span className="text-2xl font-bold text-slate-900">{pets.length}</span>
+                </div>
+                <div className="w-px h-12 bg-slate-200" />
+                <div className="flex flex-col items-center gap-1.5">
+                  <Star className="h-7 w-7 text-orange-400" />
+                  <span className="text-xs text-slate-400">대표 반려견</span>
+                  <span className="text-2xl font-bold text-slate-900">
+                    {pets.find(p => p.id === primaryPetId)?.name ?? "없음"}
+                  </span>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() =>
                   navigate("/step", {
                     state: {
-                      editMode: true,
+                      userOnlyMode: true,
                       userId: user?.id,
-                      petId: selectedPet?.id,
                       userData: {
                         nickname: user?.nickname ?? "",
                         gender: user?.gender ?? null,
                         birth_date: user?.birth_date ?? "",
-                      },
-                      petData: {
-                        name: selectedPet?.name ?? "",
-                        breed_id: rawPets.find((p) => p.id === selectedPet?.id)?.breed_id ?? null,
-                        breed_name: selectedPet?.breedName ?? "",
-                        birth_date: selectedPet?.birthDate ?? "",
-                        gender: selectedPet?.gender ?? null,
-                        is_neutered: selectedPet?.isNeutered ?? null,
-                        selected_tags: selectedPet?.selectedTags ?? [],
+                        selected_tags: user?.selected_tags ?? [],
                       },
                     },
                   })
@@ -386,10 +410,6 @@ export default function MyPage() {
                 <Settings className="h-4 w-4" />
                 회원정보 수정
               </button>
-              <div className="grid grid-cols-2 gap-3">
-                <SummaryMiniCard label="내 반려견" value={`${pets.length}마리`} />
-                <SummaryMiniCard label="현재 선택" value={selectedPet?.name ?? "없음"} />
-              </div>
             </div>
           </div>
         </motion.div>
@@ -435,34 +455,45 @@ export default function MyPage() {
               <div className="-mx-1 overflow-x-auto pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex w-max gap-5 px-1">
                   {pets.map((pet) => {
-                    const selected = pet.id === selectedPetId;
+                    const isPrimary = pet.id === primaryPetId;
+                    const isSelected = pet.id === selectedPetId;
+                    const isSetting = settingPrimary === pet.id;
                     return (
                       <div
                         key={pet.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => { setSelectedPetId(pet.id); setSaveSuccess(false); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedPetId(pet.id); setSaveSuccess(false); } }}
-                        className={`w-[320px] shrink-0 cursor-pointer overflow-hidden rounded-[28px] border p-5 text-left transition ${
-                          selected
+                        onClick={() => setSelectedPetId(pet.id)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedPetId(pet.id); }}
+                        className={`w-[320px] shrink-0 cursor-pointer overflow-hidden rounded-[28px] border p-5 text-left transition flex flex-col ${
+                          isPrimary
                             ? "border-orange-300 bg-orange-50/40 shadow-md"
+                            : isSelected
+                            ? "border-slate-300 bg-slate-50/60 shadow-sm"
                             : "border-slate-100 bg-white hover:border-orange-200 hover:shadow-sm"
                         }`}
                       >
                         <div className="flex items-start gap-4">
-                          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
-                            {petPhotos[pet.id] ? (
-                              <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
-                            ) : (
-                              <Dog className="h-8 w-8 text-orange-500" />
+                          <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
+                            <div className="absolute inset-0 overflow-hidden rounded-3xl">
+                              {petPhotos[pet.id] ? (
+                                <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <Dog className="h-8 w-8 text-orange-500" />
+                              )}
+                            </div>
+                            {isPrimary && (
+                              <div className="absolute -bottom-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white ring-2 ring-orange-500 shadow">
+                                <Check className="h-3.5 w-3.5 stroke-[3] text-orange-500" />
+                              </div>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <h3 className="truncate text-xl font-bold text-slate-900">{pet.name}</h3>
-                              {selected && (
+                              {isPrimary && (
                                 <span className="rounded-full bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white">
-                                  선택됨
+                                  현재 대표
                                 </span>
                               )}
                             </div>
@@ -483,7 +514,28 @@ export default function MyPage() {
                           </div>
                         </div>
 
-                        <div className="mt-5 grid grid-cols-2 gap-2">
+                        <div className="mt-auto pt-5 grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            disabled={isPrimary || isSetting}
+                            onClick={(e) => { e.stopPropagation(); handleSetPrimary(pet.id); }}
+                            className={`inline-flex items-center justify-center gap-1.5 rounded-2xl px-3 py-3 text-sm font-semibold whitespace-nowrap transition ${
+                              isPrimary
+                                ? "bg-orange-100 text-orange-400 cursor-default"
+                                : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
+                            }`}
+                          >
+                            <Star className={`h-4 w-4 ${isPrimary ? "fill-orange-400" : ""}`} />
+                            {isPrimary ? "선택완료" : isSetting ? "설정 중" : "선택"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDetailPet(pet); }}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+                          >
+                            <Eye className="h-4 w-4" />
+                            정보
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -516,14 +568,6 @@ export default function MyPage() {
                             <Pencil className="h-4 w-4" />
                             수정
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setDetailPet(pet); }}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-orange-500 px-3 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
-                          >
-                            <Eye className="h-4 w-4" />
-                            상세보기
-                          </button>
                         </div>
                       </div>
                     );
@@ -531,24 +575,6 @@ export default function MyPage() {
                 </div>
               </div>
 
-              {/* 외부 저장 버튼 */}
-              {pets.length > 0 && (
-                <div className="mt-5 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleSavePet}
-                    disabled={saveSuccess && selectedPetId === savedPetId}
-                    className={`inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-semibold transition ${
-                      saveSuccess && selectedPetId === savedPetId
-                        ? "bg-emerald-500 text-white"
-                        : "bg-slate-900 text-white hover:bg-slate-700"
-                    }`}
-                  >
-                    <Save className="h-4 w-4" />
-                    {saveSuccess && selectedPetId === savedPetId ? "저장 완료" : "저장"}
-                  </button>
-                </div>
-              )}
               </>
             )}
           </motion.section>
@@ -633,15 +659,20 @@ export default function MyPage() {
       </div>
 
       <PetDetailModal pet={detailPet} onClose={() => setDetailPet(null)} petPhotos={petPhotos} />
-    </div>
-  );
-}
 
-function SummaryMiniCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[24px] border border-orange-100 bg-white/80 p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key="toast"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-xl"
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
