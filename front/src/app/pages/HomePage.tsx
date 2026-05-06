@@ -674,6 +674,16 @@ export default function HomePage({
     let watchId: number;
 
     const startWatch = () => {
+      // 빠른 위치 먼저 표시 (IP 기반, 즉시 응답)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => {},
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+      );
+
+      // 이후 정밀 위치로 지속 업데이트
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
           const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -683,7 +693,7 @@ export default function HomePage({
         () => {
           localStorage.removeItem('gps_permission');
         },
-        { enableHighAccuracy: true, timeout: 10000 },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
       );
     };
 
@@ -701,7 +711,7 @@ export default function HomePage({
         () => {
           localStorage.removeItem('gps_permission');
         },
-        { enableHighAccuracy: true, timeout: 10000 },
+        { enableHighAccuracy: false, timeout: 5000 },
       );
     }
 

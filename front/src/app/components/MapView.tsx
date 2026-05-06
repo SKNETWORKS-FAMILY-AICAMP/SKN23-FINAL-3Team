@@ -67,6 +67,8 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
   const infoWindowRef = useRef<any>(null);
   const relayoutTimerRef = useRef<number | null>(null);
   const userOverlayRef = useRef<any>(null);
+  const hasInitialCenteredRef = useRef(false);
+  const userLocationRef = useRef(userLocation);
 
   const clearMarkers = () => {
     markersRef.current.forEach((marker) => marker.setMap(null));
@@ -122,6 +124,10 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
     });
   };
 
+  useEffect(() => {
+    userLocationRef.current = userLocation;
+  }, [userLocation]);
+
   const handleGpsClick = () => {
     if (!userLocation) {
       setGpsError('위치 권한을 허용해주세요.');
@@ -129,6 +135,7 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
       return;
     }
     if (mapInstanceRef.current && window.kakao?.maps) {
+      renderUserOverlay(userLocation);
       mapInstanceRef.current.setCenter(new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng));
       mapInstanceRef.current.setLevel(5);
     }
@@ -202,6 +209,20 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
         });
 
         renderMarkers();
+
+        // GPS가 지도 초기화보다 먼저 도착했을 경우 즉시 파란 점 그리기
+        const loc = userLocationRef.current;
+        if (loc) {
+          const pos = new window.kakao.maps.LatLng(loc.lat, loc.lng);
+          const content = `<div style="width:16px;height:16px;border-radius:50%;background:#4285F4;border:3px solid white;box-shadow:0 0 0 4px rgba(66,133,244,0.25);"></div>`;
+          userOverlayRef.current = new window.kakao.maps.CustomOverlay({ position: pos, content, map: mapInstanceRef.current, zIndex: 10 });
+          if (!hasInitialCenteredRef.current) {
+            mapInstanceRef.current.setCenter(pos);
+            mapInstanceRef.current.setLevel(5);
+            hasInitialCenteredRef.current = true;
+          }
+        }
+
         setMapReady(true);
       });
     };
@@ -218,6 +239,15 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
   useEffect(() => {
     if (!userLocation || !mapInstanceRef.current) return;
     renderUserOverlay(userLocation);
+
+    // 처음 위치가 잡히는 순간 지도 중심 이동
+    if (!hasInitialCenteredRef.current && window.kakao?.maps) {
+      mapInstanceRef.current.setCenter(
+        new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng),
+      );
+      mapInstanceRef.current.setLevel(5);
+      hasInitialCenteredRef.current = true;
+    }
   }, [userLocation, mapReady]);
 
   useEffect(() => {
