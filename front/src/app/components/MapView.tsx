@@ -67,12 +67,20 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
   const infoWindowRef = useRef<any>(null);
   const relayoutTimerRef = useRef<number | null>(null);
   const userOverlayRef = useRef<any>(null);
+  const defaultMarkerRef = useRef<any>(null);
   const hasInitialCenteredRef = useRef(false);
   const userLocationRef = useRef(userLocation);
 
   const clearMarkers = () => {
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current = [];
+  };
+
+  const clearDefaultMarker = () => {
+    if (defaultMarkerRef.current) {
+      defaultMarkerRef.current.setMap(null);
+      defaultMarkerRef.current = null;
+    }
   };
 
   const fitMapToPlaces = () => {
@@ -153,23 +161,21 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
     }
 
     if (places.length === 0) {
-      const defaultPosition = new window.kakao.maps.LatLng(
-        DEFAULT_CENTER.lat,
-        DEFAULT_CENTER.lng,
-      );
-
-      mapInstanceRef.current.setCenter(defaultPosition);
-      mapInstanceRef.current.setLevel(7);
-
-      const defaultMarker = new window.kakao.maps.Marker({
-        map: mapInstanceRef.current,
-        position: defaultPosition,
-        title: '기본 위치',
-      });
-
-      markersRef.current.push(defaultMarker);
+      // GPS 미허용일 때만 서울시청 마커 표시
+      if (!userLocationRef.current) {
+        const defaultPosition = new window.kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        mapInstanceRef.current.setCenter(defaultPosition);
+        mapInstanceRef.current.setLevel(7);
+        defaultMarkerRef.current = new window.kakao.maps.Marker({
+          map: mapInstanceRef.current,
+          position: defaultPosition,
+          title: '서울시청',
+        });
+      }
       return;
     }
+
+    clearDefaultMarker();
 
     places.forEach((place) => {
       if (!place.lat || !place.lng) return;
@@ -199,9 +205,15 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
       }
 
       window.kakao.maps.load(() => {
+        const initLoc = userLocationRef.current;
+        const initCenter = initLoc
+          ? new window.kakao.maps.LatLng(initLoc.lat, initLoc.lng)
+          : new window.kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        const initLevel = initLoc ? 5 : 7;
+
         mapInstanceRef.current = new window.kakao.maps.Map(mapRef.current, {
-          center: new window.kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
-          level: 7,
+          center: initCenter,
+          level: initLevel,
         });
 
         infoWindowRef.current = new window.kakao.maps.InfoWindow({
@@ -210,17 +222,13 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
 
         renderMarkers();
 
-        // GPS가 지도 초기화보다 먼저 도착했을 경우 즉시 파란 점 그리기
+        // GPS가 이미 있으면 즉시 파란 점 그리기 + 초기 센터링 완료 표시
         const loc = userLocationRef.current;
         if (loc) {
           const pos = new window.kakao.maps.LatLng(loc.lat, loc.lng);
           const content = `<div style="width:16px;height:16px;border-radius:50%;background:#4285F4;border:3px solid white;box-shadow:0 0 0 4px rgba(66,133,244,0.25);"></div>`;
           userOverlayRef.current = new window.kakao.maps.CustomOverlay({ position: pos, content, map: mapInstanceRef.current, zIndex: 10 });
-          if (!hasInitialCenteredRef.current) {
-            mapInstanceRef.current.setCenter(pos);
-            mapInstanceRef.current.setLevel(5);
-            hasInitialCenteredRef.current = true;
-          }
+          hasInitialCenteredRef.current = true;
         }
 
         setMapReady(true);
@@ -240,8 +248,9 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
     if (!userLocation || !mapInstanceRef.current) return;
     renderUserOverlay(userLocation);
 
-    // 처음 위치가 잡히는 순간 지도 중심 이동
+    // 처음 위치가 잡히는 순간 서울시청 마커 제거 + 지도 중심 이동
     if (!hasInitialCenteredRef.current && window.kakao?.maps) {
+      clearDefaultMarker();
       mapInstanceRef.current.setCenter(
         new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng),
       );
