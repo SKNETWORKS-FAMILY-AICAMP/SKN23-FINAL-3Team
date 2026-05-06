@@ -1201,6 +1201,7 @@ async def search_places_from_db(
     search_mode: str = "combined",
     user_lat: float = None,
     user_lng: float = None,
+    pre_parsed: dict = None,
 ) -> list[dict]:
     """Run the hybrid place-search pipeline.
 
@@ -1211,9 +1212,19 @@ async def search_places_from_db(
 
     user_lat / user_lng: 사용자 GPS 좌표. landmark가 없고 GPS가 제공되면
         현재 위치를 landmark_coords로 사용해 반경 검색을 수행.
+
+    pre_parsed: 사전에 파싱된 쿼리 결과 dict. 제공 시 LLM 파싱 호출을 건너뜀 (평가용).
     """
     try:
-        parsed = await _parse_query_with_llm(query, request)
+        if pre_parsed:
+            parsed = ParsedQuery(query)
+            parsed.objective = pre_parsed["objective"]
+            parsed.subjective = pre_parsed.get("subjective", query)
+            parsed.time_condition = pre_parsed.get("time_condition")
+            parsed.use_current_location = pre_parsed.get("use_current_location", False)
+            parsed.landmark = pre_parsed.get("landmark")
+        else:
+            parsed = await _parse_query_with_llm(query, request)
 
         if city:
             parsed.objective["city"] = city

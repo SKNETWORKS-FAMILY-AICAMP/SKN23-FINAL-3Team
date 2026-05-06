@@ -22,6 +22,7 @@ const DEFAULT_CENTER = { lat: 37.5665, lng: 126.9780 };
 export default function MapView({ places, onUsePlace, initialSelectedId, userLocation }: Props) {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(initialSelectedId ?? null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
@@ -201,6 +202,7 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
         });
 
         renderMarkers();
+        setMapReady(true);
       });
     };
     waitForKakao();
@@ -216,7 +218,7 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
   useEffect(() => {
     if (!userLocation || !mapInstanceRef.current) return;
     renderUserOverlay(userLocation);
-  }, [userLocation]);
+  }, [userLocation, mapReady]);
 
   useEffect(() => {
     if (!mapInstanceRef.current) {

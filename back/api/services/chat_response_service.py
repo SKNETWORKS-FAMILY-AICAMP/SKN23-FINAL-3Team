@@ -536,10 +536,11 @@ async def _handle_places(
             place["reason"] = reasons.get(place.get("name", ""), "")
         return _format_place_list_response(places), places
 
-    places_text = _format_places_brief(places)
-    user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
-    text = await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
-    return text, []
+    return (
+        "조건에 맞는 장소를 찾지 못했어요. 🐾\n"
+        "검색 조건을 조금 바꿔서 다시 시도해보세요.\n"
+        "예: 지역·카테고리를 넓히거나, 다른 키워드로 검색해보세요."
+    ), []
 
 
 async def _handle_facility(
