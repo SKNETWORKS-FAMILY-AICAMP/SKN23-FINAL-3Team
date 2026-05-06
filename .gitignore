@@ -292,6 +292,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# Flutter mobile env helper — Python virtualenv 패턴 (env/ / ENV/) 와 충돌
+# (Windows case-insensitive 파일시스템 매칭). 명시 예외로 트래킹 복원.
+!mobile/lib/core/env/
+!mobile/lib/core/env/**
+
 # Spyder project settings
 .spyderproject
 .spyproject
