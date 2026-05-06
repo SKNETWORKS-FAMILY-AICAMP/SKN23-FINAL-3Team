@@ -1,5 +1,18 @@
 import { api } from './apiClient'
 
+export interface PrimaryPet {
+  id: number
+  user_id: number
+  breed_id: number
+  name: string
+  birth_date: string | null
+  gender: 'MALE' | 'FEMALE' | null
+  is_neutered: boolean | null
+  type_id: number | null
+  selected_tags: string[]
+  age: number | null
+}
+
 export interface UserProfile {
   id: number
   email: string
@@ -13,6 +26,8 @@ export interface UserProfile {
   created_at: string
   updated_at: string
   age: number | null
+  primary_pet_id: number | null
+  primary_pet: PrimaryPet | null
 }
 
 export interface UserUpdateInput {
@@ -23,6 +38,7 @@ export interface UserUpdateInput {
   type_id?: number
   selected_tags?: string[]
   profile_id?: number
+  primary_pet_id?: number
 }
 
 /** GET /users/me */

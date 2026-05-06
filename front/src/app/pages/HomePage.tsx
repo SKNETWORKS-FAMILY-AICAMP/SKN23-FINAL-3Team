@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star } from 'lucide-react';
 import type { Pet, DiaryEntry, User } from '../types';
@@ -10,7 +10,7 @@ import type { GeneratedDiary } from '../services/diaryService';
 import type { PlaceResult } from '../services/placeService';
 import { createDiary, updateDiary, deleteDiary, toggleFavorite as toggleFavoriteApi } from '../services/dbDiaryService';
 import { uploadImage } from '../services/imageService';
-import { getMe } from '../services/userService';
+import { getMe, updateUser } from '../services/userService';
 import { getPets } from '../services/petService';
 import { getBreed } from '../services/breedService';
 import { getDiariesByUser } from '../services/dbDiaryService';
@@ -649,6 +649,12 @@ export default function HomePage({
   const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
+  const [showPetPicker, setShowPetPicker] = useState(false);
+  const [allPetsForPicker, setAllPetsForPicker] = useState<{ id: number; name: string; breed: string }[]>([]);
+  const [pickerUserId, setPickerUserId] = useState<number | null>(null);
+  const [settingPetId, setSettingPetId] = useState<number | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const petPickerBtnRef = useRef<HTMLButtonElement>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [albumFavoriteIds, setAlbumFavoriteIds] = useState<Set<string>>(new Set());
   const [chatKey, setChatKey] = useState(0);
@@ -713,14 +719,22 @@ export default function HomePage({
         const me = await getMe();
         const allPets = await getPets(me.id);
         if (allPets.length === 0) return;
+        setPickerUserId(me.id);
+
+        // 전체 반려견 picker용 저장 (breed 이름은 간략히)
+        const pickerList = await Promise.all(
+          allPets.map(async (ap) => {
+            let breed = '강아지';
+            try { breed = (await getBreed(ap.breed_id)).name_ko; } catch { /* ignore */ }
+            return { id: ap.id, name: ap.name, breed };
+          })
+        );
+        setAllPetsForPicker(pickerList);
+
         const savedId = Number(localStorage.getItem('selected_pet_id')) || null;
         const p = (savedId ? allPets.find((pet) => pet.id === savedId) : null) ?? allPets[0];
         setFetchedPetId(p.id);
-        let breedName = '강아지';
-        try {
-          const breed = await getBreed(p.breed_id);
-          breedName = breed.name_ko;
-        } catch { /* breed 조회 실패 시 기본값 유지 */ }
+        let breedName = pickerList.find((pl) => pl.id === p.id)?.breed ?? '강아지';
         setFetchedPet({
           id: p.id,
           name: p.name,
@@ -772,6 +786,26 @@ export default function HomePage({
   const safeUser = user;
   const safeDiaries = diaries ?? [];
   const currentPet = selectedPet ?? fetchedPet ?? safePets[0] ?? pet;
+
+  useEffect(() => {
+    if (!showPetPicker) return;
+    const close = () => setShowPetPicker(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showPetPicker]);
+
+  const handlePickPet = async (petId: number) => {
+    if (!pickerUserId || settingPetId !== null) return;
+    setSettingPetId(petId);
+    try {
+      await updateUser(pickerUserId, { primary_pet_id: petId });
+      localStorage.setItem('selected_pet_id', String(petId));
+      window.dispatchEvent(new Event('pet-select-change'));
+    } catch { /* 실패 시 무시 */ } finally {
+      setSettingPetId(null);
+      setShowPetPicker(false);
+    }
+  };
 
   const handleOpenDiaryTab = () => {
     setTab('diary');
@@ -918,6 +952,7 @@ export default function HomePage({
   };
 
   return (
+    <>
     <div className="h-screen bg-[#f8f8f6] pt-16">
       <div className="flex h-full overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
@@ -1195,9 +1230,19 @@ export default function HomePage({
                     <p className="text-sm font-bold" style={{ color: '#3D2B1F' }}>
                       AI 멍봇
                     </p>
-                    <p className="text-xs" style={{ color: '#8B6355' }}>
-                      {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'}
-                    </p>
+                    <button
+                      ref={petPickerBtnRef}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = petPickerBtnRef.current?.getBoundingClientRect();
+                        if (rect) setPickerPos({ top: rect.bottom + 4, left: rect.left });
+                        setShowPetPicker((v) => !v);
+                      }}
+                      className="text-xs underline-offset-2 hover:underline transition-colors"
+                      style={{ color: '#8B6355' }}
+                    >
+                      {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'} ▾
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -1258,5 +1303,30 @@ export default function HomePage({
         </div>
       </div>
     </div>
+
+    {showPetPicker && pickerPos && allPetsForPicker.length > 0 && (
+      <div
+        className="fixed z-[9999] min-w-[180px] overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-[#F5D6C8]"
+        style={{ top: pickerPos.top, left: pickerPos.left }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {allPetsForPicker.map((ap) => {
+          const isActive = ap.id === (currentPet?.id ?? fetchedPetId);
+          const isSetting = settingPetId === ap.id;
+          return (
+            <button
+              key={ap.id}
+              onClick={() => handlePickPet(ap.id)}
+              disabled={isActive || isSetting}
+              className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-[#FFF0E6] disabled:cursor-default ${isActive ? 'font-bold text-[#F4845F]' : 'text-[#3D2B1F]'}`}
+            >
+              {isActive && <span className="text-[#F4845F]">✓</span>}
+              <span>{isSetting ? '설정 중...' : `${ap.name} · ${ap.breed}`}</span>
+            </button>
+          );
+        })}
+      </div>
+    )}
+    </>
   );
 }

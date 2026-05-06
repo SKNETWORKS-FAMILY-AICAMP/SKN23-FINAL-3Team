@@ -374,6 +374,7 @@ export default function ProfileSetupPage() {
   const editState = location.state as {
     editMode?: boolean;
     petOnlyMode?: boolean;
+    userOnlyMode?: boolean;
     userId?: number;
     petId?: number;
     userData?: { nickname: string; gender: string | null; birth_date: string; selected_tags?: string[] };
@@ -389,6 +390,7 @@ export default function ProfileSetupPage() {
   } | null;
   const isEditMode = editState?.editMode === true;
   const isPetOnlyMode = editState?.petOnlyMode === true;
+  const isUserOnlyMode = editState?.userOnlyMode === true;
 
   const [form, setForm] = useState<ProfileSetupData>({
     ...defaultData,
@@ -416,6 +418,20 @@ export default function ProfileSetupPage() {
     getAllBreeds().then(setBreeds).catch(() => {/* 로드 실패 시 하드코딩 목록으로 fallback */});
     getTop10Breeds().then(setTopBreeds).catch(() => setTopBreeds([]));
   }, []);
+
+  // 보호자 전용 수정 모드: 기존 데이터로 폼 초기화
+  useEffect(() => {
+    if (!isUserOnlyMode || !editState) return;
+    const { userData } = editState;
+    setForm((prev) => ({
+      ...prev,
+      guardianName: userData?.nickname ?? "",
+      guardianBirth: userData?.birth_date ?? "",
+      guardianGender:
+        userData?.gender === "MALE" ? "male" : userData?.gender === "FEMALE" ? "female" : "male",
+      ownerPersonality: userData?.selected_tags ?? [],
+    }));
+  }, [isUserOnlyMode]);
 
   // 수정 모드: 기존 데이터로 폼 초기화
   useEffect(() => {
@@ -516,6 +532,26 @@ export default function ProfileSetupPage() {
   };
 
   const handleStart = async () => {
+    if (isUserOnlyMode) {
+      setIsSubmitting(true);
+      try {
+        const userId = editState?.userId;
+        if (!userId) throw new Error("수정 대상 정보가 없습니다.");
+        await updateUser(userId, {
+          nickname: form.guardianName || undefined,
+          gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
+          birth_date: form.guardianBirth || undefined,
+          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+        });
+        navigate("/mypage", { replace: true });
+      } catch (err) {
+        console.error("보호자 정보 저장 실패", err);
+        alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
     if (!form.petName) {
       alert("반려견 이름을 입력해주세요.");
       return;
@@ -629,13 +665,13 @@ export default function ProfileSetupPage() {
     <div className="min-h-screen bg-[#F6F1EC]">
       <header className="border-b-[3px] border-[#3DA0FF] bg-[#F6F1EC] px-4 py-4 text-center">
         <h1 className="text-sm font-bold tracking-tight text-[#2F2B27]">
-          {isEditMode ? "정보 수정" : isPetOnlyMode ? "반려견 추가" : "프로필 설정"}
+          {isUserOnlyMode ? "보호자 정보 수정" : isEditMode ? "정보 수정" : isPetOnlyMode ? "반려견 추가" : "프로필 설정"}
         </h1>
       </header>
 
       <main className="mx-auto max-w-[780px] px-4 py-10">
         <div className="mx-auto max-w-[520px] space-y-6">
-          {!isPetOnlyMode && !isEditMode && <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          {(!isPetOnlyMode && !isEditMode) || isUserOnlyMode ? <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <h2 className="text-[16px] font-bold text-[#37322D]">보호자 정보</h2>
 
             <div className="mt-4">
@@ -745,9 +781,9 @@ export default function ProfileSetupPage() {
                 <p className="mt-2 text-xs text-red-500">{ownerPersonalityError}</p>
               )}
             </div>
-          </section>}
+          </section> : null}
 
-          <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          {!isUserOnlyMode && <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <h2 className="text-[16px] font-bold text-[#37322D]">반려견 정보</h2>
 
             <div className="mt-6 flex justify-center">
@@ -928,7 +964,7 @@ export default function ProfileSetupPage() {
               </div>
 
             </div>
-          </section>
+          </section>}
 
           <button
             type="button"
@@ -936,7 +972,7 @@ export default function ProfileSetupPage() {
             disabled={isSubmitting}
             className="w-full rounded-[16px] bg-[#DB5F2E] px-6 py-5 text-lg font-bold text-white shadow-sm transition hover:bg-[#D05523] disabled:opacity-60"
           >
-            {isSubmitting ? "저장 중..." : isEditMode ? "수정 완료" : isPetOnlyMode ? "추가하기 🐾" : "시작하기! 🐾"}
+            {isSubmitting ? "저장 중..." : isUserOnlyMode ? "수정 완료" : isEditMode ? "수정 완료" : isPetOnlyMode ? "추가하기 🐾" : "시작하기! 🐾"}
           </button>
         </div>
       </main>
