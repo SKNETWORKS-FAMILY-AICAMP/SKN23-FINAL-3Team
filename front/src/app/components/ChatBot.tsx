@@ -468,7 +468,7 @@ export default function ChatBot({
 
         {/* 웰컴 버튼: 말풍선 바로 아래 인라인 */}
         {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && (
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1 pl-10">
             <button
               onClick={handleStartDiary}
               className="rounded-full border border-[#F4845F] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#F4845F] transition hover:bg-[#FFF7F3]"
