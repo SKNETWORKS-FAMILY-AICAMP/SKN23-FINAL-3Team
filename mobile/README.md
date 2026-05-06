@@ -2,8 +2,6 @@
 
 withDOG = 반려견 동반 장소 추천 챗봇 (메인) + AI 그림일기 (보조). React 웹 풀 기능 포팅 — 5/20 시연 데모용.
 
-권위 wiki: `D:/Obsidian/withDOG/wiki/04-feature/feature-flutter-app.md`
-
 ## 환경 설정 — monorepo 최상위 `.env` 단일 source
 
 본 디렉토리(`mobile/`)에는 별도 `.env` 를 두지 않는다. 대신 **저장소 root 의 `.env`** (`D:/SKN AI/Project/SKN23-FINAL-3TEAM/.env`) 를 모든 환경(front·mobile·back) 이 공유한다.
