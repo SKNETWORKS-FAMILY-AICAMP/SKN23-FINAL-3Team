@@ -32,6 +32,10 @@ class UserResponse(BaseModel):
     gender: GenderEnum | None = Field(None, description="성별")
     birth_date: date | None = Field(None, description="생년월일")
     profile_id: int | None = Field(None, description="프로필 이미지 ID (온보딩 전 NULL)")
+    profile_image_url: str | None = Field(
+        None,
+        description="프로필 이미지 URL (S3 공개 URL). User ORM property 매핑.",
+    )
     provider: str = Field(..., description="소셜 로그인 제공자 (kakao/google/naver)")
     type_id: int | None = Field(None, description="대표 성향 키워드 ID (온보딩 전 NULL)")
     primary_pet_id: int | None = Field(None, description="대표 반려견 ID (미설정 시 NULL)")

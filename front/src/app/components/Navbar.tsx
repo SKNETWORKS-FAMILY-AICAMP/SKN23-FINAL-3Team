@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { getMe } from "../services/userService";
 import { getPets } from "../services/petService";
-import { getImage } from "../services/imageService";
 import { SubscriptionModal } from "./SubscriptionModal";
 
 interface SubItem {
@@ -71,25 +70,21 @@ export function Navbar() {
     setIsLoggedIn(!!localStorage.getItem('access_token'));
   }, [location.pathname]);
 
-  // 선택된 반려견 사진 로드 (MyPage와 연동)
+  // 사용자 프로필 사진 + 활성 반려견 ID 동기화
+  // - 우측 아바타 = users.profile_image_url 단일 출처 (가을쥐 결정 2026-05-07)
+  // - selected_pet_id 동기화는 별개 책임 (챗봇·일기 활성 pet 컨텍스트)
   const loadProfilePhoto = async () => {
     if (!isLoggedIn) return;
     try {
       const me = await getMe();
+      setProfilePhoto(me.profile_image_url);
+
       const pets = await getPets(me.id);
       const pet = pets[0] ?? null;
       const selectedPetId = localStorage.getItem('selected_pet_id');
       const targetPet = (selectedPetId ? pets.find((p) => String(p.id) === selectedPetId) : null) ?? pet;
       if (targetPet) {
         localStorage.setItem('selected_pet_id', String(targetPet.id));
-        const cached = localStorage.getItem(`pet_photo_${targetPet.id}`);
-        if (cached) { setProfilePhoto(cached); return; }
-      }
-      // localStorage에 없으면 profile_id로 백엔드에서 가져와서 저장
-      if (me.profile_id) {
-        const img = await getImage(me.profile_id);
-        setProfilePhoto(img.url);
-        if (targetPet) localStorage.setItem(`pet_photo_${targetPet.id}`, img.url);
       }
     } catch { /* 무시 */ }
   };

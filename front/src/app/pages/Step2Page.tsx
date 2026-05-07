@@ -6,6 +6,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   Search,
+  User,
   X,
 } from "lucide-react";
 import { getMe, updateUser } from "../services/userService";
@@ -29,6 +30,7 @@ type ProfileSetupData = {
   guardianName: string;
   guardianBirth: string;
   guardianGender: GuardianGender;
+  guardianImage?: string;        // 보호자 프로필 사진 (data: 또는 기존 url)
   ownerPersonality: string[];   // 보호자 라이프스타일 태그
   petName: string;
   birthDate: string;
@@ -36,7 +38,7 @@ type ProfileSetupData = {
   petGender: PetGender;
   neutered: Neutered;
   personality: string[];         // 반려견 성격 태그
-  image?: string;
+  image?: string;                // 반려견 프로필 사진
 };
 
 // 키워드 목록(반려견 성격 / 보호자 라이프스타일) 은 GET /keywords?category={PET|USER}
@@ -54,6 +56,7 @@ const defaultData: ProfileSetupData = {
   guardianName: "",
   guardianBirth: "",
   guardianGender: undefined,
+  guardianImage: undefined,
   ownerPersonality: [],
   petName: "",
   birthDate: "",
@@ -78,11 +81,10 @@ function SegButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-12 w-full items-center justify-center rounded-2xl border text-base font-semibold transition ${
-        active
+      className={`flex h-12 w-full items-center justify-center rounded-2xl border text-base font-semibold transition ${active
           ? "border-[#E86A2C] bg-[#FFF2EA] text-[#D45E23]"
           : "border-[#E6E1DB] bg-white text-[#9B948B] hover:border-[#F1B18C]"
-      }`}
+        }`}
     >
       {children}
     </button>
@@ -102,11 +104,10 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-        active
+      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${active
           ? "border-[#E86A2C] bg-[#FFF2EA] text-[#D45E23]"
           : "border-[#E6E1DB] bg-white text-[#7B746B] hover:border-[#F1B18C] hover:text-[#D45E23]"
-      }`}
+        }`}
     >
       {children}
     </button>
@@ -192,11 +193,10 @@ function BreedModal({
                       onSelect(breed);
                       onClose();
                     }}
-                    className={`rounded-[16px] px-4 py-4 text-left text-[18px] font-medium transition ${
-                      active
+                    className={`rounded-[16px] px-4 py-4 text-left text-[18px] font-medium transition ${active
                         ? "bg-[#F7E8E1] text-[#C65B27]"
                         : "text-[#5F5A55] hover:bg-[#F7F4F1]"
-                    }`}
+                      }`}
                   >
                     {breed.name_ko}
                   </button>
@@ -341,7 +341,7 @@ export default function ProfileSetupPage() {
     userOnlyMode?: boolean;
     userId?: number;
     petId?: number;
-    userData?: { nickname: string; gender: string | null; birth_date: string; selected_tags?: string[] };
+    userData?: { nickname: string; gender: string | null; birth_date: string; selected_tags?: string[]; profile_image_url?: string | null };
     petData?: {
       name: string;
       breed_id: number | null;
@@ -350,6 +350,7 @@ export default function ProfileSetupPage() {
       gender: "MALE" | "FEMALE" | null;
       is_neutered: boolean | null;
       selected_tags: string[];
+      image_url?: string | null;
     };
   } | null;
   const isEditMode = editState?.editMode === true;
@@ -396,9 +397,10 @@ export default function ProfileSetupPage() {
     };
   }, []);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const guardianFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    getAllBreeds().then(setBreeds).catch(() => {/* 로드 실패 시 하드코딩 목록으로 fallback */});
+    getAllBreeds().then(setBreeds).catch(() => {/* 로드 실패 시 하드코딩 목록으로 fallback */ });
     getTop10Breeds().then(setTopBreeds).catch(() => setTopBreeds([]));
   }, []);
 
@@ -413,6 +415,7 @@ export default function ProfileSetupPage() {
       guardianGender:
         userData?.gender === "MALE" ? "male" : userData?.gender === "FEMALE" ? "female" : "male",
       ownerPersonality: userData?.selected_tags ?? [],
+      guardianImage: userData?.profile_image_url ?? undefined,
     }));
   }, [isUserOnlyMode]);
 
@@ -427,6 +430,7 @@ export default function ProfileSetupPage() {
       guardianGender:
         userData?.gender === "MALE" ? "male" : userData?.gender === "FEMALE" ? "female" : "male",
       ownerPersonality: userData?.selected_tags ?? [],
+      guardianImage: userData?.profile_image_url ?? undefined,
       petName: petData?.name ?? "",
       birthDate: petData?.birth_date ?? "",
       breed: petData?.breed_name ?? "",
@@ -435,10 +439,8 @@ export default function ProfileSetupPage() {
       neutered:
         petData?.is_neutered === true ? "yes" : petData?.is_neutered === false ? "no" : undefined,
       personality: petData?.selected_tags ?? [],
-      // 저장된 프로필 사진 불러오기
-      image: editState.petId
-        ? (localStorage.getItem(`pet_photo_${editState.petId}`) ?? undefined)
-        : undefined,
+      // 저장된 프로필 사진 — 백엔드 응답 (pets.image_url) 사용. localStorage 폐기 (#67).
+      image: petData?.image_url ?? undefined,
     }));
     if (petData?.breed_id) setSelectedBreedId(petData.breed_id);
   }, [isEditMode]);
@@ -517,6 +519,28 @@ export default function ProfileSetupPage() {
     e.target.value = "";
   };
 
+  const handleGuardianImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const sizeError = validateImageSize(file);
+    if (sizeError) {
+      alert(sizeError);
+      e.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") {
+        const result = reader.result;
+        setForm((prev) => ({ ...prev, guardianImage: result }));
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const handleTopBreedSelect = (breed: Breed) => {
     setForm((prev) => ({ ...prev, breed: breed.name_ko }));
     setSelectedBreedId(breed.id);
@@ -535,11 +559,21 @@ export default function ProfileSetupPage() {
       try {
         const userId = editState?.userId;
         if (!userId) throw new Error("수정 대상 정보가 없습니다.");
+
+        // 보호자 사진 업로드 (data: 신규만, 기존 url 은 미변경)
+        let userProfileId: number | undefined;
+        if (form.guardianImage && form.guardianImage.startsWith('data:')) {
+          const file = await base64ToFile(form.guardianImage, 'user-profile.jpg');
+          const uploaded = await uploadImage(file);
+          userProfileId = uploaded.id;
+        }
+
         await updateUser(userId, {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
           selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          profile_id: userProfileId,
         });
         navigate("/mypage", { replace: true });
       } catch (err) {
@@ -578,18 +612,23 @@ export default function ProfileSetupPage() {
       const isNeuteredApi = form.neutered === "yes" ? true : form.neutered === "no" ? false : undefined;
 
       if (isEditMode && editState) {
-        // 수정 모드: updateUser + updatePet
+        // 수정 모드: updateUser + updatePet. 사진은 반려견 프로필 (pets.profile_id) 으로만 박음.
         const userId = editState.userId;
         const petId = editState.petId;
         if (!userId || !petId) throw new Error("수정 대상 정보가 없습니다.");
 
-        let profileId: number | undefined;
-        let imageUrl: string | undefined;
-        if (form.image && form.image.startsWith('data:')) {
-          const file = await base64ToFile(form.image, 'profile.jpg');
+        // 보호자/반려견 사진 업로드 (변경 시만 신규, data: 만 신규로 인식)
+        let userProfileId: number | undefined;
+        if (form.guardianImage && form.guardianImage.startsWith('data:')) {
+          const file = await base64ToFile(form.guardianImage, 'user-profile.jpg');
           const uploaded = await uploadImage(file);
-          profileId = uploaded.id;
-          imageUrl = uploaded.url;
+          userProfileId = uploaded.id;
+        }
+        let petProfileId: number | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'pet-profile.jpg');
+          const uploaded = await uploadImage(file);
+          petProfileId = uploaded.id;
         }
 
         await updateUser(userId, {
@@ -597,45 +636,52 @@ export default function ProfileSetupPage() {
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
           selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
-          profile_id: profileId,
+          profile_id: userProfileId,
         });
-        const updatedPet = await updatePet(petId, {
+        await updatePet(petId, {
           breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
+          image_id: petProfileId,
         });
-        if (imageUrl) {
-          localStorage.setItem(`pet_photo_${updatedPet.id}`, imageUrl);
-        } else if (form.image) {
-          localStorage.setItem(`pet_photo_${updatedPet.id}`, form.image);
-        }
         navigate("/mypage", { replace: true });
       } else if (isPetOnlyMode) {
-        // 반려견 추가 모드: createPet만
-        const newPet = await createPet({
+        // 반려견 추가 모드: 이미지 업로드 → createPet (profile_id 연결)
+        let petProfileId: number | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'pet-profile.jpg');
+          const uploaded = await uploadImage(file);
+          petProfileId = uploaded.id;
+        }
+
+        await createPet({
           breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
+          image_id: petProfileId,
         });
-        if (form.image) localStorage.setItem(`pet_photo_${newPet.id}`, form.image);
         navigate("/mypage", { replace: true });
       } else {
-        // 최초 등록 모드: getMe + updateUser + createPet
+        // 최초 등록 모드: getMe + updateUser + createPet. 사진 = 보호자 + 반려견 분리 (#67 fix 후속).
         const me = await getMe();
 
-        let profileId: number | undefined;
-        let imageUrl: string | undefined;
-        if (form.image && form.image.startsWith('data:')) {
-          const file = await base64ToFile(form.image, 'profile.jpg');
+        let userProfileId: number | undefined;
+        if (form.guardianImage && form.guardianImage.startsWith('data:')) {
+          const file = await base64ToFile(form.guardianImage, 'user-profile.jpg');
           const uploaded = await uploadImage(file);
-          profileId = uploaded.id;
-          imageUrl = uploaded.url;
+          userProfileId = uploaded.id;
+        }
+        let petProfileId: number | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'pet-profile.jpg');
+          const uploaded = await uploadImage(file);
+          petProfileId = uploaded.id;
         }
 
         await updateUser(me.id, {
@@ -643,21 +689,17 @@ export default function ProfileSetupPage() {
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
           selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
-          profile_id: profileId,
+          profile_id: userProfileId,
         });
-        const newPet = await createPet({
+        await createPet({
           breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
+          image_id: petProfileId,
         });
-        if (imageUrl) {
-          localStorage.setItem(`pet_photo_${newPet.id}`, imageUrl);
-        } else if (form.image) {
-          localStorage.setItem(`pet_photo_${newPet.id}`, form.image);
-        }
         navigate("/home");
       }
     } catch (err) {
@@ -690,6 +732,31 @@ export default function ProfileSetupPage() {
         <div className="mx-auto max-w-[520px] space-y-6">
           {(!isPetOnlyMode && !isEditMode) || isUserOnlyMode ? <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <h2 className="text-[16px] font-bold text-[#37322D]">보호자 정보</h2>
+
+            <div className="mt-6 flex justify-center">
+              <input
+                ref={guardianFileRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={handleGuardianImageChange}
+              />
+              <button
+                type="button"
+                onClick={() => guardianFileRef.current?.click()}
+                className="flex flex-col items-center"
+              >
+                <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-[#E8EAF0] text-[#7B859F] shadow-sm">
+                  {form.guardianImage ? (
+                    <img src={form.guardianImage} alt="보호자" className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-6 w-6" />
+                  )}
+                </div>
+                <span className="mt-3 text-[11px] text-[#A19A92]">클릭하여 사진 추가</span>
+                <span className="mt-1 text-[10px] text-[#B5ADA4]">PNG · JPEG · 5MB 이하 (선택)</span>
+              </button>
+            </div>
 
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between">
@@ -726,22 +793,18 @@ export default function ProfileSetupPage() {
             <div className="mt-4">
               <label className="mb-2 block text-xs font-medium text-[#8D867E]">성별</label>
               <div className="flex justify-center gap-3">
-                <div className="w-44">
-                  <SegButton
-                    active={form.guardianGender === "male"}
-                    onClick={() => setForm((prev) => ({ ...prev, guardianGender: "male" }))}
-                  >
-                    남성
-                  </SegButton>
-                </div>
-                <div className="w-44">
-                  <SegButton
-                    active={form.guardianGender === "female"}
-                    onClick={() => setForm((prev) => ({ ...prev, guardianGender: "female" }))}
-                  >
-                    여성
-                  </SegButton>
-                </div>
+                <SegButton
+                  active={form.guardianGender === "male"}
+                  onClick={() => setForm((prev) => ({ ...prev, guardianGender: "male" }))}
+                >
+                  남성
+                </SegButton>
+                <SegButton
+                  active={form.guardianGender === "female"}
+                  onClick={() => setForm((prev) => ({ ...prev, guardianGender: "female" }))}
+                >
+                  여성
+                </SegButton>
               </div>
             </div>
 
