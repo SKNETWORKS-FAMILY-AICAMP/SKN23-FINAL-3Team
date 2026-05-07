@@ -31,6 +31,7 @@ class PetCreate(BaseModel):
     is_neutered: bool | None = Field(None, description="중성화 여부 (미입력 가능)")
     type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID (keywords 테이블 참조)")
     selected_tags: list[Any] | None = Field(None, description="선택한 성격 태그 목록 (JSON)")
+    image_id: int | None = Field(None, gt=0, description="프로필 이미지 ID (images.id 참조, 등록 시 선택)")
 
     @field_validator("name", mode="before")
     @classmethod
@@ -57,6 +58,7 @@ class PetUpdate(BaseModel):
     is_neutered: bool | None = Field(None, description="중성화 여부")
     type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID")
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
+    image_id: int | None = Field(None, gt=0, description="프로필 이미지 ID (images.id 참조)")
 
     @field_validator("name", mode="before")
     @classmethod
@@ -83,6 +85,10 @@ class PetResponse(BaseModel):
     is_neutered: bool | None = Field(None, description="중성화 여부")
     type_id: int | None = Field(None, description="대표 성격 키워드 ID")
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
+    image_url: str | None = Field(
+        None,
+        description="프로필 이미지 URL (S3 공개 URL). Pet ORM property 매핑.",
+    )
     created_at: datetime = Field(..., description="등록 일시")
     updated_at: datetime = Field(..., description="수정 일시")
 
