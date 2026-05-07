@@ -11,6 +11,7 @@ import { getMe, updateUser } from "../services/userService";
 import { createPet, updatePet } from "../services/petService";
 import { getAllBreeds, getTop10Breeds, type Breed } from "../services/breedService";
 import { uploadImage } from "../services/imageService";
+import { getPetKeywords, getUserKeywords } from "../services/keywordService";
 import {
   validateNickname,
   validatePetName,
@@ -37,59 +38,10 @@ type ProfileSetupData = {
   image?: string;
 };
 
-// scoring.py DOG_TAG_SCORES 기준 (24개)
-const personalityOptions = [
-  "에너자이저",
-  "느긋한 편",
-  "애교쟁이",
-  "제 갈 길 가는 타입",
-  "낯을 가려요",
-  "낯선 사람도 좋아요",
-  "사람이라면 다 좋아",
-  "사람은 좀 무서워요",
-  "겁쟁이",
-  "겁 없는 탐험가",
-  "호기심 폭발",
-  "고집 있는 편",
-  "예민한 편",
-  "먹는 게 최고",
-  "낯선 것엔 짖어요",
-  "산책이 제일 좋아",
-  "밖이 좋아요",
-  "집이 편해요",
-  "장난감 수집가",
-  "공이라면 뭐든지",
-  "강아지 친구 환영",
-  "혼자도 잘 놀아요",
-  "안기는 거 좋아요",
-  "시키는 건 다 해요",
-];
-
-// scoring.py OWNER_TAG_SCORES 기준 (19개)
-const ownerPersonalityOptions = [
-  "신나게 뛰어놀기",
-  "느긋하게 쉬어가기",
-  "자연 속으로",
-  "도시 구경",
-  "일상 충전",
-  "새로운 곳 구경",
-  "감성 충만",
-  "동네 골목 탐방",
-  "계획 없이 떠나기",
-  "바다",
-  "산",
-  "숲",
-  "계곡",
-  "공원 산책",
-  "카페 투어",
-  "핫플 인증",
-  "사진 건지러",
-  "맛있는 거 먹으러",
-  "전시 관람",
-];
-
-const previewPersonalityOptions = personalityOptions.slice(0, 10);
-const previewOwnerPersonalityOptions = ownerPersonalityOptions.slice(0, 9);
+// 키워드 목록(반려견 성격 / 보호자 라이프스타일) 은 GET /keywords?category={PET|USER}
+// API 로 동적 로드 — 백엔드 keywords 테이블 단일 출처. 메인 = 처음 10개 / 더보기 모달 = 전체.
+// 가을쥐 결정 2026-05-07. 기존 하드코딩 24+19개 제거.
+const PREVIEW_KEYWORD_COUNT = 10;
 
 async function base64ToFile(base64: string, filename: string): Promise<File> {
   const res = await fetch(base64);
@@ -262,11 +214,13 @@ function PersonalityModal({
   onClose,
   selectedItems,
   onToggle,
+  options,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedItems: string[];
   onToggle: (item: string) => void;
+  options: string[];
 }) {
   if (!isOpen) return null;
 
@@ -295,7 +249,7 @@ function PersonalityModal({
 
         <div className="overflow-y-auto px-6 pb-8 md:px-8">
           <div className="flex flex-wrap gap-3">
-            {personalityOptions.map((item) => (
+            {options.map((item) => (
               <Chip
                 key={item}
                 active={selectedItems.includes(item)}
@@ -326,11 +280,13 @@ function OwnerPersonalityModal({
   onClose,
   selectedItems,
   onToggle,
+  options,
 }: {
   isOpen: boolean;
   onClose: () => void;
   selectedItems: string[];
   onToggle: (item: string) => void;
+  options: string[];
 }) {
   if (!isOpen) return null;
   return (
@@ -354,7 +310,7 @@ function OwnerPersonalityModal({
         </div>
         <div className="overflow-y-auto px-6 pb-8 md:px-8">
           <div className="flex flex-wrap gap-3">
-            {ownerPersonalityOptions.map((item) => (
+            {options.map((item) => (
               <Chip key={item} active={selectedItems.includes(item)} onClick={() => onToggle(item)}>
                 {item}
               </Chip>
@@ -419,6 +375,25 @@ export default function ProfileSetupPage() {
   const [isOwnerPersonalityModalOpen, setIsOwnerPersonalityModalOpen] = useState(false);
   const [personalityError, setPersonalityError] = useState("");
   const [ownerPersonalityError, setOwnerPersonalityError] = useState("");
+  // 키워드 목록 (백엔드 keywords 테이블 단일 출처, id 오름차순)
+  const [petKeywordNames, setPetKeywordNames] = useState<string[]>([]);
+  const [userKeywordNames, setUserKeywordNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getPetKeywords(), getUserKeywords()])
+      .then(([pet, user]) => {
+        if (!active) return;
+        setPetKeywordNames(pet.map((k) => k.name));
+        setUserKeywordNames(user.map((k) => k.name));
+      })
+      .catch((err) => {
+        console.error("키워드 목록 로드 실패", err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -770,7 +745,7 @@ export default function ProfileSetupPage() {
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {previewOwnerPersonalityOptions.map((item) => (
+                {userKeywordNames.slice(0, PREVIEW_KEYWORD_COUNT).map((item) => (
                   <Chip
                     key={item}
                     active={form.ownerPersonality.includes(item)}
@@ -948,7 +923,7 @@ export default function ProfileSetupPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {previewPersonalityOptions.map((item) => (
+                  {petKeywordNames.slice(0, PREVIEW_KEYWORD_COUNT).map((item) => (
                     <Chip
                       key={item}
                       active={form.personality.includes(item)}
@@ -1028,6 +1003,7 @@ export default function ProfileSetupPage() {
         onClose={() => setIsPersonalityModalOpen(false)}
         selectedItems={form.personality}
         onToggle={togglePersonality}
+        options={petKeywordNames}
       />
 
       <OwnerPersonalityModal
@@ -1035,6 +1011,7 @@ export default function ProfileSetupPage() {
         onClose={() => setIsOwnerPersonalityModalOpen(false)}
         selectedItems={form.ownerPersonality}
         onToggle={toggleOwnerPersonality}
+        options={userKeywordNames}
       />
     </div>
   );
