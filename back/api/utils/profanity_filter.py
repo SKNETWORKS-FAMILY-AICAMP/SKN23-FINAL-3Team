@@ -41,6 +41,21 @@ _PROFANITY_LABELS: set[str] = {
 _MODEL_NAME = "smilegate-ai/kor_unsmile"
 _THRESHOLD = 0.5
 
+# 일상 비속어 사전 — kor_unsmile 모델이 혐오·차별 라벨 위주라 일상 비속어
+# (예: "바보") 를 false negative 로 놓치는 한계 보완. 부분 문자열 매칭이라
+# false positive 가능성 ("바보스럽다") 있으나 차단 우선 정책 (#71, 사용자 결정 2026-05-07).
+_LOCAL_PROFANITY_WORDS: set[str] = {
+    # 일상 비속어 (한글)
+    "바보", "멍청이", "쪼다", "또라이", "찌질이",
+    "병신", "ㅂㅅ", "ㅄ",
+    "씨발", "씨바", "ㅅㅂ", "ㅆㅂ",
+    "개새끼", "개새", "씹새끼", "씹새",
+    "지랄", "ㅈㄹ",
+    "꺼져", "닥쳐", "엿먹어",
+    # 영문
+    "fuck", "shit", "bitch",
+}
+
 _pipeline = None
 _load_lock = threading.Lock()
 
@@ -66,15 +81,25 @@ def _load_pipeline():
 def contains_profanity(text: str | None) -> bool:
     """문자열에 욕설·혐오 표현이 포함됐는지 판정.
 
+    1차: 일상 비속어 사전 (`_LOCAL_PROFANITY_WORDS`, 부분 문자열 매칭).
+    2차: ML 분류 (`smilegate-ai/kor_unsmile`, 9개 혐오 라벨, _THRESHOLD 초과).
+    사전 OR ML 어느 쪽이라도 양성이면 True.
+
     Args:
         text: 검사 대상 (None / 빈 문자열은 False 반환).
 
     Returns:
-        True  = 욕설·혐오 라벨 score 가 _THRESHOLD(0.5) 초과 시.
-        False = clean 또는 모든 차단 라벨 임계치 미만, 입력 부재, 또는 모델 호출 실패 시 (fail-open).
+        True  = 사전 매칭 OR ML 라벨 score 가 _THRESHOLD(0.5) 초과 시.
+        False = clean, 입력 부재, 또는 ML 호출 실패 시 (fail-open — 사전 매칭은 항상 동작).
     """
     if not text or not text.strip():
         return False
+    # 1차: 일상 비속어 사전 (부분 문자열). lower() 로 영문 대소문자 무시
+    cleaned = text.strip().lower()
+    for word in _LOCAL_PROFANITY_WORDS:
+        if word in cleaned:
+            return True
+    # 2차: ML 분류 (혐오·차별 라벨)
     try:
         pipe = _load_pipeline()
         result = pipe(text)
