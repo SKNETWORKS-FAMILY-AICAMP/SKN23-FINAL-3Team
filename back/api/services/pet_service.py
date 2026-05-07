@@ -28,6 +28,8 @@ from fastapi import HTTPException, status
 from schemas.pet import PetCreate, PetUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from utils.profanity_filter import contains_profanity
+
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
 def _assert_owner(pet: Pet, current_user_id: int) -> None:
@@ -109,6 +111,13 @@ async def create_pet(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="반려견 성별(gender)은 필수 항목입니다.",
+        )
+
+    # 욕설 필터 (이름 — 정책 #71)
+    if contains_profanity(data.name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
         )
 
     # FK 무결성 검증
@@ -214,6 +223,13 @@ async def update_pet(
 
     if not update_data:
         return pet
+
+    # 욕설 필터 (이름 — 정책 #71)
+    if "name" in update_data and contains_profanity(update_data["name"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
+        )
 
     # FK 무결성 검증
     if "breed_id" in update_data:

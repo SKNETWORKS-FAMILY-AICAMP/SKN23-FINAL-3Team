@@ -28,6 +28,8 @@ from schemas.user import UserUpdate
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from utils.profanity_filter import contains_profanity
+
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
@@ -178,6 +180,13 @@ async def update_user(
 
     if not update_data:
         return user  # 변경 사항 없음
+
+    # 욕설 필터 (닉네임 — 정책 #71)
+    if "nickname" in update_data and contains_profanity(update_data["nickname"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
+        )
 
     # FK 무결성 검증
     if "profile_id" in update_data:

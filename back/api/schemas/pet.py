@@ -14,22 +14,33 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 from services.common_service import calculate_age
 
 from core.type.gender import PetGenderEnum
+from utils.validation import clean_text, validate_pet_birth
 
 
 class PetCreate(BaseModel):
     """반려견 등록 요청."""
 
     breed_id: int = Field(..., gt=0, description="견종 ID (breeds 테이블 참조)")
-    name: str = Field(..., min_length=1, max_length=50, description="반려견 이름")
-    birth_date: date | None = Field(None, description="생년월일 (YYYY-MM-DD)")
+    name: str = Field(..., description="반려견 이름 (1~20자, trim 후. 욕설 검사는 service 단)")
+    birth_date: date | None = Field(None, description="생년월일 (오늘-30년 ~ 오늘)")
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부 (미입력 가능)")
     type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID (keywords 테이블 참조)")
     selected_tags: list[Any] | None = Field(None, description="선택한 성격 태그 목록 (JSON)")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, v: str | None) -> str | None:
+        return clean_text(v, min_length=1, max_length=20, label="반려견 이름")
+
+    @field_validator("birth_date", mode="after")
+    @classmethod
+    def _check_pet_birth(cls, v: date | None) -> date | None:
+        return validate_pet_birth(v)
 
 
 class PetUpdate(BaseModel):
@@ -40,12 +51,22 @@ class PetUpdate(BaseModel):
     """
 
     breed_id: int | None = Field(None, gt=0, description="견종 ID")
-    name: str | None = Field(None, min_length=1, max_length=50, description="이름")
-    birth_date: date | None = Field(None, description="생년월일")
+    name: str | None = Field(None, description="반려견 이름 (1~20자, trim 후. 욕설 검사는 service 단)")
+    birth_date: date | None = Field(None, description="생년월일 (오늘-30년 ~ 오늘)")
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부")
     type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID")
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, v: str | None) -> str | None:
+        return clean_text(v, min_length=1, max_length=20, label="반려견 이름")
+
+    @field_validator("birth_date", mode="after")
+    @classmethod
+    def _check_pet_birth(cls, v: date | None) -> date | None:
+        return validate_pet_birth(v)
 
 
 class PetResponse(BaseModel):
