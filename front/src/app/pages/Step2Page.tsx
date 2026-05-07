@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
+  ArrowLeft,
   Camera,
   ChevronRight,
   MoreHorizontal,
@@ -524,11 +525,9 @@ export default function ProfileSetupPage() {
   const handleStart = async () => {
     if (isUserOnlyMode) {
       // 정책 #62 — 보호자 입력 검증 (닉네임 1~20, 생년월일 1900 ~ 오늘-14년).
-      // 닉네임은 빈 입력일 때 기존 값 유지하므로 비어있지 않은 경우만 검증.
-      if (form.guardianName) {
-        const nicknameError = validateNickname(form.guardianName);
-        if (nicknameError) { alert(nicknameError); return; }
-      }
+      // 빈 입력도 거부 (사용자 결정 2026-05-07 — 닉네임 필수).
+      const nicknameError = validateNickname(form.guardianName);
+      if (nicknameError) { alert(nicknameError); return; }
       const userBirthError = validateUserBirth(form.guardianBirth);
       if (userBirthError) { alert(userBirthError); return; }
 
@@ -673,7 +672,15 @@ export default function ProfileSetupPage() {
 
   return (
     <div className="min-h-screen bg-[#F6F1EC]">
-      <header className="border-b-[3px] border-[#3DA0FF] bg-[#F6F1EC] px-4 py-4 text-center">
+      <header className="relative border-b-[3px] border-[#3DA0FF] bg-[#F6F1EC] px-4 py-4 text-center">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="뒤로가기"
+          className="absolute left-3 top-1/2 -translate-y-1/2 grid h-9 w-9 place-items-center rounded-full text-[#8A837B] transition hover:bg-[#EFE8E0]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
         <h1 className="text-sm font-bold tracking-tight text-[#2F2B27]">
           {isUserOnlyMode ? "보호자 정보 수정" : isEditMode ? "정보 수정" : isPetOnlyMode ? "반려견 추가" : "프로필 설정"}
         </h1>
@@ -685,11 +692,15 @@ export default function ProfileSetupPage() {
             <h2 className="text-[16px] font-bold text-[#37322D]">보호자 정보</h2>
 
             <div className="mt-4">
-              <label className="mb-2 block text-xs font-medium text-[#8D867E]">닉네임</label>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-xs font-medium text-[#8D867E]">닉네임</label>
+                <span className="text-[11px] text-[#B5ADA4]">{form.guardianName.trim().length}/20</span>
+              </div>
               <input
                 value={form.guardianName}
                 onChange={(e) => setForm((prev) => ({ ...prev, guardianName: e.target.value }))}
                 placeholder="보호자님"
+                maxLength={20}
                 className="h-12 w-full rounded-[10px] border border-[#E3DDD7] px-4 text-sm outline-none placeholder:text-[#BBB3AB] focus:border-[#F0A777]"
               />
             </div>
@@ -800,7 +811,7 @@ export default function ProfileSetupPage() {
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg"
                 className="hidden"
                 onChange={handleImageChange}
               />
@@ -817,6 +828,7 @@ export default function ProfileSetupPage() {
                   )}
                 </div>
                 <span className="mt-3 text-[11px] text-[#A19A92]">클릭하여 사진 추가</span>
+                <span className="mt-1 text-[10px] text-[#B5ADA4]">PNG · JPEG · 5MB 이하</span>
               </button>
             </div>
 
@@ -976,14 +988,26 @@ export default function ProfileSetupPage() {
             </div>
           </section>}
 
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={isSubmitting}
-            className="w-full rounded-[16px] bg-[#DB5F2E] px-6 py-5 text-lg font-bold text-white shadow-sm transition hover:bg-[#D05523] disabled:opacity-60"
-          >
-            {isSubmitting ? "저장 중..." : isUserOnlyMode ? "수정 완료" : isEditMode ? "수정 완료" : isPetOnlyMode ? "추가하기 🐾" : "시작하기! 🐾"}
-          </button>
+          <div className="flex gap-3">
+            {(isUserOnlyMode || isEditMode || isPetOnlyMode) && (
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                disabled={isSubmitting}
+                className="rounded-[16px] border border-[#E3DDD7] bg-white px-6 py-5 text-lg font-semibold text-[#7B746B] transition hover:bg-[#F4F1EE] disabled:opacity-60"
+              >
+                취소
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={isSubmitting}
+              className="flex-1 rounded-[16px] bg-[#DB5F2E] px-6 py-5 text-lg font-bold text-white shadow-sm transition hover:bg-[#D05523] disabled:opacity-60"
+            >
+              {isSubmitting ? "저장 중..." : isUserOnlyMode ? "수정 완료" : isEditMode ? "수정 완료" : isPetOnlyMode ? "추가하기 🐾" : "시작하기! 🐾"}
+            </button>
+          </div>
         </div>
       </main>
 
