@@ -11,6 +11,13 @@ import { getMe, updateUser } from "../services/userService";
 import { createPet, updatePet } from "../services/petService";
 import { getAllBreeds, getTop10Breeds, type Breed } from "../services/breedService";
 import { uploadImage } from "../services/imageService";
+import {
+  validateNickname,
+  validatePetName,
+  validateUserBirth,
+  validatePetBirth,
+  validateImageSize,
+} from "../utils/validation";
 
 type GuardianGender = "male" | "female" | "other" | undefined;
 type PetGender = "male" | "female" | undefined;
@@ -515,6 +522,14 @@ export default function ProfileSetupPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 정책 #72-A — 5MB 사전 검증 (Nginx·백엔드 매직바이트 검증보다 먼저 차단)
+    const sizeError = validateImageSize(file);
+    if (sizeError) {
+      alert(sizeError);
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === "string") {
@@ -533,6 +548,15 @@ export default function ProfileSetupPage() {
 
   const handleStart = async () => {
     if (isUserOnlyMode) {
+      // 정책 #62 — 보호자 입력 검증 (닉네임 1~20, 생년월일 1900 ~ 오늘-14년).
+      // 닉네임은 빈 입력일 때 기존 값 유지하므로 비어있지 않은 경우만 검증.
+      if (form.guardianName) {
+        const nicknameError = validateNickname(form.guardianName);
+        if (nicknameError) { alert(nicknameError); return; }
+      }
+      const userBirthError = validateUserBirth(form.guardianBirth);
+      if (userBirthError) { alert(userBirthError); return; }
+
       setIsSubmitting(true);
       try {
         const userId = editState?.userId;
@@ -546,14 +570,23 @@ export default function ProfileSetupPage() {
         navigate("/mypage", { replace: true });
       } catch (err) {
         console.error("보호자 정보 저장 실패", err);
-        alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+        // 백엔드 detail (욕설 검출 #71 — "부적절한 단어가 포함되어 있습니다" 등) 그대로 표시
+        const message = err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.";
+        alert(message);
       } finally {
         setIsSubmitting(false);
       }
       return;
     }
-    if (!form.petName) {
-      alert("반려견 이름을 입력해주세요.");
+    // 정책 #63 — 반려견 입력 검증 (이름 1~20, 생년월일 오늘-30년 ~ 오늘)
+    const petNameError = validatePetName(form.petName);
+    if (petNameError) {
+      alert(petNameError);
+      return;
+    }
+    const petBirthError = validatePetBirth(form.birthDate);
+    if (petBirthError) {
+      alert(petBirthError);
       return;
     }
     if (selectedBreedId === null) {
@@ -655,7 +688,9 @@ export default function ProfileSetupPage() {
       }
     } catch (err) {
       console.error("프로필 저장 실패", err);
-      alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+      // 백엔드 detail (욕설 검출 #71 / 매직바이트 #72-A 등) 그대로 표시
+      const message = err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.";
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
