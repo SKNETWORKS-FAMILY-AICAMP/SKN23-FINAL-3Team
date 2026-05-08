@@ -27,8 +27,9 @@ from utils.validation import clean_text
 
 # 다이어리 본문(content)은 정책상 상한 없음 — DB TEXT 컬럼 안전 영역으로 보수적 cap.
 _DIARY_CONTENT_MAX = 50000
-# 6하원칙 슬롯 길이 cap (정책 = 0~100자, NULL 허용)
-_DIARY_6W_MAX = 100
+# 6하원칙 슬롯 길이 cap (정책 = 0~1000자, NULL 허용. 자유채팅 다이어리에서 _conversation 텍스트가
+# what_text 에 박히는 흐름 정합 — diary_response_service.py:619)
+_DIARY_6W_MAX = 1000
 # 다이어리 제목 (정책 = 1~50자)
 _DIARY_TITLE_MIN = 1
 _DIARY_TITLE_MAX = 50
@@ -44,13 +45,13 @@ class DiaryCreate(BaseModel):
 
     pet_id: int = Field(..., gt=0, description="반려견 ID (pets 테이블 참조)")
 
-    # 6하원칙 (정책 = 0~100자, NULL 허용. 욕설 검사는 service 단)
-    when_text: str | None = Field(None, description="언제 (0~100자)")
-    where_text: str | None = Field(None, description="어디서 (0~100자)")
-    who_text: str | None = Field(None, description="누구와 (0~100자)")
-    what_text: str | None = Field(None, description="무엇을 (0~100자)")
-    how_text: str | None = Field(None, description="어떻게 (0~100자)")
-    why_text: str | None = Field(None, description="왜 (0~100자)")
+    # 6하원칙 (정책 = 0~1000자, NULL 허용. 욕설 검사는 service 단)
+    when_text: str | None = Field(None, description="언제 (0~1000자)")
+    where_text: str | None = Field(None, description="어디서 (0~1000자)")
+    who_text: str | None = Field(None, description="누구와 (0~1000자)")
+    what_text: str | None = Field(None, description="무엇을 (0~1000자)")
+    how_text: str | None = Field(None, description="어떻게 (0~1000자)")
+    why_text: str | None = Field(None, description="왜 (0~1000자)")
 
     # AI 생성 필드 (선택). title 은 None 허용(AI 자동 생성), 값 들어오면 1~50자.
     title: str | None = Field(None, description="제목 (1~50자, 미입력 시 AI 자동 생성)")
@@ -94,13 +95,13 @@ class DiaryUpdate(BaseModel):
 
     pet_id: int | None = Field(None, gt=0, description="반려견 ID")
 
-    # 6하원칙 (정책 = 0~100자, NULL 허용)
-    when_text: str | None = Field(None, description="언제 (0~100자)")
-    where_text: str | None = Field(None, description="어디서 (0~100자)")
-    who_text: str | None = Field(None, description="누구와 (0~100자)")
-    what_text: str | None = Field(None, description="무엇을 (0~100자)")
-    how_text: str | None = Field(None, description="어떻게 (0~100자)")
-    why_text: str | None = Field(None, description="왜 (0~100자)")
+    # 6하원칙 (정책 = 0~1000자, NULL 허용)
+    when_text: str | None = Field(None, description="언제 (0~1000자)")
+    where_text: str | None = Field(None, description="어디서 (0~1000자)")
+    who_text: str | None = Field(None, description="누구와 (0~1000자)")
+    what_text: str | None = Field(None, description="무엇을 (0~1000자)")
+    how_text: str | None = Field(None, description="어떻게 (0~1000자)")
+    why_text: str | None = Field(None, description="왜 (0~1000자)")
 
     # AI 생성 필드 + 이미지 바인딩
     title: str | None = Field(None, description="제목 (1~50자)")
