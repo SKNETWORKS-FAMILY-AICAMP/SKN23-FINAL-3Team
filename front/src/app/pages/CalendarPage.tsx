@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getDiary, getDiaryCalendar, updateDiary, type DiaryRecord } from '../services/dbDiaryService';
+import { getDiary, getDiaryCalendar, updateDiary, deleteDiary, type DiaryRecord } from '../services/dbDiaryService';
 import { getImage } from '../services/imageService';
 import DiaryDetailView, { type DiaryViewModel } from '../components/DiaryDetailView';
 
@@ -174,6 +174,13 @@ export default function CalendarPage() {
               onUpdate={async (title, body) => {
                 await updateDiary(selectedDiary.id, { title, content: body });
                 setSelectedDiary({ ...selectedDiary, title, content: body });
+              }}
+              onDelete={async () => {
+                await deleteDiary(selectedDiary.id);
+                // 캘린더 셀의 감정 이모지 제거 + 상세 화면 닫기
+                setEmotions((prev) => prev.filter((e) => e.diaryId !== selectedDiary.id));
+                setSelectedDiary(null);
+                setSelectedImageUrl(null);
               }}
             />
           )}

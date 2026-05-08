@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { getPlaceByName, type FacilityCard } from '../services/chatService';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import DiaryNoteCard from './DiaryNoteCard';
 import PlaceDetailCard from './PlaceDetailCard';
+import ConfirmModal from './ConfirmModal';
 
 /**
  * DiaryDetailView 가 받는 정규형 일기 데이터.
@@ -33,6 +35,12 @@ interface Props {
    * 호출처는 `(title, body) => Promise<void>` 형태로 백엔드 업데이트 + 부모 state 갱신을 처리.
    */
   onUpdate?: (title: string, body: string) => Promise<void>;
+  /**
+   * 삭제 콜백. 미전달 시 🗑 버튼이 표시되지 않음.
+   * 호출처는 백엔드 deleteDiary + 부모 state 갱신 + 화면 복귀(onBack 호출)를 처리.
+   * 호출 시점에는 본 컴포넌트가 ConfirmModal 로 사용자 확인을 이미 받은 후.
+   */
+  onDelete?: () => Promise<void>;
 }
 
 /**
@@ -52,6 +60,7 @@ export default function DiaryDetailView({
   onBack,
   headerTitle = '🐾 그림일기',
   onUpdate,
+  onDelete,
 }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -62,6 +71,10 @@ export default function DiaryDetailView({
   const [placeDetail, setPlaceDetail] = useState<FacilityCard | null>(null);
   const [placeDetailLoading, setPlaceDetailLoading] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
+
+  // 삭제 확인 — ConfirmModal 재사용
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const favorite = useFavoriteToggle();
 
@@ -104,6 +117,20 @@ export default function DiaryDetailView({
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!onDelete || deleting) return;
+    setDeleting(true);
+    try {
+      await onDelete();
+      setDeleteOpen(false);
+      // 호출처가 onBack / state 갱신 처리. 본 컴포넌트는 모달만 닫음.
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '삭제에 실패했어요. 다시 시도해주세요.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const showModal = placeDetail !== null;
 
   return (
@@ -128,6 +155,16 @@ export default function DiaryDetailView({
               className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
             >
               ✏️ 수정
+            </button>
+          )}
+          {!isEditing && onDelete && (
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              aria-label="다이어리 삭제"
+              className="grid h-7 w-7 place-items-center rounded-full border border-[#F5D6C8] bg-white text-[#8B6355] transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
           {isEditing && (
@@ -185,6 +222,18 @@ export default function DiaryDetailView({
           favoriteToggling={favorite.isToggling(placeDetail.content_id)}
         />
       )}
+
+      <ConfirmModal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="다이어리를 삭제하시겠습니까?"
+        description="삭제된 다이어리는 복구할 수 없습니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        loading={deleting}
+      />
     </>
   );
 }

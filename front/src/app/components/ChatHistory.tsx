@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, MessageSquare, Clock } from 'lucide-react'
+import { ArrowLeft, MessageSquare, Clock, Pencil, Trash2, Check, X } from 'lucide-react'
 import { getMe } from '../services/userService'
-import { getChatRooms, getMessages, getPlaceByName, type ChatRoom, type ChatMessage } from '../services/chatService'
+import {
+  getChatRooms,
+  getMessages,
+  getPlaceByName,
+  renameChatRoom,
+  deleteChatRoom,
+  type ChatRoom,
+  type ChatMessage,
+} from '../services/chatService'
 import { type PlaceResult } from '../services/placeService'
+import ConfirmModal from './ConfirmModal'
 
 interface Props {
   onBack: () => void
@@ -89,6 +98,61 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
   const [msgLoading, setMsgLoading] = useState(false)
   const [loadingPlace, setLoadingPlace] = useState<string | null>(null)
   const [notFoundPlace, setNotFoundPlace] = useState<string | null>(null)
+  // 인라인 이름 편집 — 한 번에 한 채팅방만 편집 가능 가정
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [editingSaving, setEditingSaving] = useState(false)
+  // 삭제 확인 모달 (ConfirmModal 재사용 — 5/7 라운드 1 신설)
+  const [roomToDelete, setRoomToDelete] = useState<ChatRoom | null>(null)
+  const [deletingRoom, setDeletingRoom] = useState(false)
+
+  const handleStartEdit = (e: React.MouseEvent, room: ChatRoom) => {
+    e.stopPropagation()
+    setEditingRoomId(room.id)
+    setEditingTitle(room.title)
+  }
+
+  const handleCancelEdit = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setEditingRoomId(null)
+    setEditingTitle('')
+  }
+
+  const handleSaveEdit = async (e: React.MouseEvent | React.KeyboardEvent, room: ChatRoom) => {
+    e.stopPropagation()
+    if (editingSaving) return
+    const next = editingTitle.trim()
+    if (!next || next === room.title) {
+      handleCancelEdit()
+      return
+    }
+    setEditingSaving(true)
+    try {
+      const updated = await renameChatRoom(room.id, next)
+      setRooms((prev) => prev.map((r) => (r.id === room.id ? updated : r)))
+      setEditingRoomId(null)
+      setEditingTitle('')
+    } catch (err) {
+      // apiClient normalizeDetail 이 422 ValidationError / 400 욕설 detail 을 한국어로 추출
+      alert(err instanceof Error ? err.message : '채팅방 이름 변경에 실패했어요')
+    } finally {
+      setEditingSaving(false)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!roomToDelete || deletingRoom) return
+    setDeletingRoom(true)
+    try {
+      await deleteChatRoom(roomToDelete.id)
+      setRooms((prev) => prev.filter((r) => r.id !== roomToDelete.id))
+      setRoomToDelete(null)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '채팅방 삭제에 실패했어요')
+    } finally {
+      setDeletingRoom(false)
+    }
+  }
 
 
   useEffect(() => {
@@ -218,27 +282,97 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
           </div>
         ) : (
           <div className="space-y-2">
-            {rooms.map((room) => (
-              <button
-                key={room.id}
-                onClick={() => handleSelectRoom(room)}
-                className="w-full rounded-2xl border border-[#F5D6C8] bg-white p-4 text-left transition hover:border-[#F4845F] hover:bg-[#FFF0E6]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFE8D6]">
-                    <MessageSquare className="h-4 w-4 text-[#F4845F]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#3D2B1F]">{room.title}</p>
-                    <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[#B08B7A]">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(room.updated_at)}
+            {rooms.map((room) => {
+              const isEditing = editingRoomId === room.id
+              return (
+                <div
+                  key={room.id}
+                  role="button"
+                  tabIndex={isEditing ? -1 : 0}
+                  onClick={() => !isEditing && handleSelectRoom(room)}
+                  onKeyDown={(e) => {
+                    if (!isEditing && (e.key === 'Enter' || e.key === ' ')) handleSelectRoom(room)
+                  }}
+                  className={`w-full cursor-pointer rounded-2xl border bg-white p-4 text-left transition ${
+                    isEditing
+                      ? 'border-[#F4845F] cursor-default'
+                      : 'border-[#F5D6C8] hover:border-[#F4845F] hover:bg-[#FFF0E6]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFE8D6]">
+                      <MessageSquare className="h-4 w-4 text-[#F4845F]" />
                     </div>
+                    <div className="min-w-0 flex-1">
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          value={editingTitle}
+                          onChange={(e) => setEditingTitle(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit(e, room)
+                            else if (e.key === 'Escape') handleCancelEdit()
+                          }}
+                          maxLength={50}
+                          className="w-full rounded-lg border border-[#F4845F] bg-white px-2 py-1 text-sm font-semibold text-[#3D2B1F] outline-none"
+                        />
+                      ) : (
+                        <p className="truncate text-sm font-semibold text-[#3D2B1F]">{room.title}</p>
+                      )}
+                      <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[#B08B7A]">
+                        <Clock className="h-3 w-3" />
+                        {formatDate(room.updated_at)}
+                      </div>
+                    </div>
+                    {isEditing ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => handleSaveEdit(e, room)}
+                          disabled={editingSaving}
+                          aria-label="저장"
+                          className="grid h-7 w-7 place-items-center rounded-full bg-[#F4845F] text-white transition hover:bg-[#e8764f] disabled:opacity-50"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          disabled={editingSaving}
+                          aria-label="취소"
+                          className="grid h-7 w-7 place-items-center rounded-full border border-[#F5D6C8] text-[#8B6355] transition hover:bg-[#FFF0E6] disabled:opacity-50"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => handleStartEdit(e, room)}
+                          aria-label={`${room.title} 이름 수정`}
+                          className="grid h-7 w-7 place-items-center rounded-full text-[#8B6355] transition hover:bg-[#FFF0E6] hover:text-[#F4845F]"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRoomToDelete(room)
+                          }}
+                          aria-label={`${room.title} 삭제`}
+                          className="grid h-7 w-7 place-items-center rounded-full text-[#8B6355] transition hover:bg-red-50 hover:text-red-500"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <ArrowLeft className="h-4 w-4 rotate-180 text-[#D0B5A8] shrink-0" />
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -251,6 +385,22 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
           ← 챗봇 대화로 돌아가기
         </button>
       </div>
+
+      <ConfirmModal
+        isOpen={roomToDelete !== null}
+        onClose={() => setRoomToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="채팅방을 삭제하시겠습니까?"
+        description={
+          roomToDelete
+            ? `"${roomToDelete.title}" 채팅방이 삭제됩니다.\n저장된 메시지는 보존되지만 표시되지 않을 수 있습니다.`
+            : ''
+        }
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        loading={deletingRoom}
+      />
     </div>
   )
 }

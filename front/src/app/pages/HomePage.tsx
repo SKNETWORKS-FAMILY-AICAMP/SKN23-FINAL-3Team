@@ -9,6 +9,7 @@ import ChatHistory from '../components/ChatHistory';
 import PlaceDetailCard from '../components/PlaceDetailCard';
 import DiaryNoteCard from '../components/DiaryNoteCard';
 import DiaryDetailView, { type DiaryViewModel } from '../components/DiaryDetailView';
+import ConfirmModal from '../components/ConfirmModal';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import type { GeneratedDiary } from '../services/diaryService';
 import type { PlaceResult } from '../services/placeService';
@@ -227,7 +228,7 @@ function DiaryAlbum({
 }: {
   diaries: DiaryEntry[];
   onBack: () => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
   onUpdate?: (id: string, title: string, body: string) => Promise<void>;
   initialFavoriteIds?: Set<string>;
 }) {
@@ -296,6 +297,11 @@ function DiaryAlbum({
                 setSelected({ ...selected, title, body });
               }
               : undefined}
+            onDelete={async () => {
+              // 부모 DiaryAlbum 의 onDelete prop 활용 — 백엔드 deleteDiary + 앨범 list filter
+              await onDelete(selected.id);
+              setSelected(null);
+            }}
           />
         </div>
       </div>
@@ -569,6 +575,9 @@ export default function HomePage({
   const [chatKey, setChatKey] = useState(0);
   const [savedDiaryId, setSavedDiaryId] = useState<number | null>(null);
   const [isEditingDiary, setIsEditingDiary] = useState(false);
+  // (a) 다이어리 결과 화면 삭제 — 자동저장 완료 후만 활성, 삭제 시 앨범으로 복귀
+  const [resultDeleteOpen, setResultDeleteOpen] = useState(false);
+  const [resultDeleting, setResultDeleting] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
@@ -889,6 +898,22 @@ export default function HomePage({
     }
   };
 
+  const handleConfirmDeleteResult = async () => {
+    if (!savedDiaryId || resultDeleting) return;
+    setResultDeleting(true);
+    try {
+      await deleteDiary(savedDiaryId);
+      setAlbumDiaries((prev) => prev.filter((d) => d.id !== String(savedDiaryId)));
+      setResultDeleteOpen(false);
+      setDiaryResult(null);
+      setShowAlbum(true);  // 결과 화면에서 삭제 → 앨범 목록으로 복귀
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '삭제에 실패했어요.');
+    } finally {
+      setResultDeleting(false);
+    }
+  };
+
   return (
     <>
       <div className="h-screen bg-[#f8f8f6] pt-16">
@@ -949,11 +974,14 @@ export default function HomePage({
                     initialFavoriteIds={albumFavoriteIds}
                     onBack={() => setShowAlbum(false)}
                     onDelete={async (id) => {
+                      // throw 흐름 = DiaryDetailView 의 ConfirmModal 이 catch + alert 처리.
+                      // 단, 앨범 목록의 ✕ 버튼은 confirm() 분기라 여기서 alert 도 같이 호출.
                       try {
                         await deleteDiary(Number(id));
                         setAlbumDiaries((prev) => prev.filter((d) => d.id !== id));
-                      } catch {
-                        alert('삭제에 실패했어요.');
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : '삭제에 실패했어요.');
+                        throw err;
                       }
                     }}
                     onUpdate={async (id, title, body) => {
@@ -999,12 +1027,22 @@ export default function HomePage({
                             {autoSaveState === 'done' && !isEditingDiary && <span className="text-green-500">✓ 저장 완료</span>}
                             {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
                             {savedDiaryId && !isEditingDiary && autoSaveState === 'done' && (
-                              <button
-                                onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
-                                className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
-                              >
-                                ✏️ 수정
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
+                                  className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                                >
+                                  ✏️ 수정
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setResultDeleteOpen(true)}
+                                  aria-label="다이어리 삭제"
+                                  className="grid h-7 w-7 place-items-center rounded-full border border-[#F5D6C8] bg-white text-[#8B6355] transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                                >
+                                  🗑
+                                </button>
+                              </>
                             )}
                             {isEditingDiary && (
                               <>
@@ -1153,6 +1191,18 @@ export default function HomePage({
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={resultDeleteOpen}
+        onClose={() => setResultDeleteOpen(false)}
+        onConfirm={handleConfirmDeleteResult}
+        title="다이어리를 삭제하시겠습니까?"
+        description="삭제된 다이어리는 복구할 수 없습니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        loading={resultDeleting}
+      />
 
       {showPlacePanel && autoPlace && (
         <PlaceDetailCard
