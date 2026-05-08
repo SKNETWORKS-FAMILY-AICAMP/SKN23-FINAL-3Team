@@ -57,7 +57,7 @@ function PetDetailModal({ pet, onClose, petPhotos }: { pet: PetCard | null; onCl
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-5">
-          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
+          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-linear-to-br from-orange-100 to-amber-50">
             {petPhotos[pet.id] ? (
               <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
             ) : (
@@ -291,7 +291,7 @@ export default function MyPage() {
         {/* 흐린 배경 레이아웃 (미리보기) */}
         <div className="pointer-events-none select-none opacity-30 blur-sm">
           <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
-            <div className="overflow-hidden rounded-[36px] bg-gradient-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100">
+            <div className="overflow-hidden rounded-[36px] bg-linear-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100">
               <div className="h-8 w-48 rounded-full bg-orange-100" />
               <div className="mt-4 h-10 w-80 rounded-xl bg-slate-200" />
               <div className="mt-3 h-5 w-64 rounded-lg bg-slate-100" />
@@ -316,7 +316,7 @@ export default function MyPage() {
             className="w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl ring-1 ring-orange-100"
           >
             {/* 상단 오렌지 배너 */}
-            <div className="bg-gradient-to-br from-orange-400 to-orange-500 px-8 py-10 text-center">
+            <div className="bg-linear-to-br from-orange-400 to-orange-500 px-8 py-10 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
                 <Lock className="h-8 w-8 text-white" />
               </div>
@@ -378,13 +378,13 @@ export default function MyPage() {
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden rounded-[36px] bg-gradient-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100 lg:p-10"
+          className="overflow-hidden rounded-[36px] bg-linear-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100 lg:p-10"
         >
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-center">
             {/* 왼쪽: 프로필 사진 + 인사말 */}
             <div className="flex items-center gap-6">
               <div className="relative shrink-0">
-                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
+                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
                   {user?.profile_image_url ? (
                     <img src={user.profile_image_url} alt="프로필" className="h-full w-full object-cover" />
                   ) : (
@@ -530,7 +530,7 @@ export default function MyPage() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                           <div className="flex items-start gap-4">
-                            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
+                            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-linear-to-br from-orange-100 to-amber-50">
                               <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-3xl">
                                 {petPhotos[pet.id] ? (
                                   <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />

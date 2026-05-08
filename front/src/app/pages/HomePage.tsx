@@ -39,7 +39,7 @@ function HomeIntro({
   onGoMypage: () => void;
 }) {
   return (
-    <div className="h-full w-full overflow-hidden bg-gradient-to-b from-[#F1F1F3] to-[#ECEDEA]">
+    <div className="h-full w-full overflow-hidden bg-linear-to-b from-[#F1F1F3] to-[#ECEDEA]">
       <div className="relative h-full overflow-hidden">
         {/* 오른쪽 영상 */}
         <div className="absolute inset-y-0 right-0 w-[58%] overflow-hidden">
@@ -143,7 +143,7 @@ function HomeIntro({
 
 function MapIntro({ onStartMap }: { onStartMap: () => void }) {
   return (
-    <div className="h-full w-full overflow-hidden bg-gradient-to-b from-[#EEF3F1] to-[#E8EFED]">
+    <div className="h-full w-full overflow-hidden bg-linear-to-b from-[#EEF3F1] to-[#E8EFED]">
       <div className="relative h-full overflow-hidden">
         {/* 오른쪽 영상 */}
         <div className="absolute inset-y-0 right-0 w-[58%] overflow-hidden">

@@ -205,7 +205,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
+    <div className="min-h-screen bg-linear-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex gap-6">
           {/* Left Sidebar - Month List */}
