@@ -1,5 +1,9 @@
 // 백엔드 REST API (users, pets, breeds, diaries, chat, images 등)
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+// fallback: VITE_API_URL 미지정 시, 페이지가 열린 호스트의 8000 포트로 자동 결정.
+// → 호스트 노트북: http://localhost:8000, 같은 Wi-Fi 다른 노트북: http://<호스트IP>:8000
+const BASE_URL =
+  import.meta.env.VITE_API_URL ??
+  `${window.location.protocol}//${window.location.hostname}:8000`
 
 function getToken(): string | null {
   return localStorage.getItem('access_token')

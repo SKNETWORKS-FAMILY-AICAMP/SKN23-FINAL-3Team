@@ -1,7 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// fallback: VITE_API_URL 미지정 시, 페이지가 열린 호스트의 8000 포트로 자동 결정
+// → 같은 Wi-Fi 다른 노트북에서 접속해도 그 노트북이 자기 localhost 가 아닌 호스트 IP 로 호출
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:8000`;
 const REDIRECT_URI = `${window.location.origin}/oauth/callback`;
 
 export function OAuthCallbackPage() {
