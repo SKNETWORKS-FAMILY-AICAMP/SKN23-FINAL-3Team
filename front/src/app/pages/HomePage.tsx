@@ -6,6 +6,10 @@ import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
 import ChatBot from '../components/ChatBot';
 import ChatHistory from '../components/ChatHistory';
+import PlaceDetailCard from '../components/PlaceDetailCard';
+import DiaryNoteCard from '../components/DiaryNoteCard';
+import DiaryDetailView, { type DiaryViewModel } from '../components/DiaryDetailView';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import type { GeneratedDiary } from '../services/diaryService';
 import type { PlaceResult } from '../services/placeService';
 import { createDiary, updateDiary, deleteDiary, toggleFavorite as toggleFavoriteApi } from '../services/dbDiaryService';
@@ -228,10 +232,6 @@ function DiaryAlbum({
   initialFavoriteIds?: Set<string>;
 }) {
   const [selected, setSelected] = useState<DiaryEntry | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editBody, setEditBody] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
 
@@ -275,119 +275,28 @@ function DiaryAlbum({
     }
   };
 
-  const handleSaveAlbumEdit = async () => {
-    if (!selected || !onUpdate) return;
-    setEditSaving(true);
-    try {
-      await onUpdate(selected.id, editTitle, editBody);
-      setSelected({ ...selected, title: editTitle, body: editBody });
-      setIsEditing(false);
-    } catch {
-      alert('수정에 실패했어요. 다시 시도해주세요.');
-    } finally {
-      setEditSaving(false);
-    }
-  };
-
   if (selected) {
+    const diaryVm: DiaryViewModel = {
+      title: selected.title,
+      body: selected.body || '',
+      summary: selected.summary,
+      imageUrl: selected.imageUrl,
+      placeName: selected.place || undefined,
+    };
     return (
       <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
         <div className="mx-auto w-full max-w-[720px]">
-          <div className="mb-4 flex items-center gap-3">
-            <button
-              onClick={() => { setSelected(null); setIsEditing(false); }}
-              className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              ← 목록으로
-            </button>
-            <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
-            <div className="ml-auto flex items-center gap-2">
-              {!isEditing && onUpdate && (
-                <button
-                  onClick={() => { setEditTitle(selected.title); setEditBody(selected.body || ''); setIsEditing(true); }}
-                  className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-                >
-                  ✏️ 수정
-                </button>
-              )}
-              {isEditing && (
-                <>
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-400 transition hover:bg-gray-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleSaveAlbumEdit}
-                    disabled={editSaving}
-                    className="rounded-full bg-[#F4845F] px-3 py-1.5 text-xs text-white transition hover:bg-[#e0724e] disabled:opacity-50"
-                  >
-                    {editSaving ? '저장 중...' : '저장'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
-            {/* 마스킹 테이프 */}
-            <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-            <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-
-            {/* 제목/요약 */}
-            <div className="mb-6 text-center">
-              <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-              {isEditing ? (
-                <input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
-                />
-              ) : (
-                <h3 className="mt-2 text-2xl font-bold text-[#F4845F] font-diary">{selected.title}</h3>
-              )}
-              {selected.summary && (
-                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F] font-diary">
-                  ✨ {selected.summary}
-                </div>
-              )}
-              {selected.place && (
-                <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#F0F7FF] px-3 py-1 text-xs font-medium text-[#5B8DB8]">
-                  📍 {selected.place}
-                </div>
-              )}
-            </div>
-
-            {/* 이미지 */}
-            <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
-              {selected.imageUrl ? (
-                <img src={selected.imageUrl} alt={selected.title} className="w-full h-auto rounded-[16px] object-contain" />
-              ) : (
-                <div className="flex h-48 items-center justify-center text-5xl">🐾</div>
-              )}
-            </div>
-
-            {/* 일기 본문 - 줄 있는 노트 */}
-            {isEditing ? (
-              <textarea
-                value={editBody}
-                onChange={(e) => setEditBody(e.target.value)}
-                rows={10}
-                className="w-full rounded-[20px] border border-[#F4845F] bg-[#FFFCF8] px-5 py-5 text-[15px] leading-[31px] text-[#3D2B1F] outline-none resize-none"
-                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-              />
-            ) : (
-              <div
-                className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-              >
-                <p className="whitespace-pre-wrap text-[17px] leading-[31px] text-[#3D2B1F] font-diary">
-                  {selected.body || '내용이 없어요.'}
-                </p>
-              </div>
-            )}
-          </div>
+          <DiaryDetailView
+            diary={diaryVm}
+            backLabel="← 목록으로"
+            onBack={() => setSelected(null)}
+            onUpdate={onUpdate
+              ? async (title, body) => {
+                await onUpdate(selected.id, title, body);
+                setSelected({ ...selected, title, body });
+              }
+              : undefined}
+          />
         </div>
       </div>
     );
@@ -666,6 +575,8 @@ export default function HomePage({
   const [showPlacePanel, setShowPlacePanel] = useState(false);
   const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  // 다이어리 결과 화면 modal 안의 즐겨찾기 별 — useFavoriteToggle 훅 사용.
+  const autoPlaceFavorite = useFavoriteToggle();
 
   // 홈 진입 시 GPS 자동 요청 + watchPosition으로 지속 추적
   useEffect(() => {
@@ -679,7 +590,7 @@ export default function HomePage({
         (pos) => {
           setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
       );
 
@@ -787,6 +698,23 @@ export default function HomePage({
     setAutoPlace(null);
   }, [location.key]);
 
+  // 외부 페이지 (PlaceFavoritesPage 등) 에서 router state 로 autoPlace 를 전달한 경우 챗봇 자동 트리거.
+  // 진입 1회만 처리하고 history.replace 로 state 정리 (뒤로가기·새로고침 시 중복 트리거 방지).
+  useEffect(() => {
+    const incoming = (location.state as { autoPlace?: PlaceResult } | null)?.autoPlace;
+    if (!incoming) return;
+    setAutoPlace(incoming);
+    setTab('diary');
+    setShowDiaryEditor(false);
+    setShowAlbum(false);
+    setDiaryResult(null);
+    setShowChatHistory(false);
+    setChatKey((k) => k + 1);
+    setDiaryTrigger((prev) => prev + 1);
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   const safePets = useMemo(() => {
     if (Array.isArray(pets) && pets.length > 0) return pets;
     if (pet) return [pet];
@@ -881,7 +809,7 @@ export default function HomePage({
         setAlbumFavoriteIds(new Set(records.filter((d) => d.is_favorite).map((d) => String(d.id))));
         setAlbumDiaries(entries.reverse());
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [showAlbum]);
 
   const handleSaveDiary = (entry: DiaryEntry) => {
@@ -939,7 +867,7 @@ export default function HomePage({
         setAutoSaveState('error');
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaryResult]);
 
   const handleSaveEdit = async () => {
@@ -963,380 +891,307 @@ export default function HomePage({
 
   return (
     <>
-    <div className="h-screen bg-[#f8f8f6] pt-16">
-      <div className="flex h-full overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
-          {/* 왼쪽 메인 영역 */}
-          <div className="flex min-w-0 flex-[2] flex-col border-r border-gray-200 bg-white">
-            <div className="flex border-b border-gray-100 bg-white">
-              <button
-                className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${
-                  tab === 'diary'
+      <div className="h-screen bg-[#f8f8f6] pt-16">
+        <div className="flex h-full overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
+            {/* 왼쪽 메인 영역 */}
+            <div className="flex min-w-0 flex-[2] flex-col border-r border-gray-200 bg-white">
+              <div className="flex border-b border-gray-100 bg-white">
+                <button
+                  className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${tab === 'diary'
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
-                }`}
-                onClick={handleOpenDiaryTab}
-              >
-                <NotebookPen className="h-4 w-4" />
-                강아지 일기장
-              </button>
+                    }`}
+                  onClick={handleOpenDiaryTab}
+                >
+                  <NotebookPen className="h-4 w-4" />
+                  강아지 일기장
+                </button>
 
-              <button
-                className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${
-                  tab === 'map'
+                <button
+                  className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${tab === 'map'
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
-                }`}
-                onClick={() => { setTab('map'); setShowMapSearch(false); setShowDiaryEditor(false); setShowAlbum(false); setDiaryResult(null); }}
-              >
-                <Map className="h-4 w-4" />
-                지도
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-
-              {tab === null && (
-                <HomeIntro
-                  onOpenMap={handleOpenMapTab}
-                  onOpenDiary={handleOpenDiaryTab}
-                  onGoMypage={handleGoMypage}
-                />
-              )}
-
-              {tab === 'diary' && !showDiaryEditor && !diaryResult && !showAlbum && (
-                <DiaryIntro
-                  onStartDiary={() => {
-                    setDiaryTrigger((prev) => prev + 1);
-                  }}
-                  onOpenAlbum={() => setShowAlbum(true)}
-                  onGoCalendar={() => navigate('/calendar')}
-                />
-              )}
-
-              {tab === 'diary' && showAlbum && !diaryResult && (
-                <DiaryAlbum
-                  diaries={albumDiaries}
-                  initialFavoriteIds={albumFavoriteIds}
-                  onBack={() => setShowAlbum(false)}
-                  onDelete={async (id) => {
-                    try {
-                      await deleteDiary(Number(id));
-                      setAlbumDiaries((prev) => prev.filter((d) => d.id !== id));
-                    } catch {
-                      alert('삭제에 실패했어요.');
-                    }
-                  }}
-                  onUpdate={async (id, title, body) => {
-                    await updateDiary(Number(id), { title, content: body });
-                    setAlbumDiaries((prev) =>
-                      prev.map((d) => d.id === id ? { ...d, title, body } : d)
-                    );
-                  }}
-                />
-              )}
-
-              {tab === 'diary' && showDiaryEditor && !diaryResult && currentPet && (
-                <DiaryView
-                  pet={currentPet}
-                  user={safeUser!}
-                  diaries={safeDiaries}
-                  autoPlace={autoPlace?.name ?? ''}
-                  onClearAutoPlace={() => setAutoPlace(null)}
-                  onSave={handleSaveDiary}
-                />
-              )}
-
-{tab === 'diary' && diaryResult && (
-  <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
-    <div className={`mx-auto w-full flex gap-4 ${showPlacePanel ? 'max-w-[1100px]' : 'max-w-[720px]'}`}>
-    <div className="flex-1 min-w-0">
-      {/* 상단 헤더 */}
-      <div className="mb-4 flex items-center gap-3">
-        <button
-          onClick={() => {
-            setDiaryResult(null);
-            setShowDiaryEditor(false);
-            setShowAlbum(true);
-            setIsEditingDiary(false);
-          }}
-          className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-        >
-          ← 뒤로
-        </button>
-        <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
-        <div className="ml-auto flex items-center gap-2 text-xs font-medium">
-          {autoSaveState === 'saving' && <span className="text-[#B08B7A]">저장 중...</span>}
-          {autoSaveState === 'done' && !isEditingDiary && <span className="text-green-500">✓ 저장 완료</span>}
-          {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
-          {savedDiaryId && !isEditingDiary && autoSaveState === 'done' && (
-            <button
-              onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
-              className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              ✏️ 수정
-            </button>
-          )}
-          {isEditingDiary && (
-            <>
-              <button
-                onClick={() => setIsEditingDiary(false)}
-                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-gray-400 transition hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={editSaving}
-                className="rounded-full bg-[#F4845F] px-3 py-1.5 text-white transition hover:bg-[#e0724e] disabled:opacity-50"
-              >
-                {editSaving ? '저장 중...' : '저장'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 스케치북/일기장 본문 */}
-      <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
-        {/* 마스킹 테이프 느낌 */}
-        <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-        <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-
-        {/* 제목/요약 */}
-        <div className="mb-6 text-center">
-          <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-          {isEditingDiary ? (
-            <input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
-            />
-          ) : (
-            <h3 className="mt-2 text-2xl font-bold text-[#F4845F] font-diary">
-              {diaryResult.diary.title}
-            </h3>
-          )}
-          {diaryResult.diary.summary && (
-            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F] font-diary">
-              ✨ {diaryResult.diary.summary}
-            </div>
-          )}
-          {autoPlace && (
-            <button
-              onClick={() => setShowPlacePanel((prev) => !prev)}
-              className={`mt-2 rounded-2xl px-3 py-1.5 text-left transition ${showPlacePanel ? 'bg-[#5B8DB8] text-white' : 'bg-[#F0F7FF] text-[#5B8DB8] hover:bg-[#ddeeff]'}`}
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold">📍 {autoPlace.name}</span>
-                <span className="text-[11px] opacity-80">{autoPlace.address}</span>
-              </div>
-            </button>
-          )}
-        </div>
-
-        {/* 이미지 */}
-        <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
-          <img
-            src={diaryResult.imageUrl}
-            alt="그림일기"
-            className="w-full h-auto rounded-[16px] object-contain"
-          />
-        </div>
-
-        {/* 일기 본문 - 줄 있는 노트 느낌 */}
-        {isEditingDiary ? (
-          <textarea
-            value={editBody}
-            onChange={(e) => setEditBody(e.target.value)}
-            rows={10}
-            className="w-full rounded-[20px] border border-[#F4845F] bg-[#FFFCF8] px-5 py-5 text-[15px] leading-[31px] text-[#3D2B1F] outline-none resize-none"
-            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-          />
-        ) : (
-          <div
-            className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-          >
-            <p className="whitespace-pre-wrap text-[17px] leading-[31px] text-[#3D2B1F] font-diary">
-              {diaryResult.diary.content}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-
-    {/* 장소 정보 사이드 패널 */}
-    {showPlacePanel && autoPlace && (
-      <div className="w-72 shrink-0 rounded-[24px] border border-[#E9D9C9] bg-[#FFFDF8] p-5 shadow-[0_4px_16px_rgba(61,43,31,0.08)] self-start mt-14">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-bold text-[#3D2B1F]">📍 장소 정보</span>
-          <button onClick={() => setShowPlacePanel(false)} className="text-[#B08B7A] hover:text-[#3D2B1F] text-xs">✕</button>
-        </div>
-        <p className="text-sm font-bold text-[#3D2B1F] mb-1">{autoPlace.name}</p>
-        <p className="text-xs text-[#8B6355] mb-3">{autoPlace.address}</p>
-        <div className="flex flex-wrap gap-1 mb-3">
-          {autoPlace.category && <span className="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] text-[#F4845F]">{autoPlace.category}</span>}
-          {autoPlace.sub_category && <span className="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] text-[#F4845F]">{autoPlace.sub_category}</span>}
-          {autoPlace.indoor === 'Y' && <span className="rounded-full bg-[#E8F4FD] px-2 py-0.5 text-[11px] text-[#5B8DB8]">실내 가능</span>}
-          {autoPlace.outdoor === 'Y' && <span className="rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[11px] text-[#4CAF50]">야외 가능</span>}
-          {autoPlace.has_parking === 'Y' && <span className="rounded-full bg-[#F3E5F5] px-2 py-0.5 text-[11px] text-[#9C27B0]">주차 가능</span>}
-        </div>
-        {autoPlace.operation && (
-          <div className="mb-2">
-            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">운영시간</p>
-            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.operation}</p>
-          </div>
-        )}
-        {autoPlace.tel && (
-          <div className="mb-2">
-            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">연락처</p>
-            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.tel}</p>
-          </div>
-        )}
-        {autoPlace.conditions && (
-          <div>
-            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">이용조건</p>
-            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.conditions}</p>
-          </div>
-        )}
-      </div>
-    )}
-  </div>
-  </div>
-)}
-
-              {tab === 'map' && !showMapSearch && (
-                <MapIntro onStartMap={() => setShowMapSearch(true)} />
-              )}
-
-              {tab === 'map' && showMapSearch && (
-                <MapView
-                  places={mapPlaces}
-                  onUsePlace={handleUsePlace}
-                  initialSelectedId={historySelectedId ?? undefined}
-                  userLocation={userLocation ?? undefined}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* 오른쪽 챗봇 영역 */}
-          <div className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
-            <div
-              className="flex h-full flex-col overflow-hidden rounded-[28px] border shadow-[0_0_40px_rgba(0,0,0,0.08)]"
-              style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
-            >
-              <div
-                className="border-b px-4 py-3"
-                style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center">
-                    <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-11 w-11 object-contain" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold" style={{ color: '#3D2B1F' }}>
-                      AI 멍봇
-                    </p>
-                    <button
-                      ref={petPickerBtnRef}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rect = petPickerBtnRef.current?.getBoundingClientRect();
-                        if (rect) setPickerPos({ top: rect.bottom + 4, left: rect.left });
-                        setShowPetPicker((v) => !v);
-                      }}
-                      className="text-xs underline-offset-2 hover:underline transition-colors"
-                      style={{ color: '#8B6355' }}
-                    >
-                      {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'} ▾
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {!showChatHistory && (
-                      <button
-                        onClick={() => {
-                          setShowChatHistory(false);
-                          setChatKey((k) => k + 1);
-                        }}
-                        className="rounded-full border border-[#F4845F] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] transition hover:bg-[#FFF0E6]"
-                      >
-                        + 새 채팅
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setShowChatHistory((prev) => !prev)}
-                      className="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
-                      style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
-                    >
-                      {showChatHistory ? '← 챗봇' : '최근 채팅 기록'}
-                    </button>
-                  </div>
-                </div>
+                    }`}
+                  onClick={() => { setTab('map'); setShowMapSearch(false); setShowDiaryEditor(false); setShowAlbum(false); setDiaryResult(null); }}
+                >
+                  <Map className="h-4 w-4" />
+                  지도
+                </button>
               </div>
 
-              <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
-                {showChatHistory ? (
-                  <ChatHistory
-                    onBack={() => setShowChatHistory(false)}
-                    onShowPlaces={(places, selected) => {
-                      setMapPlaces(places)
-                      setHistorySelectedId(selected.content_id ?? selected.name)
-                      setTab('map')
-                      setShowMapSearch(true)
-                      // 채팅 기록은 닫지 않음 — 일기쓰기 버튼 클릭 시 handleUsePlace에서 닫힘
+              <div className="flex-1 overflow-y-auto">
+
+                {tab === null && (
+                  <HomeIntro
+                    onOpenMap={handleOpenMapTab}
+                    onOpenDiary={handleOpenDiaryTab}
+                    onGoMypage={handleGoMypage}
+                  />
+                )}
+
+                {tab === 'diary' && !showDiaryEditor && !diaryResult && !showAlbum && (
+                  <DiaryIntro
+                    onStartDiary={() => {
+                      setDiaryTrigger((prev) => prev + 1);
+                    }}
+                    onOpenAlbum={() => setShowAlbum(true)}
+                    onGoCalendar={() => navigate('/calendar')}
+                  />
+                )}
+
+                {tab === 'diary' && showAlbum && !diaryResult && (
+                  <DiaryAlbum
+                    // nav 앨범 재클릭 시 같은 URL 이라도 location.key 가 새로 생성되므로 강제 재mount.
+                    // DiaryAlbum 내부 selected / isEditing state 가 자동 reset → 목록으로 복귀.
+                    key={location.key}
+                    diaries={albumDiaries}
+                    initialFavoriteIds={albumFavoriteIds}
+                    onBack={() => setShowAlbum(false)}
+                    onDelete={async (id) => {
+                      try {
+                        await deleteDiary(Number(id));
+                        setAlbumDiaries((prev) => prev.filter((d) => d.id !== id));
+                      } catch {
+                        alert('삭제에 실패했어요.');
+                      }
+                    }}
+                    onUpdate={async (id, title, body) => {
+                      await updateDiary(Number(id), { title, content: body });
+                      setAlbumDiaries((prev) =>
+                        prev.map((d) => d.id === id ? { ...d, title, body } : d)
+                      );
                     }}
                   />
-                ) : (
-                  <div className="h-full p-3">
-                    <ChatBot
-                      key={chatKey}
-                      pet={currentPet}
-                      onSelectPlace={handleUsePlace}
-                      onPlacesFound={handlePlacesFound}
-                      onNavigateToDiary={handleOpenDiaryTab}
-                      onNavigateToMap={handleOpenMapTab}
-                      onDiaryReady={handleDiaryReady}
-                      diaryTrigger={diaryTrigger}
-                      diaryPlace={autoPlace?.name}
-                      initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
-                      userLocation={userLocation ?? undefined}
-                    />
+                )}
+
+                {tab === 'diary' && showDiaryEditor && !diaryResult && currentPet && (
+                  <DiaryView
+                    pet={currentPet}
+                    user={safeUser!}
+                    diaries={safeDiaries}
+                    autoPlace={autoPlace?.name ?? ''}
+                    onClearAutoPlace={() => setAutoPlace(null)}
+                    onSave={handleSaveDiary}
+                  />
+                )}
+
+                {tab === 'diary' && diaryResult && (
+                  <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+                    <div className="mx-auto w-full max-w-[720px]">
+                      <div className="flex-1 min-w-0">
+                        {/* 상단 헤더 */}
+                        <div className="mb-4 flex items-center gap-3">
+                          <button
+                            onClick={() => {
+                              setDiaryResult(null);
+                              setShowDiaryEditor(false);
+                              setShowAlbum(true);
+                              setIsEditingDiary(false);
+                            }}
+                            className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                          >
+                            ← 뒤로
+                          </button>
+                          <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+                          <div className="ml-auto flex items-center gap-2 text-xs font-medium">
+                            {autoSaveState === 'saving' && <span className="text-[#B08B7A]">저장 중...</span>}
+                            {autoSaveState === 'done' && !isEditingDiary && <span className="text-green-500">✓ 저장 완료</span>}
+                            {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
+                            {savedDiaryId && !isEditingDiary && autoSaveState === 'done' && (
+                              <button
+                                onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
+                                className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                              >
+                                ✏️ 수정
+                              </button>
+                            )}
+                            {isEditingDiary && (
+                              <>
+                                <button
+                                  onClick={() => setIsEditingDiary(false)}
+                                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-gray-400 transition hover:bg-gray-50"
+                                >
+                                  취소
+                                </button>
+                                <button
+                                  onClick={handleSaveEdit}
+                                  disabled={editSaving}
+                                  className="rounded-full bg-[#F4845F] px-3 py-1.5 text-white transition hover:bg-[#e0724e] disabled:opacity-50"
+                                >
+                                  {editSaving ? '저장 중...' : '저장'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <DiaryNoteCard
+                          title={diaryResult.diary.title}
+                          body={diaryResult.diary.content}
+                          summary={diaryResult.diary.summary}
+                          imageUrl={diaryResult.imageUrl}
+                          placeName={autoPlace?.name}
+                          onPlaceClick={autoPlace ? () => setShowPlacePanel((prev) => !prev) : undefined}
+                          placePinActive={showPlacePanel}
+                          isEditing={isEditingDiary}
+                          editTitle={editTitle}
+                          editBody={editBody}
+                          onTitleChange={setEditTitle}
+                          onBodyChange={setEditBody}
+                        />
+                      </div>
+
+                    </div>
                   </div>
+                )}
+
+                {tab === 'map' && !showMapSearch && (
+                  <MapIntro onStartMap={() => setShowMapSearch(true)} />
+                )}
+
+                {tab === 'map' && showMapSearch && (
+                  <MapView
+                    places={mapPlaces}
+                    onUsePlace={handleUsePlace}
+                    initialSelectedId={historySelectedId ?? undefined}
+                    userLocation={userLocation ?? undefined}
+                  />
                 )}
               </div>
             </div>
+
+            {/* 오른쪽 챗봇 영역 */}
+            <div className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
+              <div
+                className="flex h-full flex-col overflow-hidden rounded-[28px] border shadow-[0_0_40px_rgba(0,0,0,0.08)]"
+                style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
+              >
+                <div
+                  className="border-b px-4 py-3"
+                  style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center">
+                      <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-11 w-11 object-contain" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold" style={{ color: '#3D2B1F' }}>
+                        AI 멍봇
+                      </p>
+                      <button
+                        ref={petPickerBtnRef}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = petPickerBtnRef.current?.getBoundingClientRect();
+                          if (rect) setPickerPos({ top: rect.bottom + 4, left: rect.left });
+                          setShowPetPicker((v) => !v);
+                        }}
+                        className="text-xs underline-offset-2 hover:underline transition-colors"
+                        style={{ color: '#8B6355' }}
+                      >
+                        {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'} ▾
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {!showChatHistory && (
+                        <button
+                          onClick={() => {
+                            setShowChatHistory(false);
+                            setChatKey((k) => k + 1);
+                          }}
+                          className="rounded-full border border-[#F4845F] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] transition hover:bg-[#FFF0E6]"
+                        >
+                          + 새 채팅
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setShowChatHistory((prev) => !prev)}
+                        className="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
+                        style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
+                      >
+                        {showChatHistory ? '← 챗봇' : '최근 채팅 기록'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
+                  {showChatHistory ? (
+                    <ChatHistory
+                      onBack={() => setShowChatHistory(false)}
+                      onShowPlaces={(places, selected) => {
+                        setMapPlaces(places)
+                        setHistorySelectedId(selected.content_id ?? selected.name)
+                        setTab('map')
+                        setShowMapSearch(true)
+                        // 채팅 기록은 닫지 않음 — 일기쓰기 버튼 클릭 시 handleUsePlace에서 닫힘
+                      }}
+                    />
+                  ) : (
+                    <div className="h-full p-3">
+                      <ChatBot
+                        key={chatKey}
+                        pet={currentPet}
+                        onSelectPlace={handleUsePlace}
+                        onPlacesFound={handlePlacesFound}
+                        onNavigateToDiary={handleOpenDiaryTab}
+                        onNavigateToMap={handleOpenMapTab}
+                        onDiaryReady={handleDiaryReady}
+                        diaryTrigger={diaryTrigger}
+                        diaryPlace={autoPlace?.name}
+                        initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
+                        userLocation={userLocation ?? undefined}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    {showPetPicker && pickerPos && allPetsForPicker.length > 0 && (
-      <div
-        className="fixed z-[9999] min-w-[180px] overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-[#F5D6C8]"
-        style={{ top: pickerPos.top, left: pickerPos.left }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {allPetsForPicker.map((ap) => {
-          const isActive = ap.id === (currentPet?.id ?? fetchedPetId);
-          const isSetting = settingPetId === ap.id;
-          return (
-            <button
-              key={ap.id}
-              onClick={() => handlePickPet(ap.id)}
-              disabled={isActive || isSetting}
-              className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-[#FFF0E6] disabled:cursor-default ${isActive ? 'font-bold text-[#F4845F]' : 'text-[#3D2B1F]'}`}
-            >
-              {isActive && <span className="text-[#F4845F]">✓</span>}
-              <span>{isSetting ? '설정 중...' : `${ap.name} · ${ap.breed}`}</span>
-            </button>
-          );
-        })}
-      </div>
-    )}
+      {showPlacePanel && autoPlace && (
+        <PlaceDetailCard
+          place={autoPlace}
+          variant="modal"
+          showImage
+          showPetInfo
+          showDescription
+          showLocationSection
+          onClose={() => setShowPlacePanel(false)}
+          isFavorite={autoPlaceFavorite.isFavorite(autoPlace.content_id)}
+          onToggleFavorite={() => autoPlaceFavorite.toggle(autoPlace.content_id)}
+          favoriteToggling={autoPlaceFavorite.isToggling(autoPlace.content_id)}
+        />
+      )}
+
+      {showPetPicker && pickerPos && allPetsForPicker.length > 0 && (
+        <div
+          className="fixed z-[9999] min-w-[180px] overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-[#F5D6C8]"
+          style={{ top: pickerPos.top, left: pickerPos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {allPetsForPicker.map((ap) => {
+            const isActive = ap.id === (currentPet?.id ?? fetchedPetId);
+            const isSetting = settingPetId === ap.id;
+            return (
+              <button
+                key={ap.id}
+                onClick={() => handlePickPet(ap.id)}
+                disabled={isActive || isSetting}
+                className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-[#FFF0E6] disabled:cursor-default ${isActive ? 'font-bold text-[#F4845F]' : 'text-[#3D2B1F]'}`}
+              >
+                {isActive && <span className="text-[#F4845F]">✓</span>}
+                <span>{isSetting ? '설정 중...' : `${ap.name} · ${ap.breed}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

@@ -16,6 +16,31 @@ function authHeaders(): HeadersInit {
     : { 'Content-Type': 'application/json' }
 }
 
+/**
+ * 백엔드 detail 페이로드를 사용자 친화 메시지 1줄로 정규화한다.
+ *
+ * - FastAPI HTTPException(detail=string) → 그대로 사용
+ * - Pydantic v2 ValidationError → `[{type,loc,msg,input}]` 배열 → 각 msg join.
+ *   Pydantic 의 `Value error, ` 접두사는 제거 (`raise ValueError(...)` 한 한국어 메시지만 노출)
+ * - detail 부재 → `API 오류 {status}`
+ */
+function normalizeDetail(detail: unknown, status: number): string {
+  if (typeof detail === 'string' && detail) return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const messages = detail
+      .map((d) => {
+        if (d && typeof d === 'object' && 'msg' in d) {
+          const msg = String((d as { msg: unknown }).msg ?? '')
+          return msg.replace(/^Value error,\s*/, '').trim()
+        }
+        return String(d)
+      })
+      .filter(Boolean)
+    if (messages.length > 0) return messages.join('\n')
+  }
+  return `API 오류 ${status}`
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // 토큰 만료 또는 무효 → 자동 로그아웃
@@ -23,8 +48,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
     window.dispatchEvent(new Event('auth-change'))
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { detail?: string }
-    throw new Error(err.detail ?? `API 오류 ${res.status}`)
+    const err = await res.json().catch(() => ({})) as { detail?: unknown }
+    throw new Error(normalizeDetail(err.detail, res.status))
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
