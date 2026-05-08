@@ -11,9 +11,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.type.place import YNEnum, FeeType
+from utils.validation import strip_place_info_marker
 
 
 class PlaceResponse(BaseModel):
@@ -47,6 +48,15 @@ class PlaceResponse(BaseModel):
     modified_time: Optional[datetime] = Field(None, description="한국관광공사 원본 데이터 최종 수정일")
     created_at: datetime = Field(..., description="수집 등록 일시")
     updated_at: datetime = Field(..., description="수집 갱신 일시")
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_place_info(cls, v: str | None) -> Optional[str]:
+        # description 필드는 Optional[str] 라 None / "" 도 그대로 두되, 마커 이후만 cut.
+        if v is None:
+            return None
+        cleaned = strip_place_info_marker(v)
+        return cleaned or None
 
 
 class PlaceFavoriteItem(BaseModel):

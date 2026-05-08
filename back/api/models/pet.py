@@ -72,7 +72,7 @@ class Pet(Base):
 
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 성격 태그 목록")
 
-    # FK -> images (프로필 이미지, nullable). 마이그레이션 2026-05-07_add_pets_profile_id.sql
+    # FK -> images (프로필 이미지, nullable).
     image_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("images.id", onupdate="CASCADE", ondelete="RESTRICT"),

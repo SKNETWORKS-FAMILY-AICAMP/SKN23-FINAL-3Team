@@ -113,3 +113,22 @@ def validate_pet_birth(value: date | None) -> date | None:
     if value > today:
         raise ValueError("반려견 생년월일은 오늘 이전이어야 합니다")
     return value
+
+
+def strip_place_info_marker(value: str | None) -> str:
+    """장소 description 의 `[장소 정보]` 마커 이후 텍스트 cut.
+
+    한국관광공사 csv 시드(`places_seed_new.py`) 가 description = overview + `\\n[장소 정보] ` + pet 형태로
+    저장한 결과 사용자에게 내부 메타데이터가 노출되는 문제 회피. RDB 컬럼 자체는 미터치하고
+    Pydantic schema 응답 변환 시점에 cut.
+
+    Args:
+        value: description 원본 (None / "" 허용).
+
+    Returns:
+        마커 이전 부분의 trim 된 문자열. 마커 부재 시 원본 trim. None / "" → "".
+    """
+    if not value:
+        return ""
+    cut = value.split("[장소 정보]", 1)[0]
+    return cut.rstrip()

@@ -151,10 +151,10 @@ class TestDiaryFields:
         m = DiaryCreate(pet_id=1)
         assert m.title is None
 
-    def test_6W_100자_초과_거부(self):
+    def test_6W_1000자_초과_거부(self):
         with pytest.raises(ValidationError) as exc:
-            DiaryCreate(pet_id=1, when_text="가" * 101)
-        assert "100자" in str(exc.value)
+            DiaryCreate(pet_id=1, when_text="가" * 1001)
+        assert "1000자" in str(exc.value)
 
     def test_6W_None_허용(self):
         m = DiaryCreate(pet_id=1)

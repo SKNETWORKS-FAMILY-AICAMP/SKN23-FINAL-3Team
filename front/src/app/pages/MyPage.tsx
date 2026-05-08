@@ -9,8 +9,6 @@ import {
   Dog,
   CalendarDays,
   BadgeCheck,
-  Lock,
-  LogIn,
   Star,
   Check,
   Trash2,
@@ -19,9 +17,10 @@ import {
 import { getMe, updateUser, deleteUser, type UserProfile } from "../services/userService";
 import { getPets, deletePet, type Pet } from "../services/petService";
 import { getAllBreeds, type Breed } from "../services/breedService";
-import { getPlaceFavorites, type FavoritePlace } from "../services/placeService";
+import { getPlaceFavorites, togglePlaceFavorite, type FavoritePlace } from "../services/placeService";
 import { useNavigate } from "react-router";
 import ConfirmModal from "../components/ConfirmModal";
+import LoginPromptModal from "../components/LoginPromptModal";
 
 // ── 마이페이지 전용 타입 ──────────────────────────────────────────────────────
 
@@ -57,7 +56,7 @@ function PetDetailModal({ pet, onClose, petPhotos }: { pet: PetCard | null; onCl
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-5">
-          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
+          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-linear-to-br from-orange-100 to-amber-50">
             {petPhotos[pet.id] ? (
               <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
             ) : (
@@ -136,6 +135,33 @@ export default function MyPage() {
   const [deletingPet, setDeletingPet] = useState(false);
   // 즐겨찾기한 장소 (마이페이지 미니 섹션, 최근 5개. 전체는 /place-favorites 라우트)
   const [favoritePlaces, setFavoritePlaces] = useState<FavoritePlace[]>([]);
+  // 카드 우측상단 별 토글 — PlaceFavoritesPage 의 handleToggle 패턴과 동일.
+  // 라운드 4 D 작업의 useFavoriteToggle 훅 사용은 stale closure 버그로 1번 클릭 시 카드가 복귀하던
+  // 회귀가 있었음. 본 페이지는 list filter source 가 favoritePlaces 단일이라 훅 우회 + 직접 호출이 단순.
+  const [favoriteToggling, setFavoriteToggling] = useState<Set<string>>(new Set());
+
+  const handleRemoveFavorite = async (item: FavoritePlace) => {
+    const cid = item.content_id;
+    if (!cid || favoriteToggling.has(cid)) return;
+    setFavoriteToggling((prev) => new Set(prev).add(cid));
+    const prevList = favoritePlaces;
+    setFavoritePlaces((list) => list.filter((f) => f.content_id !== cid));
+    try {
+      const res = await togglePlaceFavorite(cid);
+      if (res.is_favorite) {
+        // 백엔드가 여전히 favorite=true 라고 응답하면 그리드 복귀 (예외 케이스)
+        setFavoritePlaces(prevList);
+      }
+    } catch {
+      setFavoritePlaces(prevList);
+    } finally {
+      setFavoriteToggling((prev) => {
+        const next = new Set(prev);
+        next.delete(cid);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -291,7 +317,7 @@ export default function MyPage() {
         {/* 흐린 배경 레이아웃 (미리보기) */}
         <div className="pointer-events-none select-none opacity-30 blur-sm">
           <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
-            <div className="overflow-hidden rounded-[36px] bg-gradient-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100">
+            <div className="overflow-hidden rounded-[36px] bg-linear-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100">
               <div className="h-8 w-48 rounded-full bg-orange-100" />
               <div className="mt-4 h-10 w-80 rounded-xl bg-slate-200" />
               <div className="mt-3 h-5 w-64 rounded-lg bg-slate-100" />
@@ -307,55 +333,12 @@ export default function MyPage() {
           </div>
         </div>
 
-        {/* 로그인 요청 오버레이 */}
-        <div className="absolute inset-0 flex items-center justify-center px-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.25 }}
-            className="w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl ring-1 ring-orange-100"
-          >
-            {/* 상단 오렌지 배너 */}
-            <div className="bg-gradient-to-br from-orange-400 to-orange-500 px-8 py-10 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
-                <Lock className="h-8 w-8 text-white" />
-              </div>
-              <h2 className="mt-4 text-2xl font-bold text-white">로그인이 필요해요</h2>
-              <p className="mt-2 text-sm text-orange-100">
-                마이페이지는 로그인 후 이용할 수 있어요
-              </p>
-            </div>
-
-            {/* 안내 메시지 */}
-            <div className="px-8 py-6">
-              <ul className="space-y-3 text-sm text-slate-600">
-                {[
-                  "🐾 반려견 프로필 등록 및 관리",
-                  "🗺️ AI 맞춤 여행지 추천",
-                  "📔 AI 그림일기 생성",
-                  "📅 멍캘린더 일정 관리",
-                ].map((text) => (
-                  <li key={text} className="flex items-center gap-2">
-                    <span>{text}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                type="button"
-                onClick={() => navigate("/login")}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 py-4 text-base font-bold text-white transition hover:bg-orange-600 active:scale-95"
-              >
-                <LogIn className="h-5 w-5" />
-                로그인 하러 가기
-              </button>
-
-              <p className="mt-4 text-center text-xs text-slate-400">
-                소셜 로그인(카카오 · 구글 · 네이버)으로 간편 가입
-              </p>
-            </div>
-          </motion.div>
-        </div>
+        {/* 로그인 요청 모달 — Navbar 와 통일 (외부팀 QA #65 X 버튼 + ESC + 배경 클릭 dismiss) */}
+        <LoginPromptModal
+          open={true}
+          onClose={() => navigate('/home')}
+          subtitle="마이페이지는 로그인 후 이용할 수 있어요"
+        />
       </div>
     );
   }
@@ -378,13 +361,13 @@ export default function MyPage() {
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden rounded-[36px] bg-gradient-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100 lg:p-10"
+          className="overflow-hidden rounded-[36px] bg-linear-to-r from-[#fff7ef] via-white to-[#fff8f2] p-8 shadow-lg ring-1 ring-orange-100 lg:p-10"
         >
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-center">
             {/* 왼쪽: 프로필 사진 + 인사말 */}
             <div className="flex items-center gap-6">
               <div className="relative shrink-0">
-                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
+                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
                   {user?.profile_image_url ? (
                     <img src={user.profile_image_url} alt="프로필" className="h-full w-full object-cover" />
                   ) : (
@@ -530,7 +513,7 @@ export default function MyPage() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                           <div className="flex items-start gap-4">
-                            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-orange-100 to-amber-50">
+                            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-linear-to-br from-orange-100 to-amber-50">
                               <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-3xl">
                                 {petPhotos[pet.id] ? (
                                   <img src={petPhotos[pet.id]} alt={pet.name} className="h-full w-full object-cover" />
@@ -580,7 +563,7 @@ export default function MyPage() {
                                 : "bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
                                 }`}
                             >
-                              <Star className={`h-4 w-4 ${isPrimary ? "fill-orange-400" : ""}`} />
+                              {!isPrimary ? <Star className={`h-4 w-4`} /> : <></>}
                               {isPrimary ? "선택완료" : isSetting ? "설정 중" : "선택"}
                             </button>
                             <button
@@ -662,7 +645,7 @@ export default function MyPage() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-orange-500 shadow-sm">
                       <Dog className="h-5 w-5" />
                     </div>
-                    <p className="mt-4 text-sm text-slate-500">견종</p>
+                    <div className="mt-4 text-sm text-slate-500">견종</div>
                     <p className="mt-1 text-2xl font-bold text-slate-900">{selectedPet.breedName}</p>
                   </div>
 
@@ -748,18 +731,32 @@ export default function MyPage() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {favoritePlaces.slice(0, 5).map((item) => (
-                  <button
+                  <div
                     key={item.content_id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => navigate('/place-favorites')}
-                    className="rounded-2xl border border-[#F5D6C8] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/place-favorites'); }}
+                    className="relative cursor-pointer rounded-2xl border border-[#F5D6C8] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFavorite(item);
+                      }}
+                      disabled={favoriteToggling.has(item.content_id)}
+                      aria-label={`${item.name} 즐겨찾기 해제`}
+                      className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-[#F4845F] transition hover:bg-[#e8764f] active:scale-95 disabled:opacity-50"
+                    >
+                      <Star className="h-3.5 w-3.5" fill="white" stroke="white" />
+                    </button>
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF0E6] text-xl">📍</div>
                     <p className="mt-3 truncate text-sm font-semibold text-[#3D2B1F]">{item.name}</p>
                     {item.sub_category && (
                       <p className="mt-0.5 truncate text-xs text-[#8B6355]">{item.sub_category}</p>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}

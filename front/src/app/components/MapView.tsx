@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, Navigation, Phone, LocateFixed, Star } from 'lucide-react';
+import { LocateFixed, Star } from 'lucide-react';
 import type { PlaceResult } from '../services/placeService';
 import { togglePlaceFavorite, getPlaceFavorites } from '../services/placeService';
+import PlaceDetailCard from './PlaceDetailCard';
+import PlaceBadges from './PlaceBadges';
 
 declare global {
   interface Window {
@@ -418,12 +420,7 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
                       >
                         <div className="text-base font-semibold text-gray-800">📍 {item.name}</div>
                         <div className="mt-1 text-sm text-gray-600">{item.address}</div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
-                          {item.category && <span>{item.category}</span>}
-                          {item.sub_category && <span>{item.sub_category}</span>}
-                          {item.indoor === 'Y' && <span>실내</span>}
-                          {item.outdoor === 'Y' && <span>실외</span>}
-                        </div>
+                        <PlaceBadges place={item} variant="simple" />
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
@@ -467,135 +464,18 @@ export default function MapView({ places, onUsePlace, initialSelectedId, userLoc
 
         {selectedPlace && (
           <div className="min-w-0">
-            <div className="overflow-hidden rounded-[28px] border border-[#F2E7DD] bg-white shadow-sm">
-              {selectedPlace.image || selectedPlace.firstimage ? (
-                <img
-                  src={selectedPlace.image || selectedPlace.firstimage}
-                  alt={selectedPlace.name}
-                  className="h-[200px] w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-[200px] w-full items-center justify-center bg-[#F6EFE8] text-5xl">
-                  🐾
-                </div>
-              )}
-
-              <div className="border-b border-[#F5EAE1] p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-2xl font-bold text-[#2F241D]">{selectedPlace.name}</div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleFavorite(selectedPlace.content_id)}
-                    disabled={togglingIds.has(selectedPlace.content_id)}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F4845F] transition hover:bg-[#e8764f] active:scale-95 disabled:opacity-50"
-                  >
-                    <Star
-                      className="h-5 w-5"
-                      fill={favoriteIds.has(selectedPlace.content_id) ? 'white' : 'none'}
-                      stroke="white"
-                    />
-                  </button>
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-                  <MapPin className="h-4 w-4" />
-                  <span>{selectedPlace.address}</span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {selectedPlace.category && (
-                    <span className="rounded-md bg-[#F6EFE8] px-2.5 py-1 text-xs font-medium text-[#8A6A58]">
-                      {selectedPlace.category}
-                    </span>
-                  )}
-                  {selectedPlace.sub_category && (
-                    <span className="rounded-md bg-[#F6EFE8] px-2.5 py-1 text-xs font-medium text-[#8A6A58]">
-                      {selectedPlace.sub_category}
-                    </span>
-                  )}
-                  {selectedPlace.indoor === 'Y' && (
-                    <span className="rounded-md bg-[#EFF6FF] px-2.5 py-1 text-xs font-medium text-blue-600">
-                      실내 가능
-                    </span>
-                  )}
-                  {selectedPlace.outdoor === 'Y' && (
-                    <span className="rounded-md bg-[#F0FDF4] px-2.5 py-1 text-xs font-medium text-green-600">
-                      실외 가능
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-6 px-5 py-5">
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">이용조건</div>
-                  <p className="text-sm leading-7 text-gray-700">
-                    {selectedPlace.conditions || '제한사항 없음'}
-                  </p>
-                </section>
-
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">운영시간</div>
-                  <p className="whitespace-pre-wrap text-sm text-gray-700">
-                    {selectedPlace.operation || '정보 없음'}
-                  </p>
-                </section>
-
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">반려견 이용 정보</div>
-                  <div className="space-y-1 text-sm text-gray-700">
-                    <p>반려견 구역: {selectedPlace.pet_zone || '정보 없음'}</p>
-                    <p>크기 제한: {selectedPlace.pet_size || '정보 없음'}</p>
-                    <p>주차: {selectedPlace.has_parking === 'Y' ? '가능' : '정보 없음'}</p>
-                  </div>
-                </section>
-
-                {selectedPlace.tel && (
-                  <section>
-                    <div className="mb-3 text-base font-bold text-[#2F241D]">매장 연락처</div>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-gray-700">{selectedPlace.tel}</p>
-                      <a
-                        href={`tel:${selectedPlace.tel}`}
-                        className="inline-flex items-center gap-1 rounded-full border border-pink-200 px-4 py-2 text-sm font-medium text-pink-500 hover:bg-pink-50"
-                      >
-                        <Phone className="h-4 w-4" />
-                        전화하기
-                      </a>
-                    </div>
-                  </section>
-                )}
-
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">매장 위치</div>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-gray-700">{selectedPlace.address}</p>
-                    <a
-                      href={`https://map.kakao.com/link/search/${encodeURIComponent(selectedPlace.name)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-full border border-pink-200 px-4 py-2 text-sm font-medium text-pink-500 hover:bg-pink-50"
-                    >
-                      <Navigation className="h-4 w-4" />
-                      길찾기
-                    </a>
-                  </div>
-                </section>
-
-                {selectedPlace.description && (
-                  <section>
-                    <div className="mb-3 text-base font-bold text-[#2F241D]">장소 설명</div>
-                    <p className="text-sm leading-7 text-gray-700">{selectedPlace.description}</p>
-                  </section>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => onUsePlace(selectedPlace)}
-                  className="w-full rounded-2xl bg-[#F08A4B] py-3 text-sm font-bold text-white hover:bg-[#E67D3C]"
-                >
-                  이 장소로 일기 쓰기 →
-                </button>
-              </div>
-            </div>
+            <PlaceDetailCard
+              place={selectedPlace}
+              variant="panel"
+              showImage
+              showPetInfo
+              showDescription
+              showLocationSection
+              isFavorite={favoriteIds.has(selectedPlace.content_id)}
+              onToggleFavorite={() => handleToggleFavorite(selectedPlace.content_id)}
+              favoriteToggling={togglingIds.has(selectedPlace.content_id)}
+              onSelectForDiary={() => onUsePlace(selectedPlace)}
+            />
           </div>
         )}
       </div>
