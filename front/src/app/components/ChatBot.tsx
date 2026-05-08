@@ -254,6 +254,8 @@ export default function ChatBot({
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
+  // welcome 단계 sendMessageWithResponse (KoELECTRA + GPT) 응답 대기 동안 input·send 차단 — race·중복 응답 방지
+  const [isResponding, setIsResponding] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const storedPetId = Number(localStorage.getItem('selected_pet_id'))
   const selectedPetId = pet.id ?? (Number.isFinite(storedPetId) && storedPetId > 0 ? storedPetId : undefined)
@@ -282,6 +284,7 @@ export default function ChatBot({
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
+    setIsResponding(true)
     try {
       let roomId = welcomeChatRoomId
       if (roomId === null) {
@@ -328,6 +331,8 @@ export default function ChatBot({
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
+    } finally {
+      setIsResponding(false)
     }
   }
 
@@ -343,6 +348,7 @@ export default function ChatBot({
   }, [diaryTrigger])
 
   const handleSubmitText = () => {
+    if (isResponding || isGenerating) return
     const trimmed = inputValue.trim()
     if (!trimmed) return
     if (step === 'main_questions') actions.submitMainAnswer(trimmed)
@@ -591,7 +597,7 @@ export default function ChatBot({
             </div>
           )}
 
-          {/* 텍스트 입력창 */}
+          {/* 텍스트 입력창 — 응답 진행 중 (welcome 의 KoELECTRA+GPT 또는 다이어리 generating) 입력 차단 */}
           {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
             <div className="flex items-center gap-2 p-3">
               <input
@@ -600,16 +606,18 @@ export default function ChatBot({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
+                    if (isResponding || isGenerating) return
                     handleSubmitText()
                   }
                 }}
-                placeholder="편하게 말씀해주세요..."
-                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
+                disabled={isResponding || isGenerating}
+                placeholder={isResponding || isGenerating ? '응답 받는 중...' : '편하게 말씀해주세요...'}
+                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F] disabled:cursor-not-allowed disabled:bg-[#FFF8F3] disabled:text-[#B08B7A]"
               />
               <button
                 onClick={handleSubmitText}
-                disabled={!inputValue.trim()}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
+                disabled={!inputValue.trim() || isResponding || isGenerating}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Send className="h-4 w-4" />
               </button>
