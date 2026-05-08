@@ -13,13 +13,16 @@ pets 테이블 ORM 모델.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from datetime import datetime
 from core.utils import kst_now
 from core.database import Base
 from core.type.gender import PetGenderEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import (BigInteger, Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, JSON, String, func)
+
+if TYPE_CHECKING:
+    from models.image import Image
 
 
 class Pet(Base):
@@ -69,6 +72,14 @@ class Pet(Base):
 
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 성격 태그 목록")
 
+    # FK -> images (프로필 이미지, nullable). 마이그레이션 2026-05-07_add_pets_profile_id.sql
+    image_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("images.id", onupdate="CASCADE", ondelete="RESTRICT"),
+        nullable=True,
+        comment="프로필 이미지 ID (images.id FK)",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
         default=kst_now, server_default=func.now(),
@@ -91,6 +102,20 @@ class Pet(Base):
     breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="select")
     keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="pet", cascade="all, delete-orphan")
+    # 프로필 이미지 — PetResponse.image_url 매핑용. selectin 으로 prefetch.
+    image: Mapped[Image | None] = relationship(
+        "Image",
+        foreign_keys=[image_id],
+        lazy="selectin",
+    )
+
+    @property
+    def image_url(self) -> str | None:
+        """PetResponse 의 from_attributes 매핑용 — relationship 에서 url 동적 추출.
+
+        relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        """
+        return self.image.file_url if self.image else None
 
     def __repr__(self) -> str:
         return f"<Pet id={self.id} name={self.name!r} user_id={self.user_id}>"

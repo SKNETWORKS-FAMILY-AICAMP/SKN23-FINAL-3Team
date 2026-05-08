@@ -18,13 +18,40 @@ from __future__ import annotations
 import uuid
 import aioboto3
 
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image as PILImage, UnidentifiedImageError
+
 from models.image import Image
 from core.utils import kst_now
 from core.config import settings
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, UploadFile, status
+
+
+# ── 매직 바이트 검증 헬퍼 (정책 #72-A) ────────────────────────────────────────
+
+def _validate_image_integrity(content: bytes) -> None:
+    """이미지 매직 바이트·구조 검증.
+
+    PIL `Image.verify()` 로 헤더·구조 무결성을 확인합니다. ContentType 위장
+    (예: text 파일을 image/jpeg 로 보내는) 시도를 차단합니다.
+
+    Args:
+        content: 업로드 파일 바이트.
+
+    Raises:
+        HTTPException 400: 이미지 헤더가 유효하지 않음.
+    """
+    try:
+        PILImage.open(BytesIO(content)).verify()
+    except (UnidentifiedImageError, OSError, SyntaxError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="유효하지 않은 이미지 파일입니다",
+        ) from e
 
 
 # ── S3 업로드 헬퍼 ───────────────────────────────────────────────────────────
@@ -101,6 +128,9 @@ async def create_image(file: UploadFile, db: AsyncSession) -> Image:
     content = await file.read()
     content_type = file.content_type or "application/octet-stream"
     original_filename = file.filename
+
+    # 매직 바이트 검증 (정책 #72-A — ContentType 위장 차단, S3 업로드 전)
+    _validate_image_integrity(content)
 
     # Step 1: S3 업로드 (실패 시 DB 저장 없음)
     try:

@@ -33,6 +33,34 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.diary import DiaryCreate, DiaryUpdate
 
+from utils.profanity_filter import contains_profanity
+
+
+# ── 정책 #71 — 욕설 검사 대상 필드 ────────────────────────────────────────────
+_PROFANITY_FIELDS_DIARY = (
+    "title", "content",
+    "when_text", "where_text", "who_text",
+    "what_text", "how_text", "why_text",
+)
+
+
+def _check_diary_profanity(values: dict) -> None:
+    """다이어리 텍스트 필드 중 욕설 포함 시 400 발생.
+
+    Args:
+        values: 검사 대상 필드명 → 값 매핑 (None / 빈 문자열은 자동 패스).
+
+    Raises:
+        HTTPException 400: 욕설 검출 시 정책 #71 메시지.
+    """
+    for field in _PROFANITY_FIELDS_DIARY:
+        text = values.get(field)
+        if text and contains_profanity(text):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="부적절한 단어가 포함되어 있습니다",
+            )
+
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
@@ -112,6 +140,9 @@ async def create_diary(
 
     if data.image_id is not None:
         await _verify_image(data.image_id, db)
+
+    # 욕설 필터 (제목/본문/6W — 정책 #71)
+    _check_diary_profanity(data.model_dump())
 
     # diary_date: 사용자가 명시 입력한 경우 그 값을 사용, 미입력이면 KST 오늘.
     # 추후 화면에서 날짜 선택 UI 가 도입되면 클라이언트가 data.diary_date 를 채워서 전달.
@@ -223,6 +254,9 @@ async def update_diary(
 
     if not update_data:
         return diary
+
+    # 욕설 필터 (제목/본문/6W — 정책 #71)
+    _check_diary_profanity(update_data)
 
     # FK 무결성 검증
     if "pet_id" in update_data:

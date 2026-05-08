@@ -20,6 +20,7 @@ export interface UserProfile {
   gender: 'MALE' | 'FEMALE' | null
   birth_date: string | null
   profile_id: number | null
+  profile_image_url: string | null
   provider: string
   type_id: number | null
   selected_tags: string[]

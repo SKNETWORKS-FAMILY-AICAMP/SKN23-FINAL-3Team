@@ -23,10 +23,13 @@ from typing import Sequence
 from sqlalchemy import select, update
 from core.utils import kst_now
 from models.breed import Breed
+from models.image import Image
 from models.keyword import Keyword
 from fastapi import HTTPException, status
 from schemas.pet import PetCreate, PetUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from utils.profanity_filter import contains_profanity
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
@@ -58,6 +61,25 @@ async def _verify_keyword(keyword_id: int, db: AsyncSession) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"성격 키워드(id={keyword_id})를 찾을 수 없습니다.",
+        )
+
+
+async def _verify_image_exists(image_id: int, db: AsyncSession) -> None:
+    """profile_id FK: 이미지가 존재하는지 검증합니다.
+
+    user_service._verify_image_exists 와 동일 패턴 — 활성(deleted_at IS NULL) 만 통과.
+    """
+
+    result = await db.execute(
+        select(Image).where(
+            Image.id == image_id,
+            Image.deleted_at.is_(None),
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"프로필 이미지(id={image_id})를 찾을 수 없습니다.",
         )
 
 
@@ -111,8 +133,18 @@ async def create_pet(
             detail="반려견 성별(gender)은 필수 항목입니다.",
         )
 
+    # 욕설 필터 (이름 — 정책 #71)
+    if contains_profanity(data.name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
+        )
+
     # FK 무결성 검증
     await _verify_breed(data.breed_id, db)
+
+    if data.image_id is not None:
+        await _verify_image_exists(data.image_id, db)
 
     # type_id: 미전송 시 첫 번째 PET 키워드 자동 사용
     type_id = data.type_id
@@ -130,6 +162,7 @@ async def create_pet(
         is_neutered=data.is_neutered,
         type_id=type_id,
         selected_tags=data.selected_tags,
+        image_id=data.image_id,
     )
     db.add(pet)
     await db.flush()
@@ -215,12 +248,22 @@ async def update_pet(
     if not update_data:
         return pet
 
+    # 욕설 필터 (이름 — 정책 #71)
+    if "name" in update_data and contains_profanity(update_data["name"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
+        )
+
     # FK 무결성 검증
     if "breed_id" in update_data:
         await _verify_breed(update_data["breed_id"], db)
 
     if "type_id" in update_data:
         await _verify_keyword(update_data["type_id"], db)
+
+    if "image_id" in update_data and update_data["image_id"] is not None:
+        await _verify_image_exists(update_data["image_id"], db)
 
     for field, value in update_data.items():
         setattr(pet, field, value)
