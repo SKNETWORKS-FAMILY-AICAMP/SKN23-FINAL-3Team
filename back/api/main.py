@@ -214,6 +214,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"[Intent] 워밍업 훅 등록 실패 (무시): {e}")
 
+    # 욕설 필터 모델 워밍업 (smilegate-ai/kor_unsmile, 첫 요청 지연 방지)
+    try:
+        from utils.profanity_filter import warmup_profanity_model
+        warmup_profanity_model()
+    except Exception as e:
+        logger.warning(f"[Profanity] 워밍업 훅 등록 실패 (무시): {e}")
+
     # 커스텀 견종 (Dog API에 없는 믹스견) 초기 삽입
     try:
         from sqlalchemy import select

@@ -89,7 +89,8 @@ class User(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="탈퇴 일시")
 
     # ── Relationships ──────────────────────────────────────────────────────
-    profile: Mapped[Image] = relationship("Image", foreign_keys=[profile_id], lazy="select")
+    # selectin: UserResponse.model_validate 시 profile_image_url property 자동 매핑용 prefetch.
+    profile: Mapped[Image | None] = relationship("Image", foreign_keys=[profile_id], lazy="selectin")
     keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
     # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 SQLAlchemy 추론 모호 → foreign_keys 명시.
     pets: Mapped[list[Pet]] = relationship(
@@ -106,6 +107,15 @@ class User(Base):
     )
     chat_rooms: Mapped[list[ChatRoom]] = relationship("ChatRoom", back_populates="user", cascade="all, delete-orphan")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def profile_image_url(self) -> str | None:
+        """UserResponse 의 from_attributes 매핑용 — relationship 에서 url 동적 추출.
+
+        relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        Pet.profile_image_url property 와 동일 패턴.
+        """
+        return self.profile.file_url if self.profile else None
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} provider={self.provider!r}>"

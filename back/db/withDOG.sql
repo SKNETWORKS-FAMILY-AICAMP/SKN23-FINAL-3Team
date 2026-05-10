@@ -194,6 +194,7 @@ CREATE TABLE `pets` (
   `is_neutered` tinyint(1) DEFAULT NULL COMMENT '중성화 여부 (NULL=미입력)',
   `type_id` bigint NOT NULL COMMENT '대표 성격 키워드 ID',
   `selected_tags` json DEFAULT NULL COMMENT '선택한 성격 태그 목록',
+  `image_id` bigint DEFAULT NULL COMMENT '프로필 이미지 ID (images.id FK)',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '등록 일시',
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정 일시',
   `deleted_at` datetime DEFAULT NULL COMMENT '삭제 일시',
@@ -201,7 +202,9 @@ CREATE TABLE `pets` (
   KEY `fk_pets_breed_id` (`breed_id`),
   KEY `fk_pets_type_id` (`type_id`),
   KEY `idx_pets_user_id` (`user_id`),
+  KEY `idx_pets_image_id` (`image_id`),
   CONSTRAINT `fk_pets_breed_id` FOREIGN KEY (`breed_id`) REFERENCES `breeds` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_pets_image_id` FOREIGN KEY (`image_id`) REFERENCES `images` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_pets_type_id` FOREIGN KEY (`type_id`) REFERENCES `keywords` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_pets_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='반려동물 기본 정보';

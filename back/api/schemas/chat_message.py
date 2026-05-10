@@ -13,7 +13,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from utils.validation import strip_place_info_marker
 
 
 class MessageCreate(BaseModel):
@@ -82,6 +84,11 @@ class FacilityCard(BaseModel):
     match_source: str = Field("vector", description="매칭 경로 (name_exact | vector)")
     match_confidence: float = Field(0.0, description="매칭 신뢰도 (0.0~1.0)")
 
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_place_info(cls, v: str | None) -> str:
+        return strip_place_info_marker(v)
+
 
 class PlaceCard(BaseModel):
     """장소추천 의도 응답에 첨부되는 장소 카드 페이로드."""
@@ -107,6 +114,11 @@ class PlaceCard(BaseModel):
     reason: str = Field("", description="질문 맥락 기반 추천 이유")
     similarity: float = Field(0.0, description="벡터 유사도")
     final_score: float = Field(0.0, description="최종 점수")
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_place_info(cls, v: str | None) -> str:
+        return strip_place_info_marker(v)
 
 
 class MessageUpdate(BaseModel):

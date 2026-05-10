@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { Send, LogIn, Lock, X, Phone, Navigation } from 'lucide-react'
+import { Send, LogIn, Lock } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
 import { useChatbot } from '../hooks/useChatbot'
@@ -254,7 +254,8 @@ export default function ChatBot({
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
-  const [selectedChatPlace, setSelectedChatPlace] = useState<PlaceResult | null>(null)
+  // welcome 단계 sendMessageWithResponse (KoELECTRA + GPT) 응답 대기 동안 input·send 차단 — race·중복 응답 방지
+  const [isResponding, setIsResponding] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const storedPetId = Number(localStorage.getItem('selected_pet_id'))
   const selectedPetId = pet.id ?? (Number.isFinite(storedPetId) && storedPetId > 0 ? storedPetId : undefined)
@@ -283,6 +284,7 @@ export default function ChatBot({
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
+    setIsResponding(true)
     try {
       let roomId = welcomeChatRoomId
       if (roomId === null) {
@@ -329,6 +331,8 @@ export default function ChatBot({
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
+    } finally {
+      setIsResponding(false)
     }
   }
 
@@ -344,6 +348,7 @@ export default function ChatBot({
   }, [diaryTrigger])
 
   const handleSubmitText = () => {
+    if (isResponding || isGenerating) return
     const trimmed = inputValue.trim()
     if (!trimmed) return
     if (step === 'main_questions') actions.submitMainAnswer(trimmed)
@@ -592,7 +597,7 @@ export default function ChatBot({
             </div>
           )}
 
-          {/* 텍스트 입력창 */}
+          {/* 텍스트 입력창 — 응답 진행 중 (welcome 의 KoELECTRA+GPT 또는 다이어리 generating) 입력 차단 */}
           {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
             <div className="flex items-center gap-2 p-3">
               <input
@@ -601,16 +606,18 @@ export default function ChatBot({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
+                    if (isResponding || isGenerating) return
                     handleSubmitText()
                   }
                 }}
-                placeholder="편하게 말씀해주세요..."
-                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
+                disabled={isResponding || isGenerating}
+                placeholder={isResponding || isGenerating ? '응답 받는 중...' : '편하게 말씀해주세요...'}
+                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F] disabled:cursor-not-allowed disabled:bg-[#FFF8F3] disabled:text-[#B08B7A]"
               />
               <button
                 onClick={handleSubmitText}
-                disabled={!inputValue.trim()}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
+                disabled={!inputValue.trim() || isResponding || isGenerating}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -619,120 +626,6 @@ export default function ChatBot({
         </>}
       </div>
 
-      {/* 장소 상세 모달 */}
-      {selectedChatPlace && (
-        <div
-          className="absolute inset-0 z-20 flex flex-col bg-white rounded-[20px] overflow-hidden"
-          style={{ top: 0, left: 0 }}
-        >
-          {/* 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#F5D6C8] bg-[#FFF8F3]">
-            <button
-              onClick={() => setSelectedChatPlace(null)}
-              className="flex items-center gap-1.5 text-sm text-[#8B6355] hover:text-[#3D2B1F] transition-colors"
-            >
-              <X className="h-4 w-4" />
-              돌아가기
-            </button>
-            <span className="text-sm font-bold text-[#3D2B1F] truncate max-w-[60%] text-center">{selectedChatPlace.name}</span>
-            <div className="w-16" />
-          </div>
-
-          {/* 내용 */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm text-[#3D2B1F]">
-            {/* 이름 + 태그 */}
-            <div>
-              <p className="text-lg font-bold">{selectedChatPlace.name}</p>
-              <div className="flex flex-wrap gap-1.5 mt-1.5">
-                {selectedChatPlace.category && (
-                  <span className="rounded-full bg-[#FFF0E6] px-2.5 py-0.5 text-xs text-[#F4845F] font-medium">{selectedChatPlace.category}</span>
-                )}
-                {selectedChatPlace.sub_category && (
-                  <span className="rounded-full bg-[#FFF0E6] px-2.5 py-0.5 text-xs text-[#F4845F] font-medium">{selectedChatPlace.sub_category}</span>
-                )}
-                {selectedChatPlace.indoor === 'Y' && (
-                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-500 font-medium">실내 가능</span>
-                )}
-              </div>
-            </div>
-
-            {/* 이용조건 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-              <p className="text-xs font-bold text-[#8B6355]">이용조건</p>
-              <p className="text-sm">{selectedChatPlace.conditions || '제한사항 없음'}</p>
-            </div>
-
-            {/* 운영시간 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-              <p className="text-xs font-bold text-[#8B6355]">운영시간</p>
-              <p className="text-sm">{selectedChatPlace.operation || '정보 없음'}</p>
-            </div>
-
-            {/* 반려견 정보 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-              <p className="text-xs font-bold text-[#8B6355]">반려견 이용 정보</p>
-              <p>반려견 구역: {selectedChatPlace.pet_zone || '정보 없음'}</p>
-              <p>크기 제한: {selectedChatPlace.pet_size || '모두 가능'}</p>
-              <p>주차: {selectedChatPlace.has_parking === 'Y' ? '가능' : '정보 없음'}</p>
-            </div>
-
-            {/* 전화 */}
-            {selectedChatPlace.tel && (
-              <div className="rounded-xl bg-[#FFF8F3] p-3 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-[#8B6355]">매장 연락처</p>
-                  <p className="text-sm mt-0.5">{selectedChatPlace.tel}</p>
-                </div>
-                <a
-                  href={`tel:${selectedChatPlace.tel}`}
-                  className="flex items-center gap-1 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
-                >
-                  <Phone className="h-3 w-3" />
-                  전화하기
-                </a>
-              </div>
-            )}
-
-            {/* 위치 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-[#8B6355]">매장 위치</p>
-                <p className="text-sm mt-0.5">{selectedChatPlace.address}</p>
-              </div>
-              <a
-                href={`https://map.kakao.com/link/search/${encodeURIComponent(selectedChatPlace.name)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
-              >
-                <Navigation className="h-3 w-3" />
-                길찾기
-              </a>
-            </div>
-
-            {/* 장소 설명 */}
-            {selectedChatPlace.description && (
-              <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-                <p className="text-xs font-bold text-[#8B6355]">장소 설명</p>
-                <p className="text-sm leading-6">{selectedChatPlace.description}</p>
-              </div>
-            )}
-          </div>
-
-          {/* 하단 버튼 */}
-          <div className="px-4 py-3 border-t border-[#F5D6C8] bg-[#FFF8F3]">
-            <button
-              onClick={() => {
-                if (_onSelectPlace) _onSelectPlace(selectedChatPlace)
-                setSelectedChatPlace(null)
-              }}
-              className="w-full rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white hover:bg-[#e8764f] transition-colors"
-            >
-              이 장소로 일기 쓰기 →
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

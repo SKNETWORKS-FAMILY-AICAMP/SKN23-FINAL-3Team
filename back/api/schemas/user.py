@@ -13,11 +13,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 from services.common_service import calculate_age
 
 from core.type.gender import GenderEnum
 from schemas.pet import PetResponse
+from utils.validation import clean_text, validate_user_birth
 
 
 class UserResponse(BaseModel):
@@ -31,6 +32,10 @@ class UserResponse(BaseModel):
     gender: GenderEnum | None = Field(None, description="성별")
     birth_date: date | None = Field(None, description="생년월일")
     profile_id: int | None = Field(None, description="프로필 이미지 ID (온보딩 전 NULL)")
+    profile_image_url: str | None = Field(
+        None,
+        description="프로필 이미지 URL (S3 공개 URL). User ORM property 매핑.",
+    )
     provider: str = Field(..., description="소셜 로그인 제공자 (kakao/google/naver)")
     type_id: int | None = Field(None, description="대표 성향 키워드 ID (온보딩 전 NULL)")
     primary_pet_id: int | None = Field(None, description="대표 반려견 ID (미설정 시 NULL)")
@@ -57,15 +62,23 @@ class UserUpdate(BaseModel):
 
     nickname: str | None = Field(
         None,
-        min_length=1,
-        max_length=50,
-        description="닉네임 (1~50자)",
+        description="닉네임 (1~20자, trim 후. 욕설 검사는 service 단)",
     )
     gender: GenderEnum | None = Field(None, description="성별")
     birth_date: date | None = Field(
         None,
-        description="생년월일",
+        description="생년월일 (1900-01-01 ~ 오늘-14년, 개인정보보호법 만 14세 이상)",
     )
+
+    @field_validator("nickname", mode="before")
+    @classmethod
+    def _clean_nickname(cls, v: str | None) -> str | None:
+        return clean_text(v, min_length=1, max_length=20, label="닉네임")
+
+    @field_validator("birth_date", mode="after")
+    @classmethod
+    def _check_user_birth(cls, v: date | None) -> date | None:
+        return validate_user_birth(v)
     profile_id: int | None = Field(
         None,
         gt=0,
