@@ -28,15 +28,24 @@ def parse_query_eval(query: str) -> dict | None:
         return None
 
 
-def search_places(query: str) -> list[str]:
+def search_places(
+    query: str,
+    user_lat: float | None = None,
+    user_lng: float | None = None,
+) -> list[str]:
     """GET /api/places/search 호출 후 장소 이름 목록(최대 5개) 반환.
 
     Returns:
         장소 이름 리스트. 오류 시 예외를 그대로 전파.
     """
+    params = {"query": query}
+    if user_lat is not None and user_lng is not None:
+        params["user_lat"] = user_lat
+        params["user_lng"] = user_lng
+
     resp = requests.get(
         SEARCH_ENDPOINT,
-        params={"query": query},
+        params=params,
         timeout=REQUEST_TIMEOUT,
     )
     resp.raise_for_status()
@@ -52,6 +61,8 @@ def search_places_eval(
     n_results: int = 5,
     mode: str = "combined",
     parsed: dict = None,
+    user_lat: float | None = None,
+    user_lng: float | None = None,
 ) -> list[str]:
     """GET /api/eval/places/search 호출 — ablation 평가 전용.
 
@@ -60,12 +71,20 @@ def search_places_eval(
         n_results: 반환받을 최대 장소 수 (최대 20)
         mode:      검색 모드 — "combined" | "rdb_only" | "rag_only"
         parsed:    사전 파싱된 쿼리 결과 dict (제공 시 서버에서 LLM 파싱 생략)
+        user_lat/user_lng: GPS 질문일 때만 전달하는 고정 사용자 좌표
 
     Returns:
         장소 이름 리스트. 오류 시 예외를 그대로 전파.
     """
     eval_endpoint = f"{BASE_URL}/api/eval/places/search"
-    params: dict = {"query": query, "n": n_results, "mode": mode}
+    params: dict = {
+        "query": query,
+        "n": n_results,
+        "mode": mode,
+    }
+    if user_lat is not None and user_lng is not None:
+        params["user_lat"] = user_lat
+        params["user_lng"] = user_lng
     if parsed is not None:
         params["parsed"] = json.dumps(parsed, ensure_ascii=False)
     resp = requests.get(

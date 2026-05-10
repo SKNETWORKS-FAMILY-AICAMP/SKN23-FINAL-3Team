@@ -44,6 +44,8 @@ async def eval_search_places(
     mode: str = "combined",
     n: int = 5,
     parsed: str = None,
+    user_lat: float | None = None,
+    user_lng: float | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Ablation 평가 전용 장소 검색.
@@ -53,6 +55,7 @@ async def eval_search_places(
         mode:   "combined" | "rdb_only" | "rag_only"
         n:      반환할 장소 수 (최대 20)
         parsed: 사전 파싱된 쿼리 결과 JSON 문자열 (제공 시 LLM 파싱 생략)
+        user_lat/user_lng: GPS 평가용 고정 사용자 좌표
 
     Returns:
         {"names": ["장소명1", "장소명2", ...]}
@@ -60,6 +63,13 @@ async def eval_search_places(
     n = min(n, 20)
     pre_parsed = json.loads(parsed) if parsed else None
     places = await search_places_from_db(
-        query, db, n_results=n, request=request, search_mode=mode, pre_parsed=pre_parsed
+        query,
+        db,
+        n_results=n,
+        request=request,
+        search_mode=mode,
+        pre_parsed=pre_parsed,
+        user_lat=user_lat,
+        user_lng=user_lng,
     )
     return {"names": [p["name"] for p in places if p.get("name")]}

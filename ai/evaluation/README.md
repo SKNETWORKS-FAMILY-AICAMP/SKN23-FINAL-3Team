@@ -45,7 +45,7 @@ python evaluation/run_evaluation.py --limit 10 --verbose
 python evaluation/run_evaluation.py --output evaluation/results/baseline.xlsx
 
 # 입력 파일 직접 지정
-python evaluation/run_evaluation.py --input "data/eval/withDOG 평가셋 .xlsx"
+python evaluation/run_evaluation.py --input "data/eval/장소추천 평가셋 NEW.xlsx"
 ```
 
 ---
@@ -135,7 +135,7 @@ ERROR: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded
 ### 엑셀 파일을 찾을 수 없음
 
 ```
-FileNotFoundError: data/eval/withDOG 평가셋 .xlsx
+FileNotFoundError: data/eval/장소추천 평가셋 NEW.xlsx
 ```
 
 → 프로젝트 루트에서 실행하고 있는지 확인
@@ -157,18 +157,18 @@ python -X utf8 evaluation/run_evaluation.py
 
 ## 평가셋 구조
 
-- **파일**: `data/eval/withDOG 평가셋 .xlsx` (첫 번째 시트)
-- **총 150건**: retrieval 118건 + refusal(오류/범위 밖) 32건
+- **파일**: `data/eval/장소추천 평가셋 NEW.xlsx` (첫 번째 시트)
+- **총 150건**: retrieval 125건 + refusal(오류/범위 밖) 25건
 - **정답 비교 방식**: 장소 이름 기준 부분 일치 (공백·특수문자 무시)
 
 | 카테고리 | 건수 | 평가 방식 |
 |---|---|---|
 | 복합 조건 | 29 | Hit@5, Recall@5 |
-| 지역 x 장소유형 | 27 | Hit@5, Recall@5 |
-| 주관 형용사 | 21 | Hit@5, Recall@5 |
-| 위치 기반 근처 | 16 | Hit@5, Recall@5 |
-| 동반 조건 특수 | 11 | Hit@5, Recall@5 |
+| 주관 형용사 | 24 | Hit@5, Recall@5 |
+| 지역 x 장소유형 | 20 | Hit@5, Recall@5 |
+| 위치 기반 근처 | 13 | Hit@5, Recall@5 |
 | 실내/실외 | 11 | Hit@5, Recall@5 |
 | 시간 조건 | 11 | Hit@5, Recall@5 |
-| 편의시설 (주차) | 9 | Hit@5, Recall@5 |
-| **오류/범위 밖** | **32** | **Refusal Rate** |
+| 동반 조건 특수 | 9 | Hit@5, Recall@5 |
+| 편의시설 (주차) | 8 | Hit@5, Recall@5 |
+| **오류/범위 밖** | **25** | **Refusal Rate** |

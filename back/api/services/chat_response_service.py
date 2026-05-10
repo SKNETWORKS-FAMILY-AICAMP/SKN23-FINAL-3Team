@@ -31,6 +31,7 @@ from models.pet import Pet
 from models.user import User
 from services.intent_service import IntentResult, RAG_STRATEGY_MAP
 from services.place_service import (
+    ParsedQuery,
     SEOUL,
     _parse_query_with_llm,
     search_facility_by_name,
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 _openai_client: AsyncOpenAI | None = None
 _GPT_MODEL = settings.GPT_MODEL
 _OUT_OF_SERVICE_AREA_MESSAGE = "현재 서비스는 서울 지역만 지원하고 있습니다."
+_PLACE_NOT_FOUND_MESSAGE = "조건에 맞는 장소를 찾지 못했어요."
 
 
 def _get_openai_client() -> AsyncOpenAI:
@@ -285,10 +287,7 @@ def _format_places_brief(places: Sequence[dict]) -> str:
 def _format_place_list_response(places: Sequence[dict]) -> str:
     """Render a stable place response without a second LLM pass."""
     if not places:
-        return (
-            "조건에 맞는 장소를 찾지 못했어요. "
-            "원하시는 지역이나 조건을 조금 바꿔서 다시 말씀해 주세요."
-        )
+        return _PLACE_NOT_FOUND_MESSAGE
 
     lines = ["반려견과 함께 가보기 좋은 장소를 정리했어요.", ""]
     for idx, place in enumerate(places, start=1):
@@ -408,10 +407,14 @@ async def generate_place_reasons(query: str, places: Sequence[dict]) -> dict[str
         return {}
 
 
-async def _is_out_of_service_area(query: str, request: Request | None = None) -> bool:
+async def _is_out_of_service_area(
+    query: str,
+    request: Request | None = None,
+    parsed: ParsedQuery | None = None,
+) -> bool:
     """서울 외 지역 질문이면 True를 반환한다."""
     try:
-        parsed = await _parse_query_with_llm(query, request=request)
+        parsed = parsed or await _parse_query_with_llm(query, request=request)
         city = (parsed.objective.get("city") or "").strip()
         return bool(city and city != SEOUL)
     except Exception as e:
@@ -514,7 +517,8 @@ async def _handle_places(
     top_k: int = 5,
     request: Request = None,
 ) -> tuple[str, list[dict]]:
-    if await _is_out_of_service_area(query, request=request):
+    parsed = await _parse_query_with_llm(query, request=request)
+    if await _is_out_of_service_area(query, request=request, parsed=parsed):
         return _OUT_OF_SERVICE_AREA_MESSAGE, []
 
     profile_ctx = await _load_place_preference_context(ctx)
@@ -522,7 +526,15 @@ async def _handle_places(
     if settings.USE_DUMMY_PLACES:
         places = await Place().find_place(top_k=top_k)
     elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request, user_lat=ctx.user_lat, user_lng=ctx.user_lng)
+        places = await search_places_from_db(
+            query,
+            ctx.db,
+            n_results=top_k,
+            request=request,
+            user_lat=ctx.user_lat,
+            user_lng=ctx.user_lng,
+            pre_parsed=parsed,
+        )
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
@@ -536,11 +548,7 @@ async def _handle_places(
             place["reason"] = reasons.get(place.get("name", ""), "")
         return _format_place_list_response(places), places
 
-    return (
-        "조건에 맞는 장소를 찾지 못했어요. 🐾\n"
-        "검색 조건을 조금 바꿔서 다시 시도해보세요.\n"
-        "예: 지역·카테고리를 넓히거나, 다른 키워드로 검색해보세요."
-    ), []
+    return _PLACE_NOT_FOUND_MESSAGE, []
 
 
 async def _handle_facility(

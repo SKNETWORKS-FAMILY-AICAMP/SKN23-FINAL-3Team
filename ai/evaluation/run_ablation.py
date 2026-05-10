@@ -17,6 +17,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent))
 
 from api_client import parse_query_eval, search_places_eval as search_places
+from config import EVAL_USER_LAT, EVAL_USER_LNG
 from load_evalset import load_evalset
 from metrics import calc_hit_at_k, calc_recall_at_k
 from save_results import save_ablation_results
@@ -26,6 +27,14 @@ K_VALUES = [1, 3, 5, 10, 20]
 MAX_K = max(K_VALUES)
 
 LOG_DIR = Path(__file__).parent / "logs"
+GPS_CATEGORY = "GPS (사용자 현재 위치)"
+
+
+def _gps_eval_coords(item: dict) -> tuple[float | None, float | None]:
+    """GPS 평가 문항에만 고정 현재 위치를 전달한다."""
+    if item.get("category") == GPS_CATEGORY:
+        return EVAL_USER_LAT, EVAL_USER_LNG
+    return None, None
 
 
 def _setup_logging(run_id: str) -> None:
@@ -101,13 +110,17 @@ def run(
             error = None
 
             try:
+                parsed = parsed_cache.get(item["query_id"])
+                user_lat, user_lng = _gps_eval_coords(item)
                 # MAX_K개를 한 번만 조회하고 k별 메트릭은 슬라이싱으로 계산
                 # 사전 파싱된 결과를 전달해 서버에서 LLM 파싱 호출을 생략
                 top_results = search_places(
                     item["question"],
                     n_results=MAX_K,
                     mode=mode,
-                    parsed=parsed_cache.get(item["query_id"]),
+                    parsed=parsed,
+                    user_lat=user_lat,
+                    user_lng=user_lng,
                 )
             except Exception as e:
                 logger.warning("  ERROR (%s) %s: %s", mode, item["query_id"], e)
