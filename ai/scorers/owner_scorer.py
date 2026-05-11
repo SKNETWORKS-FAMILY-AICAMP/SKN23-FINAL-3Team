@@ -1,31 +1,14 @@
 # -*- coding: utf-8 -*-
+from typing import TYPE_CHECKING
+
 from ai.core.interfaces.base_scorer import BaseScorer
+from ai.scorers.keyword_score_loader import load_keyword_score_map
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class OwnerScorer(BaseScorer):
-
-    _TAG_SCORES = {
-        "신나게 뛰어놀기": {"a": 1, "b": 3, "c": 0, "d": 0, "e": 1},
-        "느긋하게 쉬어가기": {"a": 2, "b": -2, "c": 0, "d": 3, "e": 0},
-        "자연 속으로": {"a": 5, "b": 1, "c": -1, "d": 2, "e": 0},
-        "도시 구경": {"a": -2, "b": 1, "c": 3, "d": 1, "e": 2},
-        "일상 충전": {"a": 1, "b": -1, "c": 0, "d": 0, "e": 1},
-        "새로운 곳 구경": {"a": 0, "b": 2, "c": 2, "d": 1, "e": 2},
-        "감성 충만": {"a": 1, "b": -1, "c": 1, "d": 5, "e": -1},
-        "동네 골목 탐방": {"a": 1, "b": 1, "c": 2, "d": 2, "e": 1},
-        "계획 없이 떠나기": {"a": 1, "b": 2, "c": 1, "d": 2, "e": -1},
-        "바다": {"a": 5, "b": 2, "c": 0, "d": 3, "e": 0},
-        "산": {"a": 5, "b": -2, "c": 0, "d": 2, "e": 0},
-        "숲": {"a": 5, "b": 2, "c": 0, "d": 3, "e": 0},
-        "계곡": {"a": 5, "b": 3, "c": 0, "d": 2, "e": 0},
-        "공원 산책": {"a": 3, "b": 2, "c": 2, "d": 1, "e": 1},
-        "카페 투어": {"a": -1, "b": 0, "c": 4, "d": 3, "e": 1},
-        "핫플 인증": {"a": -2, "b": 1, "c": 5, "d": -2, "e": 2},
-        "사진 건지러": {"a": 1, "b": 1, "c": 2, "d": -1, "e": 0},
-        "맛있는 거 먹으러": {"a": -1, "b": 0, "c": 2, "d": 1, "e": 3},
-        "전시 관람": {"a": -1, "b": 1, "c": 1, "d": 3, "e": 1},
-    }
-
     _AXIS_TO_TYPE = {
         "a": "nature_lover",
         "b": "city_explorer",
@@ -37,19 +20,26 @@ class OwnerScorer(BaseScorer):
     _TIE_PRIORITY = ["d", "a", "e", "c", "b"]
 
     _TYPES = {
-        "nature_lover": "🌿 자연 애호가",
-        "city_explorer": "✨ 도시 감성러",
-        "active_lifestyle": "🏃 활발한 활동가",
-        "relaxed_healer": "🛋️ 느긋한 휴식러",
-        "foodie_explorer": "🍴 맛집 탐방러",
+        "nature_lover": "자연 선호가",
+        "city_explorer": "도시 감성가",
+        "active_lifestyle": "활동적인 스타일",
+        "relaxed_healer": "느긋한 휴식형",
+        "foodie_explorer": "맛집 탐험가",
     }
 
+    def __init__(self, tag_scores: dict[str, dict[str, float]] | None = None):
+        self._tag_scores = tag_scores or {}
+
+    async def load_from_db(self, db: "AsyncSession") -> None:
+        self._tag_scores = await load_keyword_score_map(db, category="USER")
+
     def calculate_vector(self, tags: list[str]) -> dict[str, float]:
-        scores = {"a": 0, "b": 0, "c": 0, "d": 0, "e": 0}
+        scores = {"a": 0.0, "b": 0.0, "c": 0.0, "d": 0.0, "e": 0.0}
         for tag in tags:
-            if tag not in self._TAG_SCORES:
+            tag_score = self._tag_scores.get(tag)
+            if tag_score is None:
                 continue
-            for axis, value in self._TAG_SCORES[tag].items():
+            for axis, value in tag_score.items():
                 scores[axis] += value
         return scores
 

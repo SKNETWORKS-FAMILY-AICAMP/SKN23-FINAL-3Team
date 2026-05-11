@@ -15,12 +15,29 @@ logger = logging.getLogger(__name__)
 
 _place_type = PlaceType()
 
+'''
+- 외부 API / 랜드마크 반경 설정
+    "...근처" 같은 쿼리에서 랜드마크 좌표를 카카오 API로 변환할 때 사용.
+    장소 후보가 3개 미만이면 다시 1km → 2km → 3km 순으로 자동 확장합니다.
+'''
 KAKAO_GEOCODE_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
-LANDMARK_RADIUS_M = 1000
-LANDMARK_RADIUS_STEPS_M = (1000, 2000, 3000)
-LANDMARK_MIN_RESULTS = 3
+LANDMARK_RADIUS_STEPS_M = (1000, 2000, 3000) # 랜드마크 반경 확장 단계
+LANDMARK_MIN_RESULTS = 3                     # 장소 후보 최소 3개
 
-SEOUL = "서울특별시"
+# Ablation A: RDB 후보와 Chroma 후보 풀을 넓혀 RDB 후보 제한으로 좋은 벡터 후보가
+# 잘리는지 확인한다. 기존 기준값은 각각 200, 50이었다.
+RDB_FILTER_MAX_CANDIDATES = 500
+CHROMA_FILTERED_FETCH_N = 200
+
+
+SEOUL = "서울특별시" # 현재 서비스가 서울만 제공하기 때문에 만든 필터 상수
+
+'''
+- 운영시간 파싱용 문자열 상수
+    DB에 저장된 운영시간(operation_info 칼럼) 텍스트를
+    파싱할 때(_parse_operation_hours) 문자열 비교에 사용.
+    LLM이 time_condition으로 뽑아주는 값도 이 상수들과 매핑됩니다.
+'''
 NO_INFO = "정보없음"
 ALWAYS_OPEN = "연중무휴"
 OPEN_24H = "24시간"
@@ -33,10 +50,31 @@ LUNCH = "점심"
 EVENING = "저녁"
 NIGHT = "밤"
 WEEKEND = "주말"
+
+'''
+- 카테고리 분류 상수
+'''
 FULL_ZONE = "전구역"
 NO_RESTRICTION = "제한사항 없음"
-OUTING_SUBCATEGORIES = {"공원", "관광지", "반려견놀이터", "카페", "식당"}
-DEPRIORITIZED_SUBCATEGORIES = {"동물병원", "동물약국", "미용", "위탁관리"}
+OUTING_SUBCATEGORIES = {"공원", "관광지", "반려견놀이터", "카페", "식당"} # 광범위 추천 쿼리일 때 우선 노출
+DEFAULT_RECOMMENDABLE_SUBCATEGORIES = {
+    "공원",
+    "관광지",
+    "레포츠",
+    "문예회관",
+    "문화시설",
+    "미술관",
+    "박물관",
+    "반려견놀이터",
+    "숙박",
+    "식당",
+    "카페",
+    "펜션",
+    "호텔",
+}
+PURPOSE_ONLY_SUBCATEGORIES = {"동물병원", "동물약국", "반려동물용품", "미용", "위탁관리"}
+DEPRIORITIZED_SUBCATEGORIES = PURPOSE_ONLY_SUBCATEGORIES # 목적형 질문이 아니면 기본 추천에서 제외
+# 쿼리에 이 단어가 있으면 "구체적 목적 있는 질문"으로 판단; 카테고리 우선순위 조정 안 함
 EXPLICIT_PURPOSE_KEYWORDS = (
     "병원",
     "약국",
@@ -54,11 +92,57 @@ EXPLICIT_PURPOSE_KEYWORDS = (
     "문예회관",
     "용품",
 )
+'''
+- 장소 유형 별칭 / 크기 판단 / 서비스 외 지역
+'''
+# "산책할 곳 추천"처럼 장소 유형이 명시 안 된 광범위 질문 감지용
+GENERIC_PLACE_TARGETS = {
+    "곳",
+    "장소",
+    "코스",
+    "나들이",
+    "외출",
+    "산책",
+    "데이트",
+    "스팟",
+}
+PLACE_TYPE_ALIASES = {
+    "놀이터": {"놀이터", "반려견놀이터"},
+    "강아지놀이터": {"강아지놀이터", "반려견놀이터"},
+    "애견놀이터": {"애견놀이터", "반려견놀이터"},
+    "식물원": {"식물원", "수목원"},
+    "수목원": {"수목원", "식물원"},
+    "숙소": {"숙소", "숙박", "호텔", "펜션"},
+    "숙박": {"숙소", "숙박", "호텔", "펜션"},
+    "강아지호텔": {"강아지호텔", "애견호텔", "펫호텔", "위탁관리"},
+    "애견호텔": {"강아지호텔", "애견호텔", "펫호텔", "위탁관리"},
+    "펫호텔": {"강아지호텔", "애견호텔", "펫호텔", "위탁관리"},
+    "동물병원": {"동물병원", "병원"},
+    "병원": {"동물병원", "병원"},
+    "동물약국": {"동물약국", "약국"},
+    "약국": {"동물약국", "약국"},
+    "용품점": {"용품점", "용품", "반려동물용품"},
+    "용품": {"용품점", "용품", "반려동물용품"},
+    "문화시설": {"문화시설", "문예회관", "미술관", "박물관"},
+}
 
+SUB_CATEGORY_GROUPS = {
+    "문화시설": {"문화시설", "문예회관", "미술관", "박물관"},
+    "문예회관": {"문화시설", "문예회관", "미술관", "박물관"},
+    "미술관": {"문화시설", "문예회관", "미술관", "박물관"},
+    "박물관": {"문화시설", "문예회관", "미술관", "박물관"},
+    "숙박": {"숙박", "펜션", "호텔"},
+    "펜션": {"숙박", "펜션", "호텔"},
+    "호텔": {"숙박", "펜션", "호텔"},
+    "강아지호텔": {"위탁관리"},
+    "애견호텔": {"위탁관리"},
+    "펫호텔": {"위탁관리"},
+}
 
+# "소형 카페" vs "소형견" 처럼 크기 단어의 대상이 장소인지 동물인지 구분
 PET_SIZE_CONTEXT_WORDS = ("반려견", "강아지", "개", "아이", "댕댕이", "견")
 PLACE_SIZE_CONTEXT_WORDS = ("카페", "식당", "공원", "숙소", "호텔", "펜션", "놀이터", "공간", "매장")
-
+# 서울 외 지역 요청이면 검색 자체를 차단하고 안내 메시지 반환 (현재 서비스 상태; 서울 지역만.)
 OUT_OF_SERVICE_KEYWORDS = (
     "제주", "부산", "강원", "경주", "속초", "동해", "인천", "수원", "대전",
     "가평", "경기", "충청", "전라", "경상", "울산", "광주", "대구", "세종",
@@ -68,7 +152,7 @@ OUT_OF_SERVICE_KEYWORDS = (
 
 
 class ParsedQuery:
-    """Container for parsed place-search query conditions."""
+    """장소 검색 쿼리 조건을 담는 컨테이너."""
 
     def __init__(self, raw_query: str):
         self.raw_query = raw_query
@@ -93,7 +177,7 @@ class ParsedQuery:
 
 
 def _extract_restriction_tags(text: str | None) -> set[str]:
-    """Normalize free-form pet restriction text into lightweight tags."""
+    """반려동물 제한사항 자유형식 텍스트를 태그 집합으로 정규화."""
     raw = (text or "").strip()
     if not raw:
         return {"no_restrictions"}
@@ -129,7 +213,7 @@ def _extract_restriction_tags(text: str | None) -> set[str]:
 
 
 def _get_restriction_preferences(parsed: ParsedQuery) -> dict[str, object]:
-    """Interpret raw query intent into common restriction preferences."""
+    """쿼리 의도에서 제한사항 선호 조건(허용/금지 태그)을 해석해 반환."""
     query = (parsed.raw_query or "").strip()
     forbidden_tags: set[str] = set()
     preferred_tags: set[str] = set()
@@ -158,7 +242,7 @@ def _get_restriction_preferences(parsed: ParsedQuery) -> dict[str, object]:
 
 
 def _relax_objective_for_restriction_focus(parsed: ParsedQuery) -> None:
-    """Avoid over-constraining searches when the user's main intent is a restriction."""
+    """제한사항이 핵심 의도인 쿼리에서 과잉 필터 조건을 완화."""
     prefs = _get_restriction_preferences(parsed)
     focus = prefs.get("focus")
     if not focus or _has_explicit_place_purpose(parsed.raw_query):
@@ -198,7 +282,7 @@ def _has_place_size_context(query: str) -> bool:
 
 
 def _normalize_size_interpretation(parsed: ParsedQuery) -> None:
-    """Disambiguate whether size words refer to pet size or place size."""
+    """크기 단어가 반려견 크기인지 장소 크기인지 판단해 objective/subjective에 반영."""
     pet_size = (parsed.objective.get("pet_size_limit") or "").strip()
     if not pet_size:
         return
@@ -220,7 +304,7 @@ def _normalize_size_interpretation(parsed: ParsedQuery) -> None:
 
 
 def _normalize_fee_preferences(parsed: ParsedQuery) -> None:
-    """Interpret fee-related expressions into structured preferences."""
+    """요금 관련 표현을 구조화된 선호 조건(entrance_fee_preference 등)으로 변환."""
     query = (parsed.raw_query or "").strip()
     if not query:
         return
@@ -259,7 +343,7 @@ def _normalize_fee_preferences(parsed: ParsedQuery) -> None:
 
 
 def _normalize_supply_preferences(parsed: ParsedQuery) -> None:
-    """Interpret supply-related expressions into structured preferences."""
+    """용품 관련 표현을 구조화된 선호 조건(waste_bag_preference 등)으로 변환."""
     query = (parsed.raw_query or "").strip()
     if not query:
         return
@@ -399,7 +483,7 @@ def _apply_fee_hard_filter(
     *,
     source: str,
 ) -> list[dict]:
-    """Apply a final fee-based guard before returning results."""
+    """결과 반환 전 요금 조건을 기준으로 최종 하드 필터링 적용."""
     if not _has_fee_preferences(parsed):
         return places
 
@@ -444,7 +528,7 @@ def _apply_restriction_hard_filter(
     *,
     source: str,
 ) -> list[dict]:
-    """Apply a final restriction-based guard using normalized condition tags."""
+    """정규화된 제한사항 태그를 기준으로 최종 하드 필터링 적용."""
     prefs = _get_restriction_preferences(parsed)
     forbidden_tags = prefs["forbidden_tags"]
     if not forbidden_tags:
@@ -474,7 +558,7 @@ def _apply_restriction_hard_filter(
 
 
 async def _parse_query_with_llm(query: str, request: Request = None) -> ParsedQuery:
-    """Parse the raw query into objective and subjective fields."""
+    """사용자 질문(query)을 객관적(objective)와 주관적(subjective)으로 파싱."""
     parsed = ParsedQuery(query)
 
     location = _place_type.extract_location(query)
@@ -494,10 +578,12 @@ async def _parse_query_with_llm(query: str, request: Request = None) -> ParsedQu
             parsed.time_condition = result.get("time_condition")
             parsed.use_current_location = bool(result.get("use_current_location", False))
             parsed.landmark = result.get("landmark")
+            _normalize_sub_category_intent(parsed)
             _normalize_size_interpretation(parsed)
     except Exception as e:
         logger.warning(f"[PlaceService] LLM query parsing failed, using defaults: {e}")
 
+    _normalize_sub_category_intent(parsed)
     _normalize_fee_preferences(parsed)
     _normalize_supply_preferences(parsed)
     _relax_objective_for_restriction_focus(parsed)
@@ -517,20 +603,238 @@ def _clone_parsed(parsed: ParsedQuery) -> ParsedQuery:
 
 
 def _has_explicit_place_purpose(query: str) -> bool:
-    """Return True when the user clearly names a specific place type."""
+    """쿼리에 구체적인 장소 유형이 명시된 경우 True 반환."""
     return any(keyword in (query or "") for keyword in EXPLICIT_PURPOSE_KEYWORDS)
 
 
+def _extract_requested_place_type(query: str) -> str | None:
+    """추천 문구에서 사용자가 명시한 장소 유형 텍스트 추출."""
+    text = (query or "").strip()
+    if not text:
+        return None
+
+    patterns = (
+        r"(?:가능한|되는|갈\s*수\s*있는|이용\s*가능한|동반\s*가능한)\s+([가-힣A-Za-z0-9]+)\s*(?:추천|알려|찾아)",
+        r"([가-힣A-Za-z0-9]+)\s*(?:추천|알려|찾아)\s*(?:해줘|줘|주세요)?$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        target = match.group(1).strip()
+        target = re.sub(r"(은|는|이|가|을|를|도|만|좀)$", "", target)
+        if target and target not in GENERIC_PLACE_TARGETS:
+            return target
+
+    return None
+
+
+def _expand_place_type_aliases(place_type: str) -> set[str]:
+    return {place_type, *PLACE_TYPE_ALIASES.get(place_type, set())}
+
+
+def _expand_sub_categories(sub_category: str | None) -> set[str]:
+    if not sub_category:
+        return set()
+    return {sub_category, *SUB_CATEGORY_GROUPS.get(sub_category, set())}
+
+
+def _normalize_sub_category_intent(parsed: ParsedQuery) -> None:
+    query = (parsed.raw_query or "").replace(" ", "")
+    if not query:
+        return
+
+    pet_hotel_keywords = ("강아지호텔", "애견호텔", "펫호텔", "펫시터", "데이케어")
+    if any(keyword in query for keyword in pet_hotel_keywords):
+        parsed.objective["sub_category"] = "위탁관리"
+        return
+
+    if "문화시설" in query:
+        parsed.objective["sub_category"] = "문화시설"
+        return
+
+    if "문예회관" in query:
+        parsed.objective["sub_category"] = "문예회관"
+
+
+def _requires_requested_place_type_filter(query: str, parsed: ParsedQuery) -> bool:
+    if parsed.objective.get("sub_category"):
+        return False
+
+    requested = _extract_requested_place_type(query)
+    if not requested:
+        return False
+
+    terms = _expand_place_type_aliases(requested)
+    return not bool(terms.intersection(EXPLICIT_PURPOSE_KEYWORDS))
+
+
+async def _is_unsupported_requested_place_type(
+    query: str,
+    parsed: ParsedQuery,
+    db: AsyncSession,
+) -> bool:
+    """사용자가 요청한 장소 유형이 DB에 존재하지 않으면 True 반환."""
+    if parsed.objective.get("sub_category"):
+        return False
+
+    requested = _extract_requested_place_type(query)
+    if not requested:
+        return False
+
+    candidates = _expand_place_type_aliases(requested)
+    if candidates.intersection(EXPLICIT_PURPOSE_KEYWORDS):
+        return False
+
+    try:
+        text_conditions = []
+        for candidate in candidates:
+            text_conditions.extend(
+                [
+                    PlaceModel.name.like(f"%{candidate}%"),
+                    PlaceModel.sub_category.like(f"%{candidate}%"),
+                    PlaceModel.description.like(f"%{candidate}%"),
+                ]
+            )
+        existing_stmt = (
+            select(PlaceModel.content_id)
+            .where(or_(*text_conditions))
+            .limit(1)
+        )
+        existing = await db.execute(existing_stmt)
+        if existing.first():
+            return False
+
+        result = await db.execute(select(PlaceModel.sub_category).distinct())
+        supported = {row[0] for row in result.fetchall() if row[0]}
+    except Exception as e:
+        logger.warning(f"[PlaceService] supported category lookup failed: {e}")
+        return False
+
+    supported.update(EXPLICIT_PURPOSE_KEYWORDS)
+    supported.update(_place_type.types.values())
+    return not candidates.intersection(supported)
+
+
+async def _filter_candidate_ids_by_requested_place_type(
+    candidate_ids: list[str],
+    query: str,
+    parsed: ParsedQuery,
+    db: AsyncSession,
+) -> list[str]:
+    """DB 텍스트에서 사용자가 명시한 장소 유형과 일치하는 후보만 유지."""
+    if not candidate_ids or not _requires_requested_place_type_filter(query, parsed):
+        return candidate_ids
+
+    requested = _extract_requested_place_type(query)
+    terms = _expand_place_type_aliases(requested)
+
+    text_conditions = []
+    for term in terms:
+        text_conditions.extend(
+            [
+                PlaceModel.name.like(f"%{term}%"),
+                PlaceModel.sub_category.like(f"%{term}%"),
+                PlaceModel.description.like(f"%{term}%"),
+            ]
+        )
+
+    stmt = (
+        select(PlaceModel.content_id)
+        .where(
+            and_(
+                PlaceModel.content_id.in_(candidate_ids),
+                or_(*text_conditions),
+            )
+        )
+    )
+    result = await db.execute(stmt)
+    filtered_ids = [row[0] for row in result.fetchall()]
+    logger.info(
+        "[PlaceService] requested place type filter (%s): %d -> %d",
+        requested,
+        len(candidate_ids),
+        len(filtered_ids),
+    )
+    return filtered_ids
+
+
 def _should_prioritize_outing(parsed: ParsedQuery) -> bool:
-    """Use outing-first ranking only for broad recommendation questions."""
+    """광범위 추천 질문일 때만 나들이 카테고리 우선 정렬을 적용."""
     return (
         not parsed.objective.get("sub_category")
         and not _has_explicit_place_purpose(parsed.raw_query)
     )
 
 
+def _allows_purpose_only_categories(parsed: ParsedQuery) -> bool:
+    """병원/약국/용품/미용/위탁관리처럼 목적형 카테고리를 허용할지 판단."""
+    sub_categories = _expand_sub_categories(parsed.objective.get("sub_category"))
+    if sub_categories.intersection(PURPOSE_ONLY_SUBCATEGORIES):
+        return True
+
+    purpose_keywords = {
+        "병원",
+        "동물병원",
+        "약국",
+        "동물약국",
+        "펫샵",
+        "팻샵",
+        "용품",
+        "용품점",
+        "반려동물용품",
+        "미용",
+        "그루밍",
+        "위탁",
+        "펫시터",
+        "강아지호텔",
+        "애견호텔",
+        "펫호텔",
+        "데이케어",
+    }
+    query = parsed.raw_query or ""
+    return any(keyword in query for keyword in purpose_keywords)
+
+
+def _allowed_result_subcategories(parsed: ParsedQuery) -> set[str] | None:
+    """현재 쿼리에서 최종 결과로 허용되는 sub_category 집합."""
+    sub_category = parsed.objective.get("sub_category")
+    if sub_category:
+        return _expand_sub_categories(sub_category)
+    if _allows_purpose_only_categories(parsed):
+        return PURPOSE_ONLY_SUBCATEGORIES
+    return DEFAULT_RECOMMENDABLE_SUBCATEGORIES
+
+
+def _apply_category_guard(
+    places: list[dict],
+    parsed: ParsedQuery,
+    *,
+    source: str,
+) -> list[dict]:
+    """목적형 카테고리가 일반 장소 추천 결과에 섞이지 않도록 최종 방어."""
+    allowed = _allowed_result_subcategories(parsed)
+    if allowed is None:
+        return places
+
+    kept = [
+        place
+        for place in places
+        if (place.get("sub_category") or "").strip() in allowed
+    ]
+    if len(kept) != len(places):
+        logger.info(
+            "[PlaceService] category guard (%s): %d -> %d (allowed=%s)",
+            source,
+            len(places),
+            len(kept),
+            sorted(allowed),
+        )
+    return kept
+
+
 def _calc_category_bias(place: PlaceModel, parsed: ParsedQuery) -> float:
-    """Add a small ranking bias for outing-friendly categories on broad queries."""
+    """광범위 질문에서 나들이 친화 카테고리에 소폭의 랭킹 보정값 계산."""
     sub_category = (place.sub_category or "").strip()
     bias = 0.0
     restriction_tags = _extract_restriction_tags(place.pet_restrictions)
@@ -566,7 +870,7 @@ def _apply_outing_priority(
     parsed: ParsedQuery,
     n_results: int,
 ) -> list[dict]:
-    """Prefer outing-friendly categories first for broad recommendation queries."""
+    """광범위 추천 쿼리에서 나들이 친화 카테고리를 결과 상위로 배치."""
     if not _should_prioritize_outing(parsed):
         return sorted(places, key=lambda x: x["final_score"], reverse=True)[:n_results]
 
@@ -593,7 +897,7 @@ def _apply_outing_priority(
 
 
 async def _get_landmark_coords(landmark: str) -> tuple[float, float] | None:
-    """Resolve landmark coordinates via Kakao keyword search."""
+    """카카오 키워드 검색으로 랜드마크 위경도 좌표 조회."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(
@@ -617,7 +921,7 @@ async def _filter_by_rdb(
     db: AsyncSession,
     max_candidates: int = 200,
 ) -> list[str]:
-    """Filter candidates from RDB using objective conditions."""
+    """objective 조건으로 RDB에서 후보 content_id 목록 필터링."""
     obj = parsed.objective
     conditions = []
 
@@ -626,7 +930,12 @@ async def _filter_by_rdb(
     if obj.get("district"):
         conditions.append(PlaceModel.address.like(f"%{obj['district']}%"))
     if obj.get("sub_category"):
-        conditions.append(PlaceModel.sub_category == obj["sub_category"])
+        sub_categories = _expand_sub_categories(obj["sub_category"])
+        conditions.append(PlaceModel.sub_category.in_(sub_categories))
+    elif _allows_purpose_only_categories(parsed):
+        conditions.append(PlaceModel.sub_category.in_(PURPOSE_ONLY_SUBCATEGORIES))
+    elif not _allows_purpose_only_categories(parsed):
+        conditions.append(PlaceModel.sub_category.in_(DEFAULT_RECOMMENDABLE_SUBCATEGORIES))
     if obj.get("is_indoor") is not None:
         conditions.append(PlaceModel.is_indoor == obj["is_indoor"])
     if obj.get("is_outdoor") is not None:
@@ -698,7 +1007,7 @@ async def _filter_by_rdb(
 
 
 def _parse_operation_hours(operation_info: str) -> dict:
-    """Parse operation_info into comparable hour and closure flags."""
+    """operation_info 텍스트를 비교 가능한 운영시간·휴무 dict로 파싱."""
     if not operation_info or NO_INFO in operation_info:
         return {}
 
@@ -715,6 +1024,10 @@ def _parse_operation_hours(operation_info: str) -> dict:
         ("일" in closed_part or SUNDAY in closed_part) and not result["always_open"]
     )
 
+    # 월~금 요일별 휴무 감지
+    for day_char, key in [("월", "closed_on_mon"), ("화", "closed_on_tue"), ("수", "closed_on_wed"), ("목", "closed_on_thu"), ("금", "closed_on_fri")]:
+        result[key] = day_char in closed_part and not result["always_open"]
+
     matches = re.findall(r"(\d{1,2}):(\d{2})~(\d{1,2}):(\d{2})", hours_part)
     if matches:
         open_times, close_times = [], []
@@ -726,6 +1039,11 @@ def _parse_operation_hours(operation_info: str) -> dict:
             close_times.append(close_h * 100 + int(cm))
         result["earliest_open"] = min(open_times)
         result["latest_close"] = max(close_times)
+    elif not result.get("is_24hours") and not result.get("always_open"):
+        logger.warning(
+            "[PlaceService] 운영시간 시간대 패턴 미인식 — DB 값 확인 필요 | operation_info=%.100s",
+            operation_info,
+        )
 
     if result["is_24hours"]:
         result["earliest_open"] = 0
@@ -739,7 +1057,7 @@ def _parse_operation_hours(operation_info: str) -> dict:
 
 
 def _check_time_condition(operation_info: str | None, time_condition: str) -> bool:
-    """Return True when a place satisfies the requested time condition."""
+    """장소가 요청된 시간 조건을 만족하면 True 반환."""
     if not time_condition:
         return True
     if not operation_info or NO_INFO in operation_info:
@@ -757,11 +1075,11 @@ def _check_time_condition(operation_info: str | None, time_condition: str) -> bo
     if time_condition == MORNING:
         return earliest <= 1000
     if time_condition == LUNCH:
-        return earliest <= 1200 and latest >= 1300
+        return earliest <= 1100 and latest >= 1400
     if time_condition == EVENING:
-        return latest >= 1800
+        return latest >= 1700
     if time_condition == NIGHT:
-        return latest >= 2200
+        return latest >= 2100
     if time_condition == OPEN_24H:
         return h.get("is_24hours", False) or latest >= 2400
     if time_condition == ALWAYS_OPEN:
@@ -791,7 +1109,7 @@ async def _filter_by_time(
     time_condition: str | None,
     db: AsyncSession,
 ) -> list[str]:
-    """Filter candidate IDs by time condition, keeping original on empty result."""
+    """시간 조건으로 후보 ID를 필터링하며, 결과가 0건이면 원본 리스트 유지."""
     if not time_condition or not candidate_ids:
         return candidate_ids
 
@@ -820,7 +1138,7 @@ async def _search_by_chromadb(
     n_results: int,
     request: Request = None,
 ) -> list[dict]:
-    """Run Chroma similarity search for the subjective part of the query."""
+    """쿼리의 주관적(subjective) 부분으로 ChromaDB 유사도 검색 실행."""
     try:
         container = request.app.state.ai_container if request else None
         if not container:
@@ -830,15 +1148,18 @@ async def _search_by_chromadb(
 
         # candidate_ids가 있으면 후처리 필터를 위해 여유롭게 더 가져온다
         has_candidates = bool(candidate_ids)
-        fetch_n = max(n_results, 50) if has_candidates else n_results
+        fetch_n = max(n_results, CHROMA_FILTERED_FETCH_N) if has_candidates else n_results
         search_n_results = max(fetch_n, 20) if _has_fee_preferences(parsed) else fetch_n
+
+        sub_categories = _expand_sub_categories(parsed.objective.get("sub_category"))
+        vector_category = parsed.objective.get("sub_category") if len(sub_categories) <= 1 else None
 
         results = container._places_retriever.search(
             query=query_text,
             n_results=search_n_results,
             city=parsed.objective.get("city"),
             district=parsed.objective.get("district"),
-            category=parsed.objective.get("sub_category"),
+            category=vector_category,
         )
 
         # RDB 필터(is_indoor/is_outdoor/has_parking/pet_size/시간 등)로 좁힌 후보에만 제한
@@ -865,7 +1186,7 @@ async def _fetch_and_score(
     db: AsyncSession,
     n_results: int,
 ) -> list[dict]:
-    """Join vector results with RDB details and calculate final scores."""
+    """벡터 검색 결과를 RDB 상세정보와 조인해 최종 점수(rag+rule+bias) 계산."""
     if not vector_results:
         return []
 
@@ -901,7 +1222,8 @@ async def _fetch_and_score(
         )
         places.append(place_dict)
 
-    prioritized = _apply_outing_priority(places, parsed, n_results)
+    category_filtered = _apply_category_guard(places, parsed, source="vector")
+    prioritized = _apply_outing_priority(category_filtered, parsed, n_results)
     fee_filtered = _apply_fee_hard_filter(prioritized, parsed, source="vector")
     return _apply_restriction_hard_filter(fee_filtered, parsed, source="vector")
 
@@ -912,7 +1234,7 @@ async def _fallback_rdb_only(
     db: AsyncSession,
     n_results: int,
 ) -> list[dict]:
-    """Build final results from RDB candidates only."""
+    """RDB 후보만으로 최종 결과 구성 (ChromaDB 미사용 폴백)."""
     if not candidate_ids:
         logger.info("[PlaceService] fallback: no candidates, return empty list")
         return []
@@ -929,7 +1251,8 @@ async def _fallback_rdb_only(
         d["final_score"] = round(d["rule_score"] + d["category_bias"], 4)
         scored.append(d)
 
-    prioritized = _apply_outing_priority(scored, parsed, n_results)
+    category_filtered = _apply_category_guard(scored, parsed, source="fallback")
+    prioritized = _apply_outing_priority(category_filtered, parsed, n_results)
     fee_filtered = _apply_fee_hard_filter(prioritized, parsed, source="fallback")
     return _apply_restriction_hard_filter(fee_filtered, parsed, source="fallback")
 
@@ -939,7 +1262,7 @@ async def _filter_with_relaxation(
     db: AsyncSession,
     max_candidates: int = 200,
 ) -> tuple[list[str], ParsedQuery]:
-    """Relax strict objective filters step by step when no candidates are found."""
+    """후보가 0건이면 objective 필터를 단계적으로 완화해 재시도."""
     candidate_ids = await _filter_by_rdb(parsed, db, max_candidates=max_candidates)
     if candidate_ids:
         return candidate_ids, parsed
@@ -970,13 +1293,6 @@ async def _filter_with_relaxation(
         relaxed.landmark = None
         relaxed.landmark_coords = None
         attempts.append(("sub_category+district+landmark", relaxed))
-
-    if parsed.objective.get("sub_category"):
-        relaxed = _clone_parsed(parsed)
-        relaxed.objective["sub_category"] = None
-        relaxed.landmark = None
-        relaxed.landmark_coords = None
-        attempts.append(("sub_category+landmark", relaxed))
 
     seen: set[tuple] = set()
     for label, relaxed in attempts:
@@ -1201,7 +1517,7 @@ async def search_places_from_db(
     search_mode: str = "combined",
     user_lat: float = None,
     user_lng: float = None,
-    pre_parsed: dict = None,
+    pre_parsed: dict | ParsedQuery | None = None,
 ) -> list[dict]:
     """Run the hybrid place-search pipeline.
 
@@ -1213,16 +1529,20 @@ async def search_places_from_db(
     user_lat / user_lng: 사용자 GPS 좌표. landmark가 없고 GPS가 제공되면
         현재 위치를 landmark_coords로 사용해 반경 검색을 수행.
 
-    pre_parsed: 사전에 파싱된 쿼리 결과 dict. 제공 시 LLM 파싱 호출을 건너뜀 (평가용).
+    pre_parsed: 사전에 파싱된 쿼리 결과. 제공 시 LLM 파싱 호출을 건너뜀.
+        dict는 평가용 입력, ParsedQuery는 채팅 핸들러에서 중복 파싱 방지용으로 사용.
     """
     try:
-        if pre_parsed:
+        if isinstance(pre_parsed, ParsedQuery):
+            parsed = _clone_parsed(pre_parsed)
+        elif pre_parsed:
             parsed = ParsedQuery(query)
-            parsed.objective = pre_parsed["objective"]
+            parsed.objective = deepcopy(pre_parsed["objective"])
             parsed.subjective = pre_parsed.get("subjective", query)
             parsed.time_condition = pre_parsed.get("time_condition")
             parsed.use_current_location = pre_parsed.get("use_current_location", False)
             parsed.landmark = pre_parsed.get("landmark")
+            parsed.landmark_coords = pre_parsed.get("landmark_coords")
         else:
             parsed = await _parse_query_with_llm(query, request)
 
@@ -1245,6 +1565,13 @@ async def search_places_from_db(
                 )
                 return []
 
+        if await _is_unsupported_requested_place_type(query, parsed, db):
+            logger.info(
+                "[PlaceService] unsupported place type requested: %s -> return empty result",
+                query,
+            )
+            return []
+
         if parsed.use_current_location:
             # LLM이 현재 위치 기반 검색으로 판단 → GPS 우선 사용
             parsed.landmark = None
@@ -1259,7 +1586,16 @@ async def search_places_from_db(
             logger.info(f"[PlaceService] fallback GPS coords: ({user_lat}, {user_lng})")
 
         if search_mode == "rdb_only":
-            candidate_ids, parsed = await _filter_with_relaxation(parsed, db, max_candidates=200)
+            candidate_ids, parsed = await _filter_with_relaxation(
+                parsed,
+                db,
+                max_candidates=RDB_FILTER_MAX_CANDIDATES,
+            )
+            candidate_ids = await _filter_candidate_ids_by_requested_place_type(
+                candidate_ids, query, parsed, db
+            )
+            if _requires_requested_place_type_filter(query, parsed) and not candidate_ids:
+                return []
             if parsed.time_condition:
                 candidate_ids = await _filter_by_time(candidate_ids, parsed.time_condition, db)
             return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
@@ -1274,7 +1610,16 @@ async def search_places_from_db(
         if _should_prioritize_outing(parsed):
             logger.info("[PlaceService] broad outing query detected, apply outing-first ranking")
 
-        candidate_ids, parsed = await _filter_with_relaxation(parsed, db, max_candidates=200)
+        candidate_ids, parsed = await _filter_with_relaxation(
+            parsed,
+            db,
+            max_candidates=RDB_FILTER_MAX_CANDIDATES,
+        )
+        candidate_ids = await _filter_candidate_ids_by_requested_place_type(
+            candidate_ids, query, parsed, db
+        )
+        if _requires_requested_place_type_filter(query, parsed) and not candidate_ids:
+            return []
 
         if parsed.time_condition:
             candidate_ids = await _filter_by_time(candidate_ids, parsed.time_condition, db)

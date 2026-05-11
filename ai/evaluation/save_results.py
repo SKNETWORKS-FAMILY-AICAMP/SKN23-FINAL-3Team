@@ -11,6 +11,14 @@ OPTIMIZATION_LOG_PATH = DEFAULT_OUTPUT_DIR / "optimization_log.xlsx"
 
 logger = logging.getLogger(__name__)
 
+MODE_LABELS = {
+    "combined": "Combined",
+    "rdb_only": "RDB only",
+    "rag_only": "RAG only",
+}
+MODE_ORDER = ["combined", "rdb_only", "rag_only"]
+REPORT_K_VALUES = [1, 3, 5, 10, 20]
+
 
 def save_results(records: list[dict], output_path: str = None, run_id: str = None) -> Path:
     """평가 결과를 새 엑셀 파일로 저장. 원본 파일은 수정하지 않는다."""
@@ -131,12 +139,151 @@ def save_ablation_results(records: list[dict], output_path: str = None, run_id: 
         df_raw.to_excel(writer, sheet_name="raw", index=False)
         df_summary.to_excel(writer, sheet_name="summary", index=False)
         df_by_cat.to_excel(writer, sheet_name="by_category", index=False)
+        _write_report_sheet(writer, df_summary, df_by_cat)
 
     logger.info("Ablation results saved → %s", out)
 
     _append_optimization_log(df_summary, run_id)
 
     return out
+
+
+def _write_report_sheet(
+    writer: pd.ExcelWriter,
+    df_summary: pd.DataFrame,
+    df_by_cat: pd.DataFrame,
+) -> None:
+    """발표/보고서에 바로 옮기기 쉬운 요약 시트를 추가한다."""
+    sheet_name = "report"
+    start_row = 0
+
+    start_row = _write_titled_table(
+        writer,
+        sheet_name,
+        "전체 지표 - Hit@k",
+        _build_overall_report(df_summary, "hit_rate", "Hit"),
+        start_row,
+    )
+    start_row = _write_titled_table(
+        writer,
+        sheet_name,
+        "전체 지표 - Recall@k",
+        _build_overall_report(df_summary, "recall_rate", "Recall"),
+        start_row + 1,
+    )
+    category_report = _build_category_report(df_by_cat)
+    start_row = _write_titled_table(
+        writer,
+        sheet_name,
+        "카테고리별 결과 (Combined, k=5)",
+        category_report,
+        start_row + 1,
+    )
+    _write_titled_table(
+        writer,
+        sheet_name,
+        "강점/약점 요약",
+        _build_strength_weakness_report(category_report),
+        start_row + 1,
+    )
+
+    _format_report_sheet(writer, sheet_name)
+
+
+def _build_overall_report(
+    df_summary: pd.DataFrame,
+    metric_col: str,
+    metric_label: str,
+) -> pd.DataFrame:
+    if df_summary.empty:
+        return pd.DataFrame(columns=["모드", *[f"{metric_label}@{k}" for k in REPORT_K_VALUES]])
+
+    pivot = df_summary.pivot_table(index="mode", columns="k", values=metric_col, aggfunc="first")
+    rows = []
+    for mode in MODE_ORDER:
+        if mode not in pivot.index:
+            continue
+        row = {"모드": MODE_LABELS.get(mode, mode)}
+        for k in REPORT_K_VALUES:
+            row[f"{metric_label}@{k}"] = pivot.loc[mode, k] if k in pivot.columns else ""
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _build_category_report(df_by_cat: pd.DataFrame) -> pd.DataFrame:
+    columns = ["카테고리", "n", "Hit@5", "Recall@5"]
+    if df_by_cat.empty:
+        return pd.DataFrame(columns=columns)
+
+    sub = df_by_cat[(df_by_cat["mode"] == "combined") & (df_by_cat["k"] == 5)].copy()
+    if sub.empty:
+        return pd.DataFrame(columns=columns)
+
+    sub = sub.rename(columns={"hit_rate": "Hit@5", "recall_rate": "Recall@5"})
+    sub = sub[columns].sort_values(["Hit@5", "Recall@5", "카테고리"], ascending=[False, False, True])
+    return sub.reset_index(drop=True)
+
+
+def _build_strength_weakness_report(category_report: pd.DataFrame) -> pd.DataFrame:
+    columns = ["구분", "카테고리", "기준", "해석"]
+    if category_report.empty:
+        return pd.DataFrame(columns=columns)
+
+    ranked = category_report[category_report["Hit@5"] != ""].copy()
+    if ranked.empty:
+        return pd.DataFrame(columns=columns)
+
+    weak = ranked.sort_values(["Hit@5", "Recall@5", "카테고리"], ascending=[True, True, True]).head(3)
+    strong = ranked.sort_values(["Hit@5", "Recall@5", "카테고리"], ascending=[False, False, True]).head(3)
+
+    rows = [
+        {
+            "구분": "약점",
+            "카테고리": ", ".join(weak["카테고리"].tolist()),
+            "기준": "Combined Hit@5 하위 3개",
+            "해석": "필터 조건 기반 쿼리 또는 복합 조건에서 보완 필요",
+        },
+        {
+            "구분": "강점",
+            "카테고리": ", ".join(strong["카테고리"].tolist()),
+            "기준": "Combined Hit@5 상위 3개",
+            "해석": "명시적 조건 쿼리에서 상대적으로 안정적",
+        },
+    ]
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _write_titled_table(
+    writer: pd.ExcelWriter,
+    sheet_name: str,
+    title: str,
+    df: pd.DataFrame,
+    start_row: int,
+) -> int:
+    workbook = writer.book
+    if sheet_name in writer.sheets:
+        worksheet = writer.sheets[sheet_name]
+    else:
+        worksheet = workbook.create_sheet(sheet_name)
+        writer.sheets[sheet_name] = worksheet
+
+    worksheet.cell(row=start_row + 1, column=1, value=title)
+    df.to_excel(writer, sheet_name=sheet_name, startrow=start_row + 1, index=False)
+    return start_row + len(df) + 3
+
+
+def _format_report_sheet(writer: pd.ExcelWriter, sheet_name: str) -> None:
+    worksheet = writer.sheets[sheet_name]
+    for row in worksheet.iter_rows():
+        for cell in row:
+            if cell.value is None:
+                continue
+            if isinstance(cell.value, float):
+                cell.number_format = "0.0%"
+
+    for column_cells in worksheet.columns:
+        max_len = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells)
+        worksheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_len + 2, 10), 45)
 
 
 def _append_optimization_log(df_summary: pd.DataFrame, run_id: str) -> None:

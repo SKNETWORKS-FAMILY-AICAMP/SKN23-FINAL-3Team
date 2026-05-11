@@ -146,11 +146,9 @@ async def create_pet(
     if data.image_id is not None:
         await _verify_image_exists(data.image_id, db)
 
-    # type_id: 미전송 시 첫 번째 PET 키워드 자동 사용
+    # type_id: 미전송 시 NULL 유지
     type_id = data.type_id
-    if type_id is None:
-        type_id = await _get_default_keyword_id(db)
-    else:
+    if type_id is not None:
         await _verify_keyword(type_id, db)
 
     pet = Pet(

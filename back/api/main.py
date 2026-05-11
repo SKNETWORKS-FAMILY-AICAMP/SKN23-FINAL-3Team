@@ -245,9 +245,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # AIContainer 초기화 (ChromaDB + 임베딩 모델)
     try:
         from ai.container import AIContainer
-        app.state.ai_container = AIContainer(
+        ai_container = AIContainer(
             openai_api_key=settings.OPENAI_API_KEY
         )
+        from core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as _sess:
+            await ai_container.load_keyword_scores(_sess)
+        app.state.ai_container = ai_container
         logger.info("[AI] AIContainer 초기화 완료")
     except Exception as e:
         logger.warning(f"[AI] AIContainer 초기화 실패 (무시): {e}")

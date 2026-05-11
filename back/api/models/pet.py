@@ -63,10 +63,10 @@ class Pet(Base):
     is_neutered: Mapped[bool | None] = mapped_column(Boolean, nullable=True, comment="중성화 여부 (NULL=미입력)")
 
     # FK → keywords
-    type_id: Mapped[int] = mapped_column(
+    type_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("keywords.id", onupdate="CASCADE", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         comment="대표 성격 키워드 ID",
     )
 

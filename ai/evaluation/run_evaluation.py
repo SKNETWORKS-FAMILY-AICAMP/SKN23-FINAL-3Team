@@ -10,11 +10,20 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent))
 
 from api_client import search_places
+from config import EVAL_USER_LAT, EVAL_USER_LNG
 from load_evalset import load_evalset
 from metrics import calc_hit_at_k, calc_recall_at_k, calc_refusal
 from save_results import save_results
 
 LOG_DIR = Path(__file__).parent / "logs"
+GPS_CATEGORY = "GPS (사용자 현재 위치)"
+
+
+def _gps_eval_coords(item: dict) -> tuple[float | None, float | None]:
+    """GPS 평가 문항에만 고정 현재 위치를 전달한다."""
+    if item.get("category") == GPS_CATEGORY:
+        return EVAL_USER_LAT, EVAL_USER_LNG
+    return None, None
 
 
 def _setup_logging(verbose: bool, run_id: str) -> None:
@@ -119,7 +128,8 @@ def run(
         }
 
         try:
-            results = search_places(q)
+            user_lat, user_lng = _gps_eval_coords(item)
+            results = search_places(q, user_lat=user_lat, user_lng=user_lng)
             record["top_results"] = results
 
             if item["eval_type"] == "refusal":
@@ -152,7 +162,7 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="withDOG 장소 검색 품질 평가")
-    parser.add_argument("--input", help="평가셋 엑셀 경로 (기본: data/eval/withDOG 평가셋 .xlsx)")
+    parser.add_argument("--input", help="평가셋 엑셀 경로 (기본: data/eval/장소추천 평가셋 NEW.xlsx)")
     parser.add_argument("--output", help="결과 저장 경로")
     parser.add_argument("--limit", type=int, help="처음 N건만 실행 (테스트용)")
     parser.add_argument("--category", help="특정 카테고리만 평가")
