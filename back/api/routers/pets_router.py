@@ -23,7 +23,7 @@ from models.user import User
 from services import pet_service as pet_svc
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.deps import get_current_user, get_db
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from schemas.pet import PetCreate, PetResponse, PetUpdate
 
 router = APIRouter(tags=["Pets"])
@@ -43,10 +43,11 @@ router = APIRouter(tags=["Pets"])
 )
 async def create_pet(
     data: PetCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PetResponse:
-    pet = await pet_svc.create_pet(data, db, current_user.id)
+    pet = await pet_svc.create_pet(data, request, db, current_user.id)
     return PetResponse.model_validate(pet)
 
 
@@ -90,10 +91,11 @@ async def get_pet(
 async def update_pet(
     pet_id: int,
     data: PetUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PetResponse:
-    pet = await pet_svc.update_pet(pet_id, data, db, current_user.id)
+    pet = await pet_svc.update_pet(pet_id, data, request, db, current_user.id)
     return PetResponse.model_validate(pet)
 
 

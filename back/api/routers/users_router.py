@@ -23,7 +23,7 @@ from __future__ import annotations
 from models.user import User
 from services import user_service as user_svc
 from core.deps import get_current_user, get_db
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.user import UserResponse, UserUpdate
 
@@ -72,12 +72,14 @@ async def get_user(
 async def update_user(
     user_id: int,
     data: UserUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     user = await user_svc.update_user(
         user_id=user_id,
         data=data,
+        request=request,
         db=db,
         current_user_id=current_user.id,
     )
