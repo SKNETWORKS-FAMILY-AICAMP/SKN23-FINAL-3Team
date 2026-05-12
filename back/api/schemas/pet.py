@@ -82,6 +82,10 @@ class PetResponse(BaseModel):
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부")
     type_id: int | None = Field(None, description="대표 성격 키워드 ID")
+    type_name: str | None = Field(
+        None,
+        description="성향 타입 한글 표시명 (keywords.name). Pet ORM property 매핑.",
+    )
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
     image_url: str | None = Field(
         None,

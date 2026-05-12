@@ -100,7 +100,9 @@ class Pet(Base):
         foreign_keys=[user_id],
     )
     breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="select")
-    keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
+    # selectin: PetResponse.type_name property 가 동기 access 안전하도록 prefetch.
+    # users.primary_pet / pet.image 와 동일 패턴.
+    type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="pet", cascade="all, delete-orphan")
     # 프로필 이미지 — PetResponse.image_url 매핑용. selectin 으로 prefetch.
     image: Mapped[Image | None] = relationship(
@@ -116,6 +118,15 @@ class Pet(Base):
         relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
         """
         return self.image.file_url if self.image else None
+
+    @property
+    def type_name(self) -> str | None:
+        """PetResponse 의 from_attributes 매핑용 — keywords.name 동적 추출.
+
+        Pet.type relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        type_id 가 NULL 이면 None 반환 — 마이페이지에서 "성향 미설정" 표시 분기.
+        """
+        return self.type.name if self.type else None
 
     def __repr__(self) -> str:
         return f"<Pet id={self.id} name={self.name!r} user_id={self.user_id}>"

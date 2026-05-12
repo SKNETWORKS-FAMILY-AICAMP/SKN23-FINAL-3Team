@@ -11,6 +11,7 @@ class Pet {
     this.gender,
     this.isNeutered,
     this.typeId,
+    this.typeName,
     this.selectedTags,
     required this.createdAt,
     required this.updatedAt,
@@ -25,6 +26,7 @@ class Pet {
   final PetGender? gender;
   final bool? isNeutered;
   final int? typeId;
+  final String? typeName;
   final List<dynamic>? selectedTags;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -40,6 +42,7 @@ class Pet {
       gender: PetGender.fromWire(json['gender'] as String?),
       isNeutered: json['is_neutered'] as bool?,
       typeId: json['type_id'] as int?,
+      typeName: json['type_name'] as String?,
       selectedTags: json['selected_tags'] as List<dynamic>?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),

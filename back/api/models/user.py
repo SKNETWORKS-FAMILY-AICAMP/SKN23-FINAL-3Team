@@ -91,7 +91,8 @@ class User(Base):
     # ── Relationships ──────────────────────────────────────────────────────
     # selectin: UserResponse.model_validate 시 profile_image_url property 자동 매핑용 prefetch.
     profile: Mapped[Image | None] = relationship("Image", foreign_keys=[profile_id], lazy="selectin")
-    keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
+    # selectin: UserResponse.type_name property 가 동기 access 안전하도록 prefetch.
+    type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")
     # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 SQLAlchemy 추론 모호 → foreign_keys 명시.
     pets: Mapped[list[Pet]] = relationship(
         "Pet",
@@ -116,6 +117,15 @@ class User(Base):
         Pet.profile_image_url property 와 동일 패턴.
         """
         return self.profile.file_url if self.profile else None
+
+    @property
+    def type_name(self) -> str | None:
+        """UserResponse 의 from_attributes 매핑용 — keywords.name 동적 추출.
+
+        User.type relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        type_id 가 NULL 이면 None 반환 — 마이페이지에서 "성향 미설정" 표시 분기.
+        """
+        return self.type.name if self.type else None
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} provider={self.provider!r}>"

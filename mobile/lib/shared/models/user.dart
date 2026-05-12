@@ -13,6 +13,7 @@ class User {
     this.profileId,
     required this.provider,
     this.typeId,
+    this.typeName,
     this.primaryPetId,
     this.primaryPet,
     this.selectedTags,
@@ -29,6 +30,7 @@ class User {
   final int? profileId;
   final String provider;
   final int? typeId;
+  final String? typeName;
   final int? primaryPetId;
   final Pet? primaryPet;
   final List<dynamic>? selectedTags;
@@ -46,6 +48,7 @@ class User {
       profileId: json['profile_id'] as int?,
       provider: json['provider'] as String,
       typeId: json['type_id'] as int?,
+      typeName: json['type_name'] as String?,
       primaryPetId: json['primary_pet_id'] as int?,
       primaryPet: json['primary_pet'] == null
           ? null

@@ -9,6 +9,7 @@ export interface Pet {
   gender: 'MALE' | 'FEMALE' | null
   is_neutered: boolean | null
   type_id: number | null
+  type_name: string | null
   selected_tags: string[]
   image_url: string | null
   created_at: string
