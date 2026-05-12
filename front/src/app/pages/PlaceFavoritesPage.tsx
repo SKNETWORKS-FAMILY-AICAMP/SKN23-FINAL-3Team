@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Star, ArrowLeft } from 'lucide-react';
+import { Star, ArrowLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { getPlaceFavorites, togglePlaceFavorite, type FavoritePlace, type PlaceResult } from '../services/placeService';
 import { getPlaceByName, type FacilityCard } from '../services/chatService';
@@ -97,7 +97,10 @@ export default function PlaceFavoritesPage() {
 
         {loading ? (
           <div className="flex h-60 items-center justify-center">
-            <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
+            <span className="inline-flex items-center gap-2 text-sm text-[#B08B7A]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              불러오는 중...
+            </span>
           </div>
         ) : favorites.length === 0 ? (
           <div className="flex h-60 flex-col items-center justify-center gap-3 text-center">
@@ -145,7 +148,10 @@ export default function PlaceFavoritesPage() {
                 {detailLoading ? (
                   <div className="overflow-hidden rounded-2xl border border-[#F2E7DD] bg-white shadow-sm">
                     <div className="flex h-60 items-center justify-center">
-                      <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
+                      <span className="inline-flex items-center gap-2 text-sm text-[#B08B7A]">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        불러오는 중...
+                      </span>
                     </div>
                   </div>
                 ) : selected && (

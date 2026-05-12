@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { getDiary, getDiaryCalendar, updateDiary, deleteDiary, type DiaryRecord } from '../services/dbDiaryService';
 import { getImage } from '../services/imageService';
 import DiaryDetailView, { type DiaryViewModel } from '../components/DiaryDetailView';
@@ -32,6 +32,9 @@ export default function CalendarPage() {
   const [selectedDiary, setSelectedDiary] = useState<DiaryRecord | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [diaryLoading, setDiaryLoading] = useState(false);
+  // 월 변경 시 캘린더 이모지가 잠시 사라졌다 다시 표시되는 깜빡임을 가리는 오버레이용.
+  // getDiaryCalendar 호출 시 setCalendarLoading(true) → finally 에서 false.
+  const [calendarLoading, setCalendarLoading] = useState(false);
   // 활성 월 카드 ref — 좌측 사이드바에서 현재 선택된 월이 화면에 보이도록 자동 스크롤.
   const activeMonthRef = useRef<HTMLDivElement | null>(null);
 
@@ -61,6 +64,7 @@ export default function CalendarPage() {
     if (!token) return;
     const y = currentDate.getFullYear();
     const m = currentDate.getMonth() + 1; // API는 1-indexed
+    setCalendarLoading(true);
     getDiaryCalendar(y, m)
       .then((res) => {
         const mapped: DayEmotion[] = res.items.map((item) => ({
@@ -70,7 +74,8 @@ export default function CalendarPage() {
         }));
         setEmotions(mapped);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setCalendarLoading(false));
   }, [currentDate]);
 
   const year = currentDate.getFullYear();
@@ -157,7 +162,10 @@ export default function CalendarPage() {
                 <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
               </div>
               <div className="flex h-60 items-center justify-center rounded-[28px] bg-[#FFFDF8] border border-[#E9D9C9] shadow-[0_8px_24px_rgba(61,43,31,0.08)]">
-                <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
+                <span className="inline-flex items-center gap-2 text-sm text-[#B08B7A]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  불러오는 중...
+                </span>
               </div>
             </>
           ) : selectedDiary && (
@@ -257,7 +265,15 @@ export default function CalendarPage() {
           </div>
 
           {/* Right Content - Calendar */}
-          <div className="flex-1 bg-white rounded-[32px] shadow-lg border border-orange-100 p-8">
+          <div className="relative flex-1 bg-white rounded-[32px] shadow-lg border border-orange-100 p-8">
+            {/* 월 변경 시 캘린더 위 오버레이 — 이모지 깜빡임 회피용. 반투명 배경으로
+                기존 셀이 살짝 비치고 중앙 스피너로 갱신 중임을 시각화. */}
+            {calendarLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[32px] bg-white/60">
+                <Loader2 className="h-7 w-7 animate-spin text-[#F4845F]" />
+              </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
               <button
