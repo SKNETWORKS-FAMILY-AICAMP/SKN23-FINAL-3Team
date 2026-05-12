@@ -276,6 +276,11 @@ async def delete_user(
         deleted_at에 현재 시각을 기록합니다.
         10일 후 services/scheduler.py의 hard_delete_withdrawn_users()가 물리 삭제합니다.
 
+        [provider_id mangle — 2026-05-12]
+        탈퇴 즉시 provider_id 에 `__deleted_<timestamp>` suffix 를 박아 동일 소셜
+        계정으로 재가입 시 UNIQUE (provider, provider_id) 충돌을 회피합니다.
+        재가입 정책 = 새 users.id 로 신규 계정 생성, 기존 데이터 미연결.
+
         Args:
                 user_id        : 탈퇴할 사용자 ID
                 db             : AsyncSession
@@ -289,4 +294,8 @@ async def delete_user(
     _assert_owner(user, current_user_id)
 
     user.deleted_at = kst_now()
+    # 동일 소셜 계정 재가입 시 UNIQUE uq_users_provider (provider, provider_id) 충돌 회피.
+    # 10일 후 hard delete 시 row 자체가 사라지므로 영구 잔존 X.
+    ts = int(user.deleted_at.timestamp())
+    user.provider_id = f"{user.provider_id}__deleted_{ts}"
     await db.flush()
