@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star } from 'lucide-react';
+import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star, Loader2 } from 'lucide-react';
 import type { Pet, DiaryEntry, User } from '../types';
 import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
@@ -221,12 +221,14 @@ function MapIntro({ onStartMap }: { onStartMap: () => void }) {
 
 function DiaryAlbum({
   diaries,
+  loading = false,
   onBack,
   onDelete,
   onUpdate,
   initialFavoriteIds,
 }: {
   diaries: DiaryEntry[];
+  loading?: boolean;
   onBack: () => void;
   onDelete: (id: string) => Promise<void>;
   onUpdate?: (id: string, title: string, body: string) => Promise<void>;
@@ -304,6 +306,16 @@ function DiaryAlbum({
             }}
           />
         </div>
+      </div>
+    );
+  }
+
+  // 로딩 중에는 빈 배열 분기 ("저장된 그림일기 없음") 가 깜박 보이지 않도록 스피너 우선 표시.
+  if (loading) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#F6F1EA] p-8">
+        <Loader2 className="h-10 w-10 animate-spin text-[#F4845F]" />
+        <span className="text-sm text-[#8B6355]">불러오는 중...</span>
       </div>
     );
   }
@@ -561,6 +573,9 @@ export default function HomePage({
   const [diaryTrigger, setDiaryTrigger] = useState(0);
   const [showAlbum, setShowAlbum] = useState(false);
   const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>([]);
+  // 앨범 진입 시 getDiariesByUser + getImage 로드 — 응답 전 "저장된 그림일기 없음" 빈 분기가
+  // 깜박이는 깜빡임 방지용. fetch 성공·실패와 무관하게 finally 에서 복원.
+  const [albumLoading, setAlbumLoading] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
@@ -795,6 +810,7 @@ export default function HomePage({
     if (!showAlbum) return;
     const token = localStorage.getItem('access_token');
     if (!token) return;
+    setAlbumLoading(true);
     getMe()
       .then((me) => getDiariesByUser(me.id))
       .then(async (records) => {
@@ -818,7 +834,8 @@ export default function HomePage({
         setAlbumFavoriteIds(new Set(records.filter((d) => d.is_favorite).map((d) => String(d.id))));
         setAlbumDiaries(entries.reverse());
       })
-      .catch(() => { });
+      .catch(() => { })
+      .finally(() => setAlbumLoading(false));
   }, [showAlbum]);
 
   const handleSaveDiary = (entry: DiaryEntry) => {
@@ -971,6 +988,7 @@ export default function HomePage({
                     // DiaryAlbum 내부 selected / isEditing state 가 자동 reset → 목록으로 복귀.
                     key={location.key}
                     diaries={albumDiaries}
+                    loading={albumLoading}
                     initialFavoriteIds={albumFavoriteIds}
                     onBack={() => setShowAlbum(false)}
                     onDelete={async (id) => {
