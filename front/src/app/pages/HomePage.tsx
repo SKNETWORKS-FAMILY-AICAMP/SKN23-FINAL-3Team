@@ -1155,6 +1155,17 @@ export default function HomePage({
                       {!showChatHistory && (
                         <button
                           onClick={() => {
+                            // 우측 챗봇 영역 reset — diaryTrigger 가 monotonic counter 라
+                            // 0 이상이면 ChatBot 재마운트 직후 useEffect[diaryTrigger] 가 발화해서
+                            // forceStartDiary 가 다시 호출됨 → step='type_select' 유지, input 폼
+                            // 미렌더. 0 으로 리셋해서 `if (!diaryTrigger) return` 분기로 차단.
+                            setDiaryTrigger(0);
+                            setAutoPlace(null);
+                            // 좌측 본문 다이어리 영역 reset — 결과 카드 / Editor 분기 닫기.
+                            // 미reset 시 우측만 welcome 복귀하고 좌측 카드는 남아 어색.
+                            setDiaryResult(null);
+                            setShowDiaryEditor(false);
+                            // 사이드바 닫기 + ChatBot 강제 재마운트
                             setShowChatHistory(false);
                             setChatKey((k) => k + 1);
                           }}
