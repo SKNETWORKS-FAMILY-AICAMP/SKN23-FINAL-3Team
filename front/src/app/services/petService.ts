@@ -22,7 +22,6 @@ export interface PetCreateInput {
   birth_date?: string
   gender?: 'MALE' | 'FEMALE'
   is_neutered?: boolean
-  type_id?: number
   selected_tags?: string[]
   image_id?: number
 }

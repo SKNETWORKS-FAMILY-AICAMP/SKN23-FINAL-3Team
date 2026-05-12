@@ -59,13 +59,13 @@ class User {
 }
 
 /// `PATCH /api/users/{id}` 요청 (`UserUpdate`).
+/// type_id 는 백엔드가 selected_tags 로부터 자동 재계산하므로 송신 필드에서 제외.
 class UserUpdate {
   const UserUpdate({
     this.nickname,
     this.gender,
     this.birthDate,
     this.profileId,
-    this.typeId,
     this.primaryPetId,
     this.selectedTags,
   });
@@ -74,7 +74,6 @@ class UserUpdate {
   final Gender? gender;
   final DateTime? birthDate;
   final int? profileId;
-  final int? typeId;
   final int? primaryPetId;
   final List<dynamic>? selectedTags;
 
@@ -83,7 +82,6 @@ class UserUpdate {
         if (gender != null) 'gender': gender!.wire,
         if (birthDate != null) 'birth_date': _formatDate(birthDate!),
         if (profileId != null) 'profile_id': profileId,
-        if (typeId != null) 'type_id': typeId,
         if (primaryPetId != null) 'primary_pet_id': primaryPetId,
         if (selectedTags != null) 'selected_tags': selectedTags,
       };

@@ -36,7 +36,6 @@ export interface UserUpdateInput {
   gender?: 'MALE' | 'FEMALE'
   birth_date?: string
   age?: number
-  type_id?: number
   selected_tags?: string[]
   profile_id?: number
   primary_pet_id?: number

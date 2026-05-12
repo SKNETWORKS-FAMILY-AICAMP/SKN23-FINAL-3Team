@@ -176,7 +176,6 @@ async def create_pet(
         await _verify_image_exists(data.image_id, db)
 
     # selected_tags → type_id 자동 계산 (빈 배열 / None 은 NULL).
-    # 클라이언트가 직접 보낸 data.type_id 는 무시 — 파생 필드 정책.
     tags = data.selected_tags or []
     if tags:
         scorer = _get_dog_scorer(request)
@@ -292,9 +291,6 @@ async def update_pet(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="부적절한 단어가 포함되어 있습니다",
         )
-
-    # type_id 는 selected_tags 기반 파생 필드 — 클라이언트 직접 입력 무시.
-    update_data.pop("type_id", None)
 
     # selected_tags 기반 type_id 자동 재계산 (PATCH 시맨틱).
     # 키 미존재 → type_id 미변경. 빈 배열 → NULL. 채워짐 → classify.

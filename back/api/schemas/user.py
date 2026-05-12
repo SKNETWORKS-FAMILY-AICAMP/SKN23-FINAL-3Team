@@ -84,11 +84,6 @@ class UserUpdate(BaseModel):
         gt=0,
         description="프로필 이미지 ID (images 테이블 참조)",
     )
-    type_id: int | None = Field(
-        None,
-        gt=0,
-        description="대표 성향 키워드 ID (keywords 테이블 참조)",
-    )
     primary_pet_id: int | None = Field(
         None,
         gt=0,
@@ -99,5 +94,5 @@ class UserUpdate(BaseModel):
     )
     selected_tags: list[Any] | None = Field(
         None,
-        description="선택한 여행 성향 태그 목록 (JSON 배열)",
+        description="선택한 여행 성향 태그 목록 (JSON 배열). type_id 는 백엔드가 자동 재계산.",
     )
