@@ -386,9 +386,13 @@ chat_response_service._handle_places()
     ↓
 성향 타입 분류
     ↓
-검색 쿼리 결정
+QueryParser 조건 파싱
     ↓
-ChromaDB RAG 벡터 검색
+RDB 후보 필터링
+    ↓
+ChromaDB 의미 검색
+    ↓
+rule_score + rag_score 결합
     ↓
 반려견/보호자 성향 기반 재순위
     ↓
@@ -417,20 +421,26 @@ owner_tags
 
 태그가 없는 경우에는 타입 분류 없이 `None`으로 처리하고 추천을 진행합니다.
 
-> #### Step 2 — 검색 쿼리 결정
+> #### Step 2 — 쿼리 파싱 및 RDB 후보 필터링
 
 ```text
-user_query가 있으면  → 사용자 입력 그대로 사용
-user_query가 없으면  → owner_tags를 공백으로 join하여 사용
-둘 다 없으면       → "반려견 동반 가능한 장소" 기본값 사용
+사용자 입력
+  → QueryParser
+  → objective 조건 추출
+      - 지역 / 장소유형 / 실내외 / 주차 / 시간 / GPS / 반경
+  → subjective 조건 추출
+      - 조용한 / 넓은 / 분위기 좋은 / 산책하기 좋은 등
+  → RDB 후보 필터링
 ```
 
-> #### Step 3 — RAG 벡터 검색
+RDB 후보 필터링은 SQL 조건 기반으로 후보를 좁히는 단계입니다. 6차 평가 이후 기본 후보 상한을 500개로 확대했고, 장소 유형 텍스트 필터 결과가 5개 미만이면 원본 후보를 유지해 과도한 후보 손실을 방지합니다.
 
-사용자 검색 쿼리를 임베딩한 뒤 ChromaDB에서 의미적으로 가까운 장소를 검색합니다.
+> #### Step 3 — ChromaDB 의미 검색
+
+사용자 검색 쿼리를 임베딩한 뒤 ChromaDB에서 의미적으로 가까운 장소를 검색합니다. `subjective` 조건이 있으면 이를 우선 사용하고, 비어 있으면 사용자 원문 전체를 사용합니다.
 
 ```text
-query
+subjective or raw_query
   → Embedder.embed()
   → query embedding
   → ChromaDB.query()
@@ -438,7 +448,7 @@ query
   → 코사인 유사도 기반 places[] 반환
 ```
 
-검색 시 필요한 경우 아래 필터를 함께 사용할 수 있습니다.
+검색 시 필요한 경우 아래 조건을 함께 사용할 수 있습니다.
 
 ```text
 category
@@ -446,7 +456,7 @@ city
 district
 ```
 
-`QueryParser` 가 사용자 자유 입력에서 객관 조건 11키(지역·카테고리·반경·시간·실내외 등)를 분리해 위 필터로 매핑하며, "강남역 근처 5km" 같은 landmark 표현은 좌표 + 반경 검색으로 변환합니다 (2026-04-26 회귀 라운드 보강).
+6차 평가 이후 combined 모드에서는 ChromaDB 후보를 RDB 후보 안으로 제한하지 않습니다. 따라서 객관 조건 기반 RDB 검색과 의미 기반 ChromaDB 검색이 각각 후보 품질을 보완하고, 이후 점수 계산에서 결합됩니다.
 
 > #### Step 4 — 반려견/보호자 성향 기반 재순위
 
@@ -466,7 +476,7 @@ owner_score_vector = OwnerScorer.calculate_vector(owner_tags)
 ```
 
 ```python
-base_score = rag_score * 0.7 + rule_score * 0.3 + category_bias
+base_score = rag_score * 0.5 + rule_score * 0.5 + category_bias
 final_score = base_score + profile_bonus
 ```
 
@@ -521,7 +531,7 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
 현재 장소 추천은 하이브리드 검색 단계에서 `rag_score`, `rule_score`, `category_bias`를 합산해 기본 점수를 만들고, 그 위에 반려견/보호자 성향 기반 보너스와 패널티를 더해 재정렬합니다.
 
 ```python
-base_score = rag_score * 0.7 + rule_score * 0.3 + category_bias
+base_score = rag_score * 0.5 + rule_score * 0.5 + category_bias
 final_score = base_score + profile_bonus
 ```
 
@@ -557,8 +567,9 @@ final_score = (
   → 장소추천 intent
   → QueryParser (쿼리 → 객관 조건 분리) 
   → DogScorer / OwnerScorer 성향 타입 분류
-  → 검색 쿼리 결정
-  → ChromaDB RAG 코사인 유사도 검색
+  → RDB 후보 필터링
+  → ChromaDB 의미 검색
+  → rag_score / rule_score / category_bias 결합
   → 반려견 성향 기반 bonus/penalty 재정렬
   → GPT-4.1-mini 추천 메시지 및 reason 생성
   → 장소 메타데이터 병합
@@ -824,18 +835,18 @@ Navbar
 
 ## 6.2. AI 장소 추천
 
-장소 검색 RAG (`/api/places/search`) 의 품질을 정량 측정하는 자동화 평가 시스템 (`ai/evaluation/`) 을 구축하고, 첫 baseline 측정을 완료했습니다.
+장소추천 검색 품질을 정량 측정하기 위해 자동화 평가 시스템 (`ai/evaluation/`) 을 구축하고, `run_ablation.py` 로 Combined / RDB only / RAG only 성능을 비교했습니다.
 
 > #### 평가셋 구성
 
 | 항목 | 값 |
 | --- | --- |
-| 총 건수 | 150건 |
-| Retrieval (정답 매칭) | 118건 |
-| Refusal (서울 외 거절) | 32건 |
+| 평가 파일 | `data/eval/장소추천 평가셋 NEW.xlsx` |
+| 평가 건수 | 131건 |
+| 평가 모드 | Combined / RDB only / RAG only |
 | 카테고리 | 9종 |
 
-카테고리 9종 — 복합 조건 / 지역 × 장소유형 / 주관 형용사 / 위치 기반 근처 / 동반 조건 특수 / 실내·실외 / 시간 조건 / 편의시설(주차) / 오류·범위 밖.
+카테고리 9종 — GPS 사용자 현재 위치 / 실내·실외 / 동반 조건 특수 / 편의시설(주차) / 시간 조건 / 복합 조건 / 위치 기반 근처 / 지역 × 장소유형 / 주관 형용사.
 
 <br />
 
@@ -843,53 +854,43 @@ Navbar
 
 | 메트릭 | 정의 |
 | --- | --- |
-| **Hit@5** | Top-5 안에 정답이 하나라도 있는 비율 (이진 0 / 1) |
-| **Recall@5** | 정답이 여러 개일 때 Top-5 포함 비율 (0.0 ~ 1.0) |
-| **Refusal Rate** | 서울 외 지역 등 범위 밖 질문을 올바르게 거절한 비율 |
+| **Hit@k** | Top-k 안에 정답이 하나라도 있는 비율 (이진 0 / 1) |
+| **Recall@k** | 정답이 여러 개일 때 Top-k 안에 포함된 정답 비율 (0.0 ~ 1.0) |
 
 <br />
 
-> #### 베이스라인 결과 (RUN_20260426)
+> #### 5차 Baseline → 6차 Final 결과
 
-```text
-[전체 Retrieval] n=118
-  Hit@5    : 0.5254 (52.5%)
-  Recall@5 : 0.4102 (41.0%)
+5차 baseline에서는 Combined와 RDB only가 전 구간 동일하게 나타났습니다. 이는 오류가 아니라, `subjective` 가 비어 있을 때 ChromaDB 재순위를 생략하고 RDB fallback으로 조기 반환하던 로직 때문이었습니다. 6차 final에서는 후보 수 확대, Chroma 후보 제한 완화, `subjective` empty fallback 제거, 장소 유형 필터 완화를 반영했습니다.
 
-[전체 Refusal]   n=32
-  Refusal Rate : 0.5938 (59.4%)
-```
+| 지표 | 5차 Baseline | 6차 Final | 변화 |
+| --- | ---: | ---: | ---: |
+| Combined Hit@1 | 26.0% | 37.4% | +11.4%p |
+| Combined Hit@3 | 26.7% | 55.0% | +28.3%p |
+| Combined Hit@5 | 29.0% | 62.6% | +33.6%p |
+| Combined Hit@10 | 34.4% | 77.1% | +42.7%p |
+| Combined Hit@20 | 55.7% | 84.0% | +28.3%p |
+| Combined Recall@5 | 2.6% | 11.5% | +8.9%p |
+| Combined Recall@20 | 8.6% | 35.9% | +27.3%p |
 
-> #### 카테고리별 (취약 영역 강조):
+> #### 카테고리별 주요 변화 (Combined, Hit@5)
 
-<br />
+| 카테고리 | 5차 Baseline | 6차 Final | 변화 |
+| --- | ---: | ---: | ---: |
+| 주관 형용사 | 4.2% | 87.5% | +83.3%p |
+| 지역 × 장소유형 | 12.5% | 56.3% | +43.8%p |
+| 위치 기반 근처 | 20.0% | 53.3% | +33.3%p |
+| 시간 조건 | 27.3% | 63.6% | +36.3%p |
+| 복합 조건 | 20.7% | 41.4% | +20.7%p |
+| 편의시설 (주차) | 44.4% | 55.6% | +11.2%p |
+| GPS 사용자 현재 위치 | 75.0% | 75.0% | 유지 |
+| 실내·실외 | 70.0% | 70.0% | 유지 |
+| 동반 조건 특수 | 60.0% | 80.0% | +20.0%p |
 
-| 카테고리 | n | Hit@5 |
-| --- | ---: | ---: |
-| 복합 조건 | 29 | 0.483 |
-| 지역 × 장소유형 | 27 | — |
-| 주관 형용사 | 21 | — |
-| **위치 기반 근처** | **16** | **0.250** 🔴 |
-| 동반 조건 특수 | 11 | — |
-| 실내 / 실외 | 11 | — |
-| 시간 조건 | 11 | — |
-| 편의시설 (주차) | 9 | — |
-| 오류 / 범위 밖 | 32 | (Refusal 0.594) |
-
-→ 개선 우선순위: **위치 기반 근처 (25.0%)** 는 `QueryParser` landmark 좌표 매핑 보강으로, **Refusal Rate (59.4%)** 는 서울 외 city 검출 정확도 향상으로 끌어올릴 계획입니다.
-
-<br />
-
-> #### 개선 추적 흐름
-
-`run_id` 컬럼으로 baseline (RUN_20260426) 과 개선 후 결과를 비교합니다.
+핵심 개선 요인은 `subjective` 가 비어 있어도 원문 query로 ChromaDB 의미 검색을 수행하도록 바꾼 점입니다. 이를 통해 Combined가 RDB fallback에 머무르지 않고 RAG only 수준 이상의 성능을 보였으며, 후보 수 확대와 장소 유형 필터 완화는 보조적으로 성능을 안정화했습니다.
 
 ```bash
-# baseline 측정
-python ai/evaluation/run_evaluation.py --output evaluation/results/before.xlsx
-
-# 검색 로직 개선 후
-python ai/evaluation/run_evaluation.py --output evaluation/results/after.xlsx
+python ai/evaluation/run_ablation.py
 ```
 
 <br />

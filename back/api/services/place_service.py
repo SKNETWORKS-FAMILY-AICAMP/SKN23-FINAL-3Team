@@ -756,6 +756,13 @@ async def _filter_candidate_ids_by_requested_place_type(
         len(candidate_ids),
         len(filtered_ids),
     )
+    if len(filtered_ids) < min(5, len(candidate_ids)):
+        logger.info(
+            "[PlaceService] requested place type filter relaxed (%s): keep original candidates",
+            requested,
+        )
+        return candidate_ids
+
     return filtered_ids
 
 
@@ -1624,9 +1631,8 @@ async def search_places_from_db(
         if parsed.time_condition:
             candidate_ids = await _filter_by_time(candidate_ids, parsed.time_condition, db)
 
-        if not (parsed.subjective or "").strip() and not _has_fee_preferences(parsed):
-            logger.info("[PlaceService] subjective empty, use RDB fallback first")
-            return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
+        # Ablation A3: subjective가 비어 있어도 Chroma 재순위를 수행한다.
+        # 기존에는 이 지점에서 RDB fallback으로 조기 반환했다.
 
         if (
             parsed.objective.get("is_indoor") is not None
@@ -1635,8 +1641,10 @@ async def search_places_from_db(
             logger.info("[PlaceService] indoor/outdoor condition detected, skip ChromaDB re-ranking")
             return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
 
+        # Ablation A2-1: Combined에서도 Chroma 후보를 RDB 후보 안으로 제한하지 않는다.
+        # RAG 후보가 실제로 Combined 성능에 기여할 수 있는지 확인하기 위한 실험이다.
         vector_results = await _search_by_chromadb(
-            parsed, candidate_ids, n_results, request
+            parsed, [], n_results, request
         )
 
         if vector_results:
