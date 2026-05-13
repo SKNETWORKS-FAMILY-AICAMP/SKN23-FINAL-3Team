@@ -59,6 +59,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- url_launcher — 길찾기: 카카오맵 / 네이버지도 앱 딥링크 -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>kakaomap</string>
+		<string>nmap</string>
+	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

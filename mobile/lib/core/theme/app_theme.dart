@@ -62,9 +62,7 @@ class AppTheme {
         backgroundColor: Colors.white,
         side: BorderSide(color: AppColors.beige),
         labelStyle: const TextStyle(color: AppColors.subBrown2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(999),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       ),
     );
   }

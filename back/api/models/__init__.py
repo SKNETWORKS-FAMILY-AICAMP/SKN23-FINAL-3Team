@@ -19,6 +19,7 @@ from models.chat_message import ChatMessage
 from models.diary import Diary
 from models.place import Place
 from models.favorite_place import FavoritePlace
+from models.pet_profile import PetProfile
 
 __all__ = [
     "Image",
@@ -26,6 +27,7 @@ __all__ = [
     "Breed",
     "User",
     "Pet",
+    "PetProfile",
     "ChatRoom",
     "ChatMessage",
     "Diary",

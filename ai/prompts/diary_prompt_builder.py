@@ -227,6 +227,7 @@ class DiaryPromptBuilder(BasePromptBuilder):
         all_answers: list[str],
         emotion: str = "😊",
         owner_gender: str = "",
+        english_prompt: str | None = None,
         **kwargs,
     ) -> str:
         breed_name = self._get_breed_en(breed, breed_en)
@@ -334,9 +335,15 @@ class DiaryPromptBuilder(BasePromptBuilder):
                 "no Middle Eastern architecture, no mosque, no Arabic text"
             )
 
+        # AI 프로필 분석 결과가 있으면 breed_name/breed_hint 대신 english_prompt 사용
+        if english_prompt:
+            character_desc = f"main character: {english_prompt}"
+        else:
+            character_desc = f"main character: one adorable {breed_name}{(' ' + breed_hint) if breed_hint else ''}"
+
         return (
             f"{image_prompt_base.strip().rstrip('.')}, "
-            f"main character: one adorable {breed_name}{(' ' + breed_hint) if breed_hint else ''}, "
+            f"{character_desc}, "
             f"personality in expression: {personality}, "
             f"{age_style}, "
             f"{(age_appearance + ', ') if age_appearance else ''}"

@@ -33,12 +33,17 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.diary import DiaryCreate, DiaryUpdate
 
+import logging
+
 from utils.profanity_filter import contains_profanity
+
+logger = logging.getLogger(__name__)
 
 
 # ── 정책 #71 — 욕설 검사 대상 필드 ────────────────────────────────────────────
+# title / content 는 AI 생성 텍스트이므로 검사 대상에서 제외.
+# 6하원칙 슬롯만 사용자 직접 입력 → 이 필드만 검사.
 _PROFANITY_FIELDS_DIARY = (
-    "title", "content",
     "when_text", "where_text", "who_text",
     "what_text", "how_text", "why_text",
 )
@@ -56,9 +61,10 @@ def _check_diary_profanity(values: dict) -> None:
     for field in _PROFANITY_FIELDS_DIARY:
         text = values.get(field)
         if text and contains_profanity(text):
+            logger.warning(f"[Profanity] 욕설 감지 — field={field}, text={text[:100]!r}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="부적절한 단어가 포함되어 있습니다",
+                detail=f"부적절한 단어가 포함되어 있습니다 (필드: {field})",
             )
 
 

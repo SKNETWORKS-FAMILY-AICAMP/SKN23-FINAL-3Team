@@ -54,6 +54,8 @@ enum LocationPermissionResult {
 
 /// 현재 위치 — `FutureProvider.autoDispose`. MapTab 진입 시 watch.
 /// 권한 거부·실패 시 null. 호출자는 null = 디폴트 서울 시청 좌표 fallback.
-final currentPositionProvider = FutureProvider.autoDispose<Position?>((_) async {
+final currentPositionProvider = FutureProvider.autoDispose<Position?>((
+  _,
+) async {
   return LocationService.getCurrent();
 });

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -29,6 +30,27 @@ class ImageApi {
     String filename = 'diary.png',
   }) async {
     final bytes = base64Decode(base64Data);
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    final response = await _client.raw.post<Map<String, dynamic>>(
+      '/images',
+      data: form,
+    );
+    return ImageUploadResponse.fromJson(response.data!);
+  }
+
+  /// URL 에서 이미지를 다운로드한 뒤 `POST /api/images` 로 업로드.
+  /// 사진 일러스트 변환 결과(S3 URL)를 일기 이미지로 연결할 때 사용.
+  Future<ImageUploadResponse> uploadFromUrl(String imageUrl) async {
+    final dio = Dio();
+    final resp = await dio.get<List<int>>(
+      imageUrl,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = Uint8List.fromList(resp.data!);
+    final ext = imageUrl.split('.').last.split('?').first.toLowerCase();
+    final filename = 'photo_diary_${DateTime.now().millisecondsSinceEpoch}.$ext';
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });

@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     # ── 개발 모드 플래그 ─────────────────────────────────────────────────────
     USE_DUMMY_PLACES: bool = Field(default=False)
 
+    # ── 사진 그림체 변환 ─────────────────────────────────────────────────────
+    USE_YOLO_DETECTOR: bool = Field(default=True)
+    USE_LOCAL_VLM: bool = Field(default=False)
+    VLM_MODEL_NAME: str = Field(default="Qwen/Qwen2.5-VL-3B-Instruct")
+    PHOTO_UPLOAD_MAX_MB: int = Field(default=10)
+    PHOTO_STYLE_MOCK_MODE: bool = Field(default=True)
+
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]
     @property

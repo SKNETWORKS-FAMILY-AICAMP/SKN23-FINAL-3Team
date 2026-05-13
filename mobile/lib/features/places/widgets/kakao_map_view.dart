@@ -89,8 +89,9 @@ class KakaoMapViewState extends State<KakaoMapView> {
     final controller = _controller;
     if (controller == null || !_ready) return;
     final levelArg = level == null ? '' : ', $level';
-    await controller
-        .evaluateJavascript(source: 'focusLatLng($lat, $lng$levelArg);');
+    await controller.evaluateJavascript(
+      source: 'focusLatLng($lat, $lng$levelArg);',
+    );
   }
 
   /// Dart → JS: 현재 위치 GPS 마커 (별도 색상, setMarkers 와 독립).
@@ -103,6 +104,23 @@ class KakaoMapViewState extends State<KakaoMapView> {
     await controller.evaluateJavascript(
       source: 'setCurrentLocationMarker($lat, $lng);',
     );
+  }
+
+  /// Dart → JS: 경로 Polyline 표시. points = [{lat, lng}, ...].
+  Future<void> drawRoutePolyline(List<Map<String, double>> points) async {
+    final controller = _controller;
+    if (controller == null || !_ready) return;
+    final payload = jsonEncode(points);
+    await controller.evaluateJavascript(
+      source: 'drawRoutePolyline($payload);',
+    );
+  }
+
+  /// Dart → JS: 경로 Polyline 제거.
+  Future<void> clearRoutePolyline() async {
+    final controller = _controller;
+    if (controller == null || !_ready) return;
+    await controller.evaluateJavascript(source: 'clearRoutePolyline();');
   }
 
   void _registerHandlers(InAppWebViewController controller) {
@@ -154,7 +172,11 @@ class KakaoMapViewState extends State<KakaoMapView> {
     final lat = (m['lat'] as num?)?.toDouble();
     final lng = (m['lng'] as num?)?.toDouble();
     if (lat == null || lng == null) return null;
-    return KakaoMapCoord(lat: lat, lng: lng, level: (m['level'] as num?)?.toInt());
+    return KakaoMapCoord(
+      lat: lat,
+      lng: lng,
+      level: (m['level'] as num?)?.toInt(),
+    );
   }
 
   @override
@@ -193,7 +215,9 @@ class KakaoMapViewState extends State<KakaoMapView> {
                 _registerHandlers(controller);
               },
               onConsoleMessage: (_, msg) {
-                debugPrint('[KakaoMapView console] ${msg.messageLevel} ${msg.message}');
+                debugPrint(
+                  '[KakaoMapView console] ${msg.messageLevel} ${msg.message}',
+                );
               },
             ),
             if (_loadError != null)
@@ -248,7 +272,11 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.map_outlined, size: 56, color: AppColors.brandOrange),
+          const Icon(
+            Icons.map_outlined,
+            size: 56,
+            color: AppColors.brandOrange,
+          ),
           const SizedBox(height: 12),
           Text(
             '지도를 불러오지 못했습니다',

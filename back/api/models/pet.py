@@ -72,7 +72,7 @@ class Pet(Base):
 
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 성격 태그 목록")
 
-    # FK -> images (프로필 이미지, nullable).
+    # FK → images (반려견 이미지)
     image_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("images.id", onupdate="CASCADE", ondelete="RESTRICT"),
@@ -99,25 +99,12 @@ class Pet(Base):
         back_populates="pets",
         foreign_keys=[user_id],
     )
-    breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="select")
+    breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="selectin")
     # selectin: PetResponse.type_name property 가 동기 access 안전하도록 prefetch.
-    # users.primary_pet / pet.image 와 동일 패턴.
     type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")
+    image: Mapped[Image | None] = relationship("Image", foreign_keys=[image_id], lazy="selectin")
+    profile = relationship("PetProfile", back_populates="pet", uselist=False, lazy="selectin")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="pet", cascade="all, delete-orphan")
-    # 프로필 이미지 — PetResponse.image_url 매핑용. selectin 으로 prefetch.
-    image: Mapped[Image | None] = relationship(
-        "Image",
-        foreign_keys=[image_id],
-        lazy="selectin",
-    )
-
-    @property
-    def image_url(self) -> str | None:
-        """PetResponse 의 from_attributes 매핑용 — relationship 에서 url 동적 추출.
-
-        relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
-        """
-        return self.image.file_url if self.image else None
 
     @property
     def type_name(self) -> str | None:

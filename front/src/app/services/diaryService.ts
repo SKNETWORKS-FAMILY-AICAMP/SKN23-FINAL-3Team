@@ -78,6 +78,42 @@ export async function generateDiaryImage(imagePrompt: string, sessionId?: string
   return `data:image/png;base64,${data.image_base64}`
 }
 
+export type PhotoStyleResult =
+  | { type: 'image_diary'; content: string; imageUrl: string }
+  | { type: 'bot_text';    content: string }
+
+export async function photoStyle(
+  file: File,
+  chatRoomId?: number,
+  dogId?: number,
+): Promise<PhotoStyleResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (chatRoomId != null) formData.append('chat_room_id', String(chatRoomId))
+  if (dogId != null)      formData.append('dog_id',       String(dogId))
+
+  const token = localStorage.getItem('access_token')
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+
+  const res = await fetch('/api/diary/photo-style', {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string }
+    throw new Error(err.detail ?? `사진 변환 API 오류 ${res.status}`)
+  }
+
+  const data = await res.json() as { type: string; content: string; image_url?: string }
+
+  if (data.type === 'image_diary' && data.image_url) {
+    return { type: 'image_diary', content: data.content, imageUrl: data.image_url }
+  }
+  return { type: 'bot_text', content: data.content }
+}
+
 // ── Mock ─────────────────────────────────────────────
 const OPENERS: Record<string, string> = {
   '😊': '오늘은 정말 신나는 하루였다! 멍!',

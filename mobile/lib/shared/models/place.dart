@@ -123,6 +123,7 @@ class FacilityCard {
   final String outdoor;
   final String conditions;
   final String description;
+
   /// 백엔드 by-name 응답이 image 필드를 추가할 시 자동 picking (R3 #56, 2026-05-05).
   /// 현재 운영 응답엔 부재 — 빈 문자열 fallback. 향후 백엔드 확장 시 mobile 변경 X.
   final String firstimage;

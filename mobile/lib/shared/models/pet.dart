@@ -16,6 +16,11 @@ class Pet {
     required this.createdAt,
     required this.updatedAt,
     this.age,
+    this.imageId,
+    this.imageUrl,
+    this.breedName,
+    this.englishPrompt,
+    this.mustIncludeKeywords,
   });
 
   final int id;
@@ -31,6 +36,17 @@ class Pet {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int? age;
+  final int? imageId;
+  final String? imageUrl;
+
+  /// 견종 한국어 이름 (백엔드 computed_field).
+  final String? breedName;
+
+  /// AI 프로필 분석 — 이미지 생성용 영문 외형 프롬프트.
+  final String? englishPrompt;
+
+  /// AI 프로필 분석 — 매 그림에 반드시 포함할 핵심 키워드.
+  final List<String>? mustIncludeKeywords;
 
   factory Pet.fromJson(Map<String, dynamic> json) {
     return Pet(
@@ -47,6 +63,13 @@ class Pet {
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       age: json['age'] as int?,
+      imageId: json['image_id'] as int?,
+      imageUrl: json['image_url'] as String?,
+      breedName: json['breed_name'] as String?,
+      englishPrompt: json['english_prompt'] as String?,
+      mustIncludeKeywords: (json['must_include_keywords'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
     );
   }
 }
@@ -61,6 +84,7 @@ class PetCreate {
     this.gender,
     this.isNeutered,
     this.selectedTags,
+    this.imageId,
   });
 
   final int breedId;
@@ -69,6 +93,7 @@ class PetCreate {
   final PetGender? gender;
   final bool? isNeutered;
   final List<dynamic>? selectedTags;
+  final int? imageId;
 
   Map<String, dynamic> toJson() => {
         'breed_id': breedId,
@@ -77,6 +102,7 @@ class PetCreate {
         if (gender != null) 'gender': gender!.wire,
         if (isNeutered != null) 'is_neutered': isNeutered,
         if (selectedTags != null) 'selected_tags': selectedTags,
+        if (imageId != null) 'image_id': imageId,
       };
 }
 
@@ -90,6 +116,7 @@ class PetUpdate {
     this.gender,
     this.isNeutered,
     this.selectedTags,
+    this.imageId,
   });
 
   final int? breedId;
@@ -98,6 +125,7 @@ class PetUpdate {
   final PetGender? gender;
   final bool? isNeutered;
   final List<dynamic>? selectedTags;
+  final int? imageId;
 
   Map<String, dynamic> toJson() => {
         if (breedId != null) 'breed_id': breedId,
@@ -106,6 +134,7 @@ class PetUpdate {
         if (gender != null) 'gender': gender!.wire,
         if (isNeutered != null) 'is_neutered': isNeutered,
         if (selectedTags != null) 'selected_tags': selectedTags,
+        if (imageId != null) 'image_id': imageId,
       };
 }
 

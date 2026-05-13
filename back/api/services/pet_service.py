@@ -25,6 +25,7 @@ from models.pet import Pet
 from models.user import User
 from typing import Sequence
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 from core.utils import kst_now
 from models.breed import Breed
 from models.image import Image
@@ -34,6 +35,10 @@ from schemas.pet import PetCreate, PetUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from utils.profanity_filter import contains_profanity
+
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
@@ -197,7 +202,6 @@ async def create_pet(
     )
     db.add(pet)
     await db.flush()
-    await db.refresh(pet)
 
     # 자동 대표 반려견 설정 — 사용자에게 대표가 아직 없으면 신규 pet 으로 채움.
     # 온보딩 첫 등록 시 첫 반려견이 자연스럽게 대표가 되도록 하는 정책.
@@ -211,6 +215,18 @@ async def create_pet(
             .values(primary_pet_id=pet.id)
         )
         await db.flush()
+
+    # selectinload 로 image 를 확실하게 로드하여 반환
+    pet = await get_pet(pet.id, db)
+
+    # AI 프로필 자동 분석 — 사진이 있으면 GPT-4o Vision 으로 외형 분석
+    if data.image_id is not None:
+        try:
+            from services.pet_profile_service import analyze_pet_profile
+            await analyze_pet_profile(pet.id, data.image_id, db)
+            pet = await get_pet(pet.id, db)  # profile 관계 리로드
+        except Exception as e:
+            _logger.warning(f"[PetProfile] 등록 시 자동 분석 실패 (무시): {e}")
 
     return pet
 
@@ -229,6 +245,7 @@ async def list_pets(user_id: int, db: AsyncSession) -> Sequence[Pet]:
     result = await db.execute(
         select(Pet)
         .where(Pet.user_id == user_id, Pet.deleted_at.is_(None))
+        .options(selectinload(Pet.image))
         .order_by(Pet.created_at.desc())
     )
     return result.scalars().all()
@@ -242,7 +259,9 @@ async def get_pet(pet_id: int, db: AsyncSession) -> Pet:
                 HTTPException 404: 존재하지 않거나 삭제된 반려견
     """
     result = await db.execute(
-        select(Pet).where(Pet.id == pet_id, Pet.deleted_at.is_(None))
+        select(Pet)
+        .where(Pet.id == pet_id, Pet.deleted_at.is_(None))
+        .options(selectinload(Pet.image))
     )
     pet = result.scalar_one_or_none()
 
@@ -285,6 +304,8 @@ async def update_pet(
     if not update_data:
         return pet
 
+    old_image_id = pet.image_id  # 변경 전 image_id 기억
+
     # 욕설 필터 (이름 — 정책 #71)
     if "name" in update_data and contains_profanity(update_data["name"]):
         raise HTTPException(
@@ -314,7 +335,19 @@ async def update_pet(
         setattr(pet, field, value)
 
     await db.flush()
-    await db.refresh(pet)
+
+    # selectinload 로 image 를 확실하게 로드하여 반환
+    pet = await get_pet(pet_id, db)
+
+    # AI 프로필 재분석 — image_id 가 변경됐을 때만 트리거
+    new_image_id = update_data.get("image_id")
+    if new_image_id is not None and new_image_id != old_image_id:
+        try:
+            from services.pet_profile_service import analyze_pet_profile
+            await analyze_pet_profile(pet_id, new_image_id, db)
+            pet = await get_pet(pet_id, db)  # profile 관계 리로드
+        except Exception as e:
+            _logger.warning(f"[PetProfile] 수정 시 자동 분석 실패 (무시): {e}")
 
     return pet
 

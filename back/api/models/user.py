@@ -102,7 +102,6 @@ class User(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="탈퇴 일시")
 
     # ── Relationships ──────────────────────────────────────────────────────
-    # selectin: UserResponse.model_validate 시 profile_image_url property 자동 매핑용 prefetch.
     profile: Mapped[Image | None] = relationship("Image", foreign_keys=[profile_id], lazy="selectin")
     # selectin: UserResponse.type_name property 가 동기 access 안전하도록 prefetch.
     type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")

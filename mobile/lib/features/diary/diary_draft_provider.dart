@@ -8,6 +8,7 @@ import '../auth/auth_providers.dart';
 import '../onboarding/onboarding_providers.dart';
 import 'diary_ai_api.dart';
 import 'diary_draft_state.dart';
+import 'diary_list_provider.dart';
 import 'diary_providers.dart';
 import 'diary_types.dart';
 
@@ -22,9 +23,13 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
 
   void start({DiaryType? type, PlaceCard? place}) {
     state = DiaryDraftState(
-      phase: type == null ? DiaryDraftPhase.typeSelect : DiaryDraftPhase.mainQuestions,
+      phase: type == null
+          ? DiaryDraftPhase.typeSelect
+          : DiaryDraftPhase.mainQuestions,
       diaryType: type,
-      mainAnswers: type == null ? const [] : List.filled(type.questions.length, ''),
+      mainAnswers: type == null
+          ? const []
+          : List.filled(type.questions.length, ''),
       contextPlace: place,
     );
   }
@@ -84,6 +89,8 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
           mainAnswers: answers,
           diaryType: type.id,
           emotionEmoji: emotion.emoji,
+          englishPrompt: pet.englishPrompt,
+          mustIncludeKeywords: pet.mustIncludeKeywords ?? const [],
         ),
       );
       state = state.copyWith(
@@ -157,7 +164,9 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
         imageId = uploaded.id;
       }
 
-      final diary = await _ref.read(diaryApiProvider).create(
+      final diary = await _ref
+          .read(diaryApiProvider)
+          .create(
             DiaryCreate(
               petId: pet.id,
               title: generated.title,
@@ -168,12 +177,10 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
               whereText: state.contextPlace?.name,
             ),
           );
-      state = state.copyWith(
-        savedDiary: diary,
-        phase: DiaryDraftPhase.saved,
-      );
+      state = state.copyWith(savedDiary: diary, phase: DiaryDraftPhase.saved);
       // 캘린더·목록 invalidate
       _ref.invalidate(favoriteCalendarProvider);
+      _ref.invalidate(diaryListProvider);
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -190,7 +197,8 @@ class DiaryDraftNotifier extends StateNotifier<DiaryDraftState> {
 }
 
 final diaryDraftProvider =
-    StateNotifierProvider.autoDispose<DiaryDraftNotifier, DiaryDraftState>(
-        (ref) {
-  return DiaryDraftNotifier(ref);
-});
+    StateNotifierProvider.autoDispose<DiaryDraftNotifier, DiaryDraftState>((
+      ref,
+    ) {
+      return DiaryDraftNotifier(ref);
+    });

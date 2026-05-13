@@ -112,8 +112,16 @@ async def get_current_user(
             detail="토큰 페이로드가 올바르지 않습니다.",
         )
 
+    from models.pet import Pet
+    from sqlalchemy.orm import selectinload
+
     result = await db.execute(
-        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+        select(User)
+        .where(User.id == user_id, User.deleted_at.is_(None))
+        .options(
+            selectinload(User.profile),
+            selectinload(User.primary_pet).selectinload(Pet.image),
+        )
     )
     user = result.scalar_one_or_none()
 

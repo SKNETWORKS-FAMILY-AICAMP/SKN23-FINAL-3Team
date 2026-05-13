@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
-import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/place.dart';
+import '../../chat/chat_providers.dart';
+import '../../home/home_tab_index.dart';
 import '../place_providers.dart';
 import 'facility_modal_sheet.dart';
 
@@ -36,132 +36,139 @@ class PlaceCardTile extends ConsumerWidget {
         children: [
           InkWell(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-            onTap: () => onNameTap != null
-                ? onNameTap!()
-                : _openFacilityModal(context),
+            onTap: () =>
+                onNameTap != null ? onNameTap!() : _openFacilityModal(context),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 80,
-                  height: 80,
-                  child: image == null
-                      ? Container(
-                          color: AppColors.peach,
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            LucideIcons.mapPin,
-                            color: AppColors.brandOrange,
-                          ),
-                        )
-                      : Image.network(
-                          image,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            color: AppColors.peach,
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              LucideIcons.image,
-                              color: AppColors.brandOrange,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: image == null
+                          ? Container(
+                              color: AppColors.peach,
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                LucideIcons.mapPin,
+                                color: AppColors.brandOrange,
+                              ),
+                            )
+                          : Image.network(
+                              image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                color: AppColors.peach,
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  LucideIcons.image,
+                                  color: AppColors.brandOrange,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      place.name,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkBrown,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (place.address.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          place.address,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          place.name,
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.mutedForeground,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkBrown,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    if (place.reason.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          place.reason,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.subBrown,
-                            height: 1.4,
+                        if (place.address.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              place.address,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.mutedForeground,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        if (place.reason.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              place.reason,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.subBrown,
+                                height: 1.4,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        if (place.subCategory.isNotEmpty ||
+                            place.indoor.isNotEmpty ||
+                            place.outdoor.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: [
+                                if (place.subCategory.isNotEmpty)
+                                  _Tag(text: place.subCategory),
+                                if (place.indoor == 'Y')
+                                  const _Tag(text: '실내 가능'),
+                                if (place.outdoor == 'Y')
+                                  const _Tag(text: '실외 가능'),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        isFavorite ? Icons.favorite : Icons.favorite_border,
+                        key: ValueKey(isFavorite),
+                        color: isFavorite
+                            ? AppColors.brandOrange
+                            : AppColors.mutedForeground,
+                        size: 20,
                       ),
-                    if (place.subCategory.isNotEmpty ||
-                        place.indoor.isNotEmpty ||
-                        place.outdoor.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (place.subCategory.isNotEmpty)
-                              _Tag(text: place.subCategory),
-                            if (place.indoor == 'Y')
-                              const _Tag(text: '실내 가능'),
-                            if (place.outdoor == 'Y')
-                              const _Tag(text: '실외 가능'),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
-                icon: Icon(
-                  isFavorite ? LucideIcons.heart : LucideIcons.heart,
-                  color: isFavorite
-                      ? AppColors.destructive
-                      : AppColors.mutedForeground,
-                  size: 20,
-                ),
-                onPressed: () => _toggleFavorite(ref, isFavorite),
-              ),
+                    ),
+                    onPressed: () => _toggleFavorite(ref, isFavorite),
+                  ),
                 ],
               ),
             ),
           ),
           const Divider(height: 1, color: AppColors.beige),
           InkWell(
-            borderRadius:
-                const BorderRadius.vertical(bottom: Radius.circular(10)),
-            onTap: () => _openDiaryDraft(context),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(10),
+            ),
+            onTap: () => _openDiaryDraft(ref),
             child: const Padding(
               padding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(LucideIcons.penTool,
-                      size: 16, color: AppColors.brandOrange),
+                  Icon(
+                    LucideIcons.penTool,
+                    size: 16,
+                    color: AppColors.brandOrange,
+                  ),
                   SizedBox(width: 6),
                   Text(
                     '이 장소로 일기 쓰기',
@@ -180,8 +187,9 @@ class PlaceCardTile extends ConsumerWidget {
     );
   }
 
-  void _openDiaryDraft(BuildContext context) {
-    context.push(AppRoutes.diaryDraft, extra: place);
+  void _openDiaryDraft(WidgetRef ref) {
+    ref.read(pendingPlaceProvider.notifier).state = place;
+    ref.read(homeTabIndexProvider.notifier).state = 4; // 챗봇 탭
   }
 
   Future<void> _toggleFavorite(WidgetRef ref, bool wasFavorite) async {
@@ -193,6 +201,10 @@ class PlaceCardTile extends ConsumerWidget {
       await ref
           .read(favoriteContentIdsProvider.notifier)
           .toggle(place.contentId);
+      ref.invalidate(favoritePlacesProvider);
+      Fluttertoast.showToast(
+        msg: wasFavorite ? '즐겨찾기에서 제거됐어요' : '즐겨찾기에 추가됐어요',
+      );
     } catch (e) {
       Fluttertoast.showToast(msg: '즐겨찾기 토글 실패: $e');
     }
@@ -207,10 +219,8 @@ class PlaceCardTile extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => FacilityModalSheet(
-        name: place.name,
-        imageUrl: place.imageUrl,
-      ),
+      builder: (_) =>
+          FacilityModalSheet(name: place.name, imageUrl: place.imageUrl),
     );
   }
 }

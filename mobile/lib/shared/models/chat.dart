@@ -105,7 +105,10 @@ class ChatTurn {
       facility: json['facility'] == null
           ? null
           : FacilityCard.fromJson(json['facility'] as Map<String, dynamic>),
-      places: placesJson?.cast<Map<String, dynamic>>().map(PlaceCard.fromJson).toList(),
+      places: placesJson
+          ?.cast<Map<String, dynamic>>()
+          .map(PlaceCard.fromJson)
+          .toList(),
     );
   }
 }

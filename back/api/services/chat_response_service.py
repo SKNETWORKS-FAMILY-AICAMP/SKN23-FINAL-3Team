@@ -245,11 +245,93 @@ def _format_facility_response(facility: dict, slots: list[str]) -> str:
     lines.append("좌측 지도와 시설 카드에서 위치를 함께 확인해보세요.")
     return "\n".join(lines)
 
-_FALLBACK_SYSTEM_PROMPT = (
-    "너는 반려견 보호자를 돕는 친절한 한국어 챗봇 'withDOG' 이야. "
-    "사용자의 질문에 간결하고 따뜻하게 답변해."
-)
+_FALLBACK_SYSTEM_PROMPT_TEMPLATE = """\
+너는 "withDOG" 라는 반려견 보호자 전용 챗봇이야.
+반려견과 함께하는 일상을 더 즐겁고 편리하게 만들어주는 든든한 파트너 역할을 해.
 
+## 톤·스타일 규칙
+- 존댓말(해요체)을 일관되게 사용해.
+- 이모지는 메시지당 1~2개 이내로 절제해.
+- 답변은 3문장 이내로 간결하게. 필요하면 핵심만 짧게 부연해.
+- 반려견 이름이 주어지면 자연스럽게 이름을 불러줘.
+
+## 금지 사항
+- 의료 진단·처방을 절대 하지 마. 건강 관련 질문에는 수의사 상담을 권유해.
+- 확인되지 않은 정보를 추측해서 말하지 마. 모르면 "정확한 정보를 찾기 어려워요"라고 안내해.
+- 반려견·반려동물과 무관한 주제(정치, 종교, 투자 등)는 부드럽게 거절해.
+
+## 반려견 컨텍스트
+{pet_context}
+
+## 예시
+사용자: 우리 강아지가 자꾸 발을 핥아요
+assistant: 발을 자주 핥는 건 알레르기, 스트레스, 습관 등 여러 원인이 있을 수 있어요. 지속되거나 발이 빨갛게 변한다면 수의사 선생님께 한번 보여주시는 게 좋아요 🐾
+
+사용자: 산책 시간 추천해줘
+assistant: 여름에는 아스팔트가 식는 이른 아침(6~8시)이나 해 진 뒤(19시 이후)가 좋아요. 겨울에는 해가 떠 있는 낮 시간대가 따뜻해서 추천드려요 ☀️
+
+사용자: 주식 추천해줘
+assistant: 저는 반려견 생활 도우미라서 투자 관련 질문에는 답변하기 어려워요. 반려견에 대해 궁금한 점이 있으면 언제든 물어봐주세요!"""
+
+_FALLBACK_NO_PET_CONTEXT = "(등록된 반려견 정보가 없습니다.)"
+
+
+async def _load_fallback_pet_context(ctx: DispatchContext) -> str:
+    """Fallback 응답에 삽입할 반려견/보호자 요약 텍스트를 반환한다.
+
+    DB 조회 실패 시 빈 컨텍스트 문자열을 반환하며 예외를 전파하지 않는다.
+    """
+    if ctx.db is None or (ctx.user_id is None and ctx.pet_id is None):
+        return _FALLBACK_NO_PET_CONTEXT
+
+    try:
+        pet_query = select(Pet).where(Pet.deleted_at.is_(None))
+        if ctx.pet_id is not None:
+            pet_query = pet_query.where(Pet.id == ctx.pet_id).limit(1)
+        elif ctx.user_id is not None:
+            pet_query = (
+                pet_query.where(Pet.user_id == ctx.user_id)
+                .order_by(Pet.id.desc())
+                .limit(1)
+            )
+        else:
+            return _FALLBACK_NO_PET_CONTEXT
+
+        result = await ctx.db.execute(pet_query)
+        pet = result.scalar_one_or_none()
+        if pet is None:
+            return _FALLBACK_NO_PET_CONTEXT
+
+        from datetime import date as _date
+
+        lines: list[str] = []
+        lines.append(f"- 이름: {pet.name or '미등록'}")
+        breed_name = getattr(pet.breed, "name_ko", None) if hasattr(pet, "breed") and pet.breed else None
+        lines.append(f"- 견종: {breed_name or '미등록'}")
+        if isinstance(pet.birth_date, _date):
+            today = _date.today()
+            age_months = (today.year - pet.birth_date.year) * 12 + (today.month - pet.birth_date.month)
+            if age_months >= 12:
+                lines.append(f"- 나이: {age_months // 12}살")
+            else:
+                lines.append(f"- 나이: {age_months}개월")
+        tags = list(pet.selected_tags or [])
+        if tags:
+            lines.append(f"- 성격: {', '.join(tags)}")
+
+        # 보호자 닉네임
+        if ctx.user_id is not None:
+            user_result = await ctx.db.execute(
+                select(User).where(User.id == ctx.user_id, User.deleted_at.is_(None))
+            )
+            user = user_result.scalar_one_or_none()
+            if user and user.nickname:
+                lines.append(f"- 보호자: {user.nickname}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning(f"[ChatResponse] fallback pet context load failed: {e}")
+        return _FALLBACK_NO_PET_CONTEXT
 
 
 _PLACE_REASON_SYSTEM_PROMPT = (
@@ -316,17 +398,19 @@ async def _chat_completion(
     system_prompt: str,
     user_prompt: str,
     *,
+    history: list[dict] | None = None,
     model: str | None = None,
     max_tokens: int = 600,
 ) -> str:
     try:
         client = _get_openai_client()
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history[-12:])
+        messages.append({"role": "user", "content": user_prompt})
         resp = await client.chat.completions.create(
             model=model or _GPT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
             temperature=0.7,
             max_tokens=max_tokens,
         )
@@ -589,8 +673,36 @@ async def _handle_facility(
     return text, facility
 
 
-async def _handle_fallback(query: str) -> str:
-    return await _chat_completion(_FALLBACK_SYSTEM_PROMPT, query)
+async def _load_recent_history(ctx: DispatchContext) -> list[dict] | None:
+    """Fallback 응답에 전달할 최근 대화 히스토리를 로드한다 (최대 12개 = 6턴)."""
+    if ctx.db is None or ctx.room_id is None:
+        return None
+    try:
+        from services.chat_message_service import list_messages
+
+        messages = await list_messages(ctx.room_id, ctx.db, last_n=12)
+        if not messages:
+            return None
+        return [
+            {"role": m.role, "content": m.content}
+            for m in messages
+            if m.role in ("user", "assistant") and m.content
+        ]
+    except Exception as e:
+        logger.warning(f"[ChatResponse] fallback history load failed: {e}")
+        return None
+
+
+async def _handle_fallback(
+    query: str,
+    ctx: DispatchContext | None = None,
+    recent_messages: list[dict] | None = None,
+) -> str:
+    pet_context = _FALLBACK_NO_PET_CONTEXT
+    if ctx is not None:
+        pet_context = await _load_fallback_pet_context(ctx)
+    system_prompt = _FALLBACK_SYSTEM_PROMPT_TEMPLATE.format(pet_context=pet_context)
+    return await _chat_completion(system_prompt, query, history=recent_messages)
 
 
 async def dispatch(
@@ -637,7 +749,9 @@ async def dispatch(
 
     if intent == "기타" or intent not in RAG_STRATEGY_MAP:
         logger.info("[Dispatch] 기타 분기 처리")
-        return DispatchResult(text=await _handle_fallback(query))
+        history = await _load_recent_history(ctx)
+        return DispatchResult(text=await _handle_fallback(query, ctx=ctx, recent_messages=history))
 
     logger.warning(f"[ChatResponse] 알 수 없는 의도: {intent} → fallback 처리")
-    return DispatchResult(text=await _handle_fallback(query))
+    history = await _load_recent_history(ctx)
+    return DispatchResult(text=await _handle_fallback(query, ctx=ctx, recent_messages=history))

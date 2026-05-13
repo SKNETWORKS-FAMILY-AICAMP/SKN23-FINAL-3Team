@@ -45,8 +45,7 @@ class ChatHistoryDrawer extends ConsumerWidget {
                           selected: list[i].id == currentRoomId,
                         ),
                       ),
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
@@ -108,7 +107,7 @@ class _EmptyView extends StatelessWidget {
           Opacity(
             opacity: 0.4,
             child: Image.asset(
-              'assets/chatbot_logo.png',
+              'assets/icon/chatbot_logo.png',
               width: 64,
               height: 64,
             ),
@@ -137,9 +136,7 @@ class _RoomTile extends ConsumerWidget {
       selected: selected,
       selectedTileColor: AppColors.peach.withValues(alpha: 0.5),
       title: Text(
-        room.title?.trim().isNotEmpty == true
-            ? room.title!
-            : '제목 없는 채팅',
+        room.title?.trim().isNotEmpty == true ? room.title! : '제목 없는 채팅',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -151,14 +148,8 @@ class _RoomTile extends ConsumerWidget {
         icon: const Icon(LucideIcons.moreVertical, size: 18),
         onSelected: (action) => _onMenuSelected(context, ref, action),
         itemBuilder: (_) => const [
-          PopupMenuItem(
-            value: _RoomMenuAction.rename,
-            child: Text('이름 변경'),
-          ),
-          PopupMenuItem(
-            value: _RoomMenuAction.delete,
-            child: Text('삭제'),
-          ),
+          PopupMenuItem(value: _RoomMenuAction.rename, child: Text('이름 변경')),
+          PopupMenuItem(value: _RoomMenuAction.delete, child: Text('삭제')),
         ],
       ),
       onTap: () {
@@ -200,8 +191,7 @@ class _RoomTile extends ConsumerWidget {
             child: const Text('취소'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(context).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
             child: const Text('변경'),
           ),
         ],
@@ -227,7 +217,9 @@ class _RoomTile extends ConsumerWidget {
             child: const Text('취소'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.destructive,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('삭제'),
           ),

@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/models/app_notification.dart';
 import '../../../shared/models/diary.dart';
+import '../../notification/notification_provider.dart';
 import '../../onboarding/onboarding_providers.dart';
 import '../diary_detail_modal_sheet.dart';
 import '../diary_list_provider.dart';
@@ -24,9 +26,16 @@ class DiaryCardTile extends ConsumerWidget {
 
   Future<void> _toggleFavorite(WidgetRef ref) async {
     try {
-      await ref.read(diaryApiProvider).toggleFavorite(diary.id);
+      final updated = await ref.read(diaryApiProvider).toggleFavorite(diary.id);
       ref.invalidate(diaryListProvider);
       ref.invalidate(favoriteCalendarProvider);
+      if (updated.isFavorite) {
+        ref.read(notificationProvider.notifier).push(
+              type: NotificationType.favoriteAdded,
+              title: '즐겨찾기에 추가했어요!',
+              body: '${diary.title ?? '일기'}를 즐겨찾기에 추가했어요 ⭐',
+            );
+      }
     } on DioException catch (e) {
       // 백엔드 detail (HTTPException 메시지) 가 있으면 우선 노출 — Toast 만으론
       // 원인 추적 어려워 device-side 진단 도와주는 패턴.
@@ -77,12 +86,16 @@ class DiaryCardTile extends ConsumerWidget {
                   // diaryImageUrlProvider 가 family 캐시 — 같은 image 가 grid 에서
                   // 중복 fetch 안 됨.
                   ClipRRect(
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(12)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(12),
+                    ),
                     child: SizedBox(
                       width: double.infinity,
                       child: diary.imageId != null
-                          ? _DiaryImage(imageId: diary.imageId!, fallbackEmoji: diary.emotion)
+                          ? _DiaryImage(
+                              imageId: diary.imageId!,
+                              fallbackEmoji: diary.emotion,
+                            )
                           : _EmotionPlaceholder(emoji: diary.emotion ?? '🐾'),
                     ),
                   ),

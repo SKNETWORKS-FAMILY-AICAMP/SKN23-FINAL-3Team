@@ -371,7 +371,7 @@ def _extract_draft_text(bot_content: str) -> str:
     return draft.strip()
 
 
-def _collect_diary_context(recent_messages: list) -> str:
+def _collect_diary_context(recent_messages: list, owner_label: str = "보호자") -> str:
     lines = []
     for m in recent_messages:
         raw = (m.content or "").strip()
@@ -390,15 +390,22 @@ def _collect_diary_context(recent_messages: list) -> str:
                 and not _is_diary_reassert_request(content)
                 and len(content) >= 5
             ):
-                lines.append(f"보호자: {content}")
+                lines.append(f"{owner_label}: {content}")
     return "\n".join(lines).strip()
 
 
 def _is_context_sufficient(context: str) -> bool:
-    user_lines = [
-        line[len("보호자: "):] for line in context.splitlines()
-        if line.startswith("보호자: ")
-    ]
+    # 봇: 으로 시작하지 않는 라인에서 레이블 제거 후 user 텍스트 추출
+    user_lines = []
+    for line in context.splitlines():
+        if line.startswith("봇: "):
+            continue
+        # "닉네임: 내용" 또는 "보호자: 내용" 형태에서 내용만 추출
+        colon_idx = line.find(": ")
+        if colon_idx != -1 and colon_idx < 20:
+            user_lines.append(line[colon_idx + 2:])
+        else:
+            user_lines.append(line)
     user_text = " ".join(user_lines)
     if len(user_text) >= 20:
         return True
@@ -513,6 +520,14 @@ def _build_pet_ctx(pet: Pet, owner_name: str) -> dict:
     if isinstance(pet.birth_date, date):
         birth_str = pet.birth_date.strftime("%Y-%m-%d")
 
+    # AI 프로필 분석 결과에서 english_prompt / must_include_keywords 추출
+    english_prompt = None
+    must_include_keywords: list[str] = []
+    if hasattr(pet, "profile") and pet.profile and pet.profile.profile_json:
+        cs = pet.profile.profile_json.get("character_sheet", {})
+        english_prompt = cs.get("english_prompt")
+        must_include_keywords = cs.get("must_include_keywords", [])
+
     return {
         "pet_name": pet.name or _DEFAULT_DIARY_PET["pet_name"],
         "breed": breed_ko or _DEFAULT_DIARY_PET["breed"],
@@ -521,6 +536,8 @@ def _build_pet_ctx(pet: Pet, owner_name: str) -> dict:
         "personalities": list(pet.selected_tags or []),
         "owner_name": owner_name,
         "pet_id": pet.id,
+        "english_prompt": english_prompt,
+        "must_include_keywords": must_include_keywords,
     }
 
 
@@ -614,10 +631,15 @@ async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
 
-    if "보호자:" in query or "봇:" in query:
+    owner_label = pet_ctx.get("owner_name") or "보호자"
+
+    if f"{owner_label}:" in query or "보호자:" in query or "봇:" in query:
         conversation_summary = query.strip()
+        # 보호자 → 실제 닉네임 치환
+        if owner_label != "보호자":
+            conversation_summary = conversation_summary.replace("보호자:", f"{owner_label}:")
     else:
-        conversation_summary = f"보호자: {query.strip()}"
+        conversation_summary = f"{owner_label}: {query.strip()}"
 
     prompt = _diary_prompt_builder.build_diary_prompt(
         pet_name=pet_ctx["pet_name"],
@@ -667,6 +689,7 @@ async def _generate_and_store_image(
         personalities=pet_ctx["personalities"],
         all_answers=[diary_data.get("_conversation", "")],
         emotion=diary_data.get("_emotion", _DEFAULT_DIARY_EMOTION),
+        english_prompt=pet_ctx.get("english_prompt"),
     )
 
     try:

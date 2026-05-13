@@ -21,6 +21,12 @@ from schemas.pet import PetResponse
 from utils.validation import clean_text, validate_user_birth
 
 
+class _ProfileImage(BaseModel):
+    """프로필 이미지 URL 로딩용 내부 스키마."""
+    model_config = ConfigDict(from_attributes=True)
+    file_url: str
+
+
 class UserResponse(BaseModel):
     """사용자 단건 응답 스키마."""
 
@@ -32,10 +38,6 @@ class UserResponse(BaseModel):
     gender: GenderEnum | None = Field(None, description="성별")
     birth_date: date | None = Field(None, description="생년월일")
     profile_id: int | None = Field(None, description="프로필 이미지 ID (온보딩 전 NULL)")
-    profile_image_url: str | None = Field(
-        None,
-        description="프로필 이미지 URL (S3 공개 URL). User ORM property 매핑.",
-    )
     provider: str = Field(..., description="소셜 로그인 제공자 (kakao/google/naver)")
     type_id: int | None = Field(None, description="대표 성향 키워드 ID (온보딩 전 NULL)")
     type_name: str | None = Field(
@@ -57,6 +59,14 @@ class UserResponse(BaseModel):
         None,
         description="개인정보처리방침 동의 시점. NULL 이면 /step 재진입 필요.",
     )
+
+    # selectin 로드된 관계 — 직렬화에서 제외, computed_field 내부 참조용
+    profile: _ProfileImage | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def profile_image_url(self) -> str | None:
+        return self.profile.file_url if self.profile else None
 
     @computed_field
     @property

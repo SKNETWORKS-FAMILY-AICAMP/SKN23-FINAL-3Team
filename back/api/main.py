@@ -26,7 +26,9 @@ import os
 import json
 import logging
 
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from core.config import settings
@@ -39,9 +41,12 @@ from logging.handlers import RotatingFileHandler
 from fastapi.middleware.cors import CORSMiddleware
 from services.intent_service import warmup_intent_model
 from core.database import close_db, init_db, init_engine
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from services.scheduler_service import hard_delete_withdrawn_users
+from core.deps import get_db, get_current_user, get_optional_user
+from models.pet import Pet
+from models.user import User
 
 # =============================================================================
 # 로깅 설정
@@ -321,12 +326,14 @@ from routers import (
     chat_messages_router,
     chat_rooms_router,
     diaries_router,
+    directions_router,
     images_router,
     keywords_router,
     pets_router,
     users_router,
     places_router,
     eval_router,
+    diary_photo_router,
 )
 
 # /api prefix로 묶어 nginx proxy_pass 경로와 일치시킴
@@ -365,6 +372,12 @@ _api_router.include_router(places_router.router,        prefix="/places",     ta
 
 # 평가 전용 (Ablation — 실서비스 라우터와 분리)
 _api_router.include_router(eval_router.router,          prefix="/eval",       tags=["Eval"])
+
+# 길찾기 (Kakao Mobility Directions)
+_api_router.include_router(directions_router.router,    prefix="/directions", tags=["Directions"])
+
+# 사진 그림체 변환 (YOLO + VLM + DALL-E)
+_api_router.include_router(diary_photo_router.router,   prefix="/diary",      tags=["AI Diary"])
 
 app.include_router(_api_router)
 
@@ -418,6 +431,8 @@ class DiaryRequest(BaseModel):
     additional_answers: list[str] = []
     diary_type: str
     emotion_emoji: str
+    english_prompt: str | None = None
+    must_include_keywords: list[str] = []
 
 
 class DiaryResponse(BaseModel):
@@ -439,9 +454,65 @@ class ImageResponse(BaseModel):
 
 
 @app.post("/api/diary/generate", response_model=DiaryResponse, tags=["AI Diary"])
-async def generate_diary(req: DiaryRequest) -> DiaryResponse:
+async def generate_diary(
+    req: DiaryRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> DiaryResponse:
     if not _AI_AVAILABLE:
         raise HTTPException(status_code=503, detail="AI 모듈을 사용할 수 없습니다.")
+
+    # ── DB 기반 컨텍스트 자동 조회 (클라이언트 값보다 DB 우선) ──────────────
+    db_breed = req.breed
+    db_breed_en = req.breed_en
+    db_birth_date = req.birth_date
+    db_personalities = req.personalities
+    db_pet_name = req.pet_name
+    db_english_prompt = req.english_prompt
+
+    pet_id_int = None
+    if req.pet_id != "default":
+        try:
+            pet_id_int = int(req.pet_id)
+        except (ValueError, TypeError):
+            pass
+
+    if pet_id_int is not None:
+        result = await db.execute(
+            select(Pet)
+            .where(Pet.id == pet_id_int, Pet.deleted_at.is_(None))
+            .options(selectinload(Pet.breed), selectinload(Pet.profile))
+        )
+        pet = result.scalar_one_or_none()
+        if pet is not None:
+            db_pet_name = pet.name or db_pet_name
+            db_breed = getattr(pet.breed, "name_ko", None) or db_breed
+            db_breed_en = getattr(pet.breed, "name_en", None) or db_breed_en
+            if pet.birth_date:
+                db_birth_date = pet.birth_date.strftime("%Y-%m-%d")
+            if pet.selected_tags:
+                db_personalities = list(pet.selected_tags)
+            # AI 프로필 분석 결과
+            if pet.profile and pet.profile.profile_json:
+                cs = pet.profile.profile_json.get("character_sheet", {})
+                db_english_prompt = cs.get("english_prompt") or db_english_prompt
+
+    # owner_name / owner_gender: 인증된 user 가 있으면 DB 우선, 없으면 클라이언트 폴백
+    if current_user is not None:
+        db_owner_name = current_user.nickname or req.owner_name
+        if current_user.gender is not None:
+            db_owner_gender = current_user.gender.value
+        else:
+            db_owner_gender = req.owner_gender
+    else:
+        db_owner_name = req.owner_name
+        db_owner_gender = req.owner_gender
+
+    logger.info(
+        f"[Diary] pet_id={req.pet_id} breed={db_breed} breed_en={db_breed_en} "
+        f"owner_gender={db_owner_gender} birth_date={db_birth_date}"
+    )
+    # ── 여기서부터 DB 값 사용 ──────────────────────────────────────────────
 
     all_answers = req.main_answers + req.additional_answers
     conversation_summary = "\n".join(f"보호자: {a}" for a in all_answers if a.strip())
@@ -449,13 +520,12 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
         raise HTTPException(status_code=400, detail="답변 내용이 없습니다.")
 
     prompt = _diary_prompt_builder.build_diary_prompt(
-    # prompt = build_diary_prompt(
-        pet_name=req.pet_name,
-        breed=req.breed,
-        birth_date=req.birth_date,
-        personalities=req.personalities,
-        owner_name=req.owner_name,
-        owner_gender=req.owner_gender,
+        pet_name=db_pet_name,
+        breed=db_breed,
+        birth_date=db_birth_date,
+        personalities=db_personalities,
+        owner_name=db_owner_name,
+        owner_gender=db_owner_gender,
         diary_type=req.diary_type,
         emotion=req.emotion_emoji,
         conversation_summary=conversation_summary,
@@ -464,9 +534,9 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
     response = await _get_openai_client().chat.completions.create(
         model=settings.GPT_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.4,   # 낮출수록 일관성↑ 창의성↓
-        top_p=0.9,         # P값: 확률 상위 90% 토큰만 선택
-        seed=42,           # 시드값: 동일 입력 시 재현 가능
+        temperature=0.4,
+        top_p=0.9,
+        seed=42,
         frequency_penalty=0.1,
     )
 
@@ -479,14 +549,14 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
         raise HTTPException(status_code=500, detail=f"LLM 응답 파싱 실패: {raw[:200]}")
 
     image_prompt = _diary_prompt_builder.build_final_image_prompt(
-    # image_prompt = build_final_image_prompt(
         image_prompt_base=data.get("image_prompt_base", ""),
-        breed=req.breed,
-        breed_en=req.breed_en,
-        birth_date=req.birth_date,
-        personalities=req.personalities,
+        breed=db_breed,
+        breed_en=db_breed_en,
+        birth_date=db_birth_date,
+        personalities=db_personalities,
         all_answers=all_answers,
         emotion=req.emotion_emoji,
+        english_prompt=db_english_prompt,
     )
 
     session_id = create_diary_session(
@@ -496,12 +566,12 @@ async def generate_diary(req: DiaryRequest) -> DiaryResponse:
         diary_title=data.get("title", ""),
         diary_content=data.get("content", ""),
         diary_summary=data.get("summary", ""),
-        pet_name=req.pet_name,
-        breed=req.breed,
-        breed_en=req.breed_en or "",
+        pet_name=db_pet_name,
+        breed=db_breed,
+        breed_en=db_breed_en or "",
         emotion=req.emotion_emoji,
         diary_type=req.diary_type,
-        personalities=req.personalities,
+        personalities=db_personalities,
     )
 
     return DiaryResponse(

@@ -20,6 +20,7 @@ class User {
     required this.createdAt,
     required this.updatedAt,
     this.age,
+    this.profileImageUrl,
   });
 
   final int id;
@@ -37,6 +38,7 @@ class User {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int? age;
+  final String? profileImageUrl;
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
@@ -57,6 +59,7 @@ class User {
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       age: json['age'] as int?,
+      profileImageUrl: json['profile_image_url'] as String?,
     );
   }
 }
@@ -69,6 +72,7 @@ class UserUpdate {
     this.gender,
     this.birthDate,
     this.profileId,
+    this.clearProfileId = false,
     this.primaryPetId,
     this.selectedTags,
   });
@@ -77,6 +81,8 @@ class UserUpdate {
   final Gender? gender;
   final DateTime? birthDate;
   final int? profileId;
+  /// true 이면 profile_id: null 을 명시적으로 전송하여 프로필 사진 삭제.
+  final bool clearProfileId;
   final int? primaryPetId;
   final List<dynamic>? selectedTags;
 
@@ -85,6 +91,7 @@ class UserUpdate {
         if (gender != null) 'gender': gender!.wire,
         if (birthDate != null) 'birth_date': _formatDate(birthDate!),
         if (profileId != null) 'profile_id': profileId,
+        if (clearProfileId) 'profile_id': null,
         if (primaryPetId != null) 'primary_pet_id': primaryPetId,
         if (selectedTags != null) 'selected_tags': selectedTags,
       };
