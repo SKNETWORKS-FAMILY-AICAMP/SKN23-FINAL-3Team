@@ -57,7 +57,7 @@ export function OAuthCallbackPage() {
           return;
         }
 
-        // 기존 유저: 펫 등록 여부 확인
+        // 기존 유저: 약관 동의 / 펫 등록 여부 확인
         const token = data.access_token;
         const meRes = await fetch(`${API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -67,6 +67,13 @@ export function OAuthCallbackPage() {
           return;
         }
         const me = await meRes.json();
+
+        // 약관·개인정보처리방침 미동의 → /step 강제 재진입 (외부팀 QA #76).
+        // 마이그레이션 직후 모든 기존 사용자가 일시적으로 NULL 상태 → 1회 동의 후 자연 통과.
+        if (!me.terms_agreed_at || !me.privacy_agreed_at) {
+          navigate('/step', { replace: true });
+          return;
+        }
 
         const petsRes = await fetch(`${API_URL}/pets?user_id=${me.id}`, {
           headers: { Authorization: `Bearer ${token}` },
