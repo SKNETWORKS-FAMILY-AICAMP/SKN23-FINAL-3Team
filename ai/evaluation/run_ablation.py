@@ -6,7 +6,9 @@
     python run_ablation.py --limit 10   # 테스트용 10건만
 """
 import argparse
+import json
 import logging
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -28,6 +30,71 @@ MAX_K = max(K_VALUES)
 
 LOG_DIR = Path(__file__).parent / "logs"
 GPS_CATEGORY = "GPS (사용자 현재 위치)"
+
+
+def _normalize_match_text(text: str) -> str:
+    """공백·특수문자 제거 후 소문자화해 평가 매칭 기준과 맞춘다."""
+    return re.sub(r"[\s\W]", "", str(text)).lower()
+
+
+def _is_match(answer: str, result: str) -> bool:
+    answer_norm = _normalize_match_text(answer)
+    result_norm = _normalize_match_text(result)
+    return bool(
+        answer_norm
+        and result_norm
+        and (answer_norm in result_norm or result_norm in answer_norm)
+    )
+
+
+def _first_answer_rank(answers: list[str], results: list[str]) -> int | None:
+    """1-based rank of the first answer match in results."""
+    for idx, result in enumerate(results, start=1):
+        if any(_is_match(answer, result) for answer in answers):
+            return idx
+    return None
+
+
+def _build_rdb_diagnostics(item: dict, debug_payload: dict | None, k: int) -> dict:
+    """Convert eval debug payload into raw-sheet diagnostic columns."""
+    rdb_debug = (debug_payload or {}).get("debug", {}).get("rdb", {})
+    if not rdb_debug:
+        return {}
+
+    answers = item.get("answers", [])
+    candidate_names = rdb_debug.get("rdb_candidate_names") or []
+    ranked_names = rdb_debug.get("rdb_ranked_names") or []
+    answer_candidate_rank = _first_answer_rank(answers, candidate_names)
+    answer_rank_rdb = _first_answer_rank(answers, ranked_names)
+    answer_in_candidates = answer_candidate_rank is not None
+
+    if answer_rank_rdb is not None and answer_rank_rdb <= k:
+        failure_type = "topk_hit"
+    elif answer_in_candidates:
+        failure_type = "ranking_miss"
+    elif rdb_debug.get("rdb_candidate_count", 0) == 0:
+        failure_type = "candidate_empty"
+    else:
+        failure_type = "candidate_miss"
+
+    return {
+        "parsed_objective": json.dumps(
+            rdb_debug.get("parsed_objective", {}),
+            ensure_ascii=False,
+        ),
+        "parsed_subjective": rdb_debug.get("parsed_subjective", ""),
+        "time_condition": rdb_debug.get("time_condition", ""),
+        "use_current_location": rdb_debug.get("use_current_location", ""),
+        "landmark": rdb_debug.get("landmark", ""),
+        "landmark_coords": rdb_debug.get("landmark_coords", ""),
+        "rdb_candidate_count": rdb_debug.get("rdb_candidate_count", ""),
+        "answer_in_rdb_candidates": answer_in_candidates,
+        "answer_candidate_rank": answer_candidate_rank or "",
+        "answer_rank_rdb": answer_rank_rdb or "",
+        "failure_type": failure_type,
+        "rdb_debug_top_names": ", ".join(ranked_names[:20]),
+        "diagnostic_error": rdb_debug.get("diagnostic_error", ""),
+    }
 
 
 def _gps_eval_coords(item: dict) -> tuple[float | None, float | None]:
@@ -108,25 +175,38 @@ def run(
         for item in tqdm(retrieval_items, desc=f"{mode:<12}", unit="건"):
             top_results = []
             error = None
+            debug_payload = None
 
             try:
                 parsed = parsed_cache.get(item["query_id"])
                 user_lat, user_lng = _gps_eval_coords(item)
                 # MAX_K개를 한 번만 조회하고 k별 메트릭은 슬라이싱으로 계산
                 # 사전 파싱된 결과를 전달해 서버에서 LLM 파싱 호출을 생략
-                top_results = search_places(
+                response = search_places(
                     item["question"],
                     n_results=MAX_K,
                     mode=mode,
                     parsed=parsed,
                     user_lat=user_lat,
                     user_lng=user_lng,
+                    debug=mode == "rdb_only",
+                    return_payload=mode == "rdb_only",
                 )
+                if mode == "rdb_only":
+                    debug_payload = response
+                    top_results = response.get("names", [])
+                else:
+                    top_results = response
             except Exception as e:
                 logger.warning("  ERROR (%s) %s: %s", mode, item["query_id"], e)
                 error = str(e)
 
             for k in K_VALUES:
+                diagnostics = (
+                    _build_rdb_diagnostics(item, debug_payload, k)
+                    if mode == "rdb_only"
+                    else {}
+                )
                 all_records.append({
                     "run_id": f"RUN_{run_id}",
                     "mode": mode,
@@ -136,6 +216,7 @@ def run(
                     "hit_at_k": calc_hit_at_k(item["answers"], top_results, k=k) if not error else "",
                     "recall_at_k": calc_recall_at_k(item["answers"], top_results, k=k) if not error else "",
                     "error": error,
+                    **diagnostics,
                 })
 
     out_path = save_ablation_results(all_records, output_path, run_id=run_id)
