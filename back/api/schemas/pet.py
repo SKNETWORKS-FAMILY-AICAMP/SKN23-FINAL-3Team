@@ -29,8 +29,7 @@ class PetCreate(BaseModel):
     birth_date: date | None = Field(None, description="생년월일 (오늘-30년 ~ 오늘)")
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부 (미입력 가능)")
-    type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID (keywords 테이블 참조)")
-    selected_tags: list[Any] | None = Field(None, description="선택한 성격 태그 목록 (JSON)")
+    selected_tags: list[Any] | None = Field(None, description="선택한 성격 태그 목록 (JSON). type_id 는 백엔드가 자동 계산.")
     image_id: int | None = Field(None, gt=0, description="프로필 이미지 ID (images.id 참조, 등록 시 선택)")
 
     @field_validator("name", mode="before")
@@ -56,8 +55,7 @@ class PetUpdate(BaseModel):
     birth_date: date | None = Field(None, description="생년월일 (오늘-30년 ~ 오늘)")
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부")
-    type_id: int | None = Field(None, gt=0, description="대표 성격 키워드 ID")
-    selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
+    selected_tags: list[Any] | None = Field(None, description="성격 태그 목록. type_id 는 백엔드가 자동 재계산.")
     image_id: int | None = Field(None, gt=0, description="프로필 이미지 ID (images.id 참조)")
 
     @field_validator("name", mode="before")
@@ -84,6 +82,10 @@ class PetResponse(BaseModel):
     gender: PetGenderEnum | None = Field(None, description="성별")
     is_neutered: bool | None = Field(None, description="중성화 여부")
     type_id: int | None = Field(None, description="대표 성격 키워드 ID")
+    type_name: str | None = Field(
+        None,
+        description="성향 타입 한글 표시명 (keywords.name). Pet ORM property 매핑.",
+    )
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
     image_url: str | None = Field(
         None,

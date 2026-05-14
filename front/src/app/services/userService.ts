@@ -9,6 +9,7 @@ export interface PrimaryPet {
   gender: 'MALE' | 'FEMALE' | null
   is_neutered: boolean | null
   type_id: number | null
+  type_name: string | null
   selected_tags: string[]
   age: number | null
 }
@@ -23,6 +24,7 @@ export interface UserProfile {
   profile_image_url: string | null
   provider: string
   type_id: number | null
+  type_name: string | null
   selected_tags: string[]
   created_at: string
   updated_at: string
@@ -36,7 +38,6 @@ export interface UserUpdateInput {
   gender?: 'MALE' | 'FEMALE'
   birth_date?: string
   age?: number
-  type_id?: number
   selected_tags?: string[]
   profile_id?: number
   primary_pet_id?: number

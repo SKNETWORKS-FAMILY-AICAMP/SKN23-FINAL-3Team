@@ -38,6 +38,10 @@ class UserResponse(BaseModel):
     )
     provider: str = Field(..., description="소셜 로그인 제공자 (kakao/google/naver)")
     type_id: int | None = Field(None, description="대표 성향 키워드 ID (온보딩 전 NULL)")
+    type_name: str | None = Field(
+        None,
+        description="성향 타입 한글 표시명 (keywords.name). User ORM property 매핑.",
+    )
     primary_pet_id: int | None = Field(None, description="대표 반려견 ID (미설정 시 NULL)")
     primary_pet: PetResponse | None = Field(
         None, description="대표 반려견 풀 페이로드 (마이페이지 카드 표시용)"
@@ -84,11 +88,6 @@ class UserUpdate(BaseModel):
         gt=0,
         description="프로필 이미지 ID (images 테이블 참조)",
     )
-    type_id: int | None = Field(
-        None,
-        gt=0,
-        description="대표 성향 키워드 ID (keywords 테이블 참조)",
-    )
     primary_pet_id: int | None = Field(
         None,
         gt=0,
@@ -99,5 +98,5 @@ class UserUpdate(BaseModel):
     )
     selected_tags: list[Any] | None = Field(
         None,
-        description="선택한 여행 성향 태그 목록 (JSON 배열)",
+        description="선택한 여행 성향 태그 목록 (JSON 배열). type_id 는 백엔드가 자동 재계산.",
     )

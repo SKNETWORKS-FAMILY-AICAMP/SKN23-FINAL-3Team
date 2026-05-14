@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { getPlaceByName, type FacilityCard } from '../services/chatService';
 import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import DiaryNoteCard from './DiaryNoteCard';
@@ -207,8 +207,24 @@ export default function DiaryDetailView({
         <p className="mt-2 text-center text-xs text-red-500">{placeError}</p>
       )}
 
-      {/* 핀 modal */}
-      {showModal && placeDetail && (
+      {/* 핀 modal — 응답 도착 전 placeDetailLoading 시 placeholder 스피너 모달 (백엔드
+          /api/places/by-name 의 enrich_place_images 직렬 호출로 1~3초 지연) */}
+      {placeDetailLoading && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setPlaceDetailLoading(false)}
+        >
+          <div
+            className="flex flex-col items-center gap-3 rounded-2xl bg-white px-10 py-12 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Loader2 className="h-8 w-8 animate-spin text-[#F4845F]" />
+            <span className="text-sm text-[#8B6355]">장소 정보를 불러오는 중...</span>
+          </div>
+        </div>
+      )}
+
+      {showModal && placeDetail && !placeDetailLoading && (
         <PlaceDetailCard
           place={placeDetail}
           variant="modal"

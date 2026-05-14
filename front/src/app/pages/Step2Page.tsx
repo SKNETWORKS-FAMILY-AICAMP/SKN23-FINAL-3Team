@@ -403,7 +403,7 @@ export default function ProfileSetupPage() {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
-          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          selected_tags: form.ownerPersonality ?? [],
           profile_id: userProfileId,
         });
         // Navbar 우측 아바타 + getMe 캐시 의존 컴포넌트 즉시 갱신
@@ -482,7 +482,7 @@ export default function ProfileSetupPage() {
             nickname: form.guardianName || undefined,
             gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
             birth_date: form.guardianBirth || undefined,
-            selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+            selected_tags: form.ownerPersonality ?? [],
             profile_id: userProfileId,
           });
         }
@@ -537,7 +537,7 @@ export default function ProfileSetupPage() {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
-          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          selected_tags: form.ownerPersonality ?? [],
           profile_id: userProfileId,
         });
         await createPet({
