@@ -1,6 +1,7 @@
 import re
 import httpx
 import logging
+import math
 
 from copy import deepcopy
 from fastapi import Request
@@ -9,7 +10,7 @@ from core.config import settings
 from core.type.place import PlaceType
 from models.place import Place as PlaceModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, func, not_, or_, select
+from sqlalchemy import and_, case, func, not_, or_, select
 
 logger = logging.getLogger(__name__)
 
@@ -872,6 +873,210 @@ def _calc_category_bias(place: PlaceModel, parsed: ParsedQuery) -> float:
     return bias
 
 
+def _tokenize_query_for_relevance(parsed: ParsedQuery) -> list[str]:
+    """Extract lightweight query tokens for RDB fallback tie-breaking."""
+    stopwords = {
+        "서울",
+        "서울특별시",
+        "추천",
+        "장소",
+        "근처",
+        "주변",
+        "가능",
+        "가능한",
+        "반려견",
+        "강아지",
+        "애견",
+        "동반",
+        "곳",
+        "있는",
+        "없는",
+        "해줘",
+        "해주세요",
+    }
+    sources = [
+        parsed.raw_query or "",
+        parsed.subjective or "",
+        parsed.objective.get("city") or "",
+        parsed.objective.get("district") or "",
+        parsed.objective.get("sub_category") or "",
+        parsed.landmark or "",
+    ]
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for source in sources:
+        for token in re.findall(r"[가-힣A-Za-z0-9]+", str(source)):
+            token = token.strip()
+            if len(token) < 2 or token in stopwords or token in seen:
+                continue
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
+
+def _contains_token(text: str | None, token: str) -> bool:
+    if not text or not token:
+        return False
+    compact_text = re.sub(r"\s+", "", str(text)).lower()
+    compact_token = re.sub(r"\s+", "", str(token)).lower()
+    return compact_token in compact_text
+
+
+def _calc_query_relevance_bonus(place: PlaceModel, parsed: ParsedQuery) -> float:
+    """Small RDB fallback bonus for direct query-field relevance.
+
+    This is intentionally lightweight. ChromaDB remains the main semantic
+    signal; this bonus only breaks ties among RDB fallback candidates.
+    """
+    bonus = 0.0
+    sub_category = (place.sub_category or "").strip()
+    requested_sub_category = (parsed.objective.get("sub_category") or "").strip()
+
+    if requested_sub_category:
+        expanded = _expand_sub_categories(requested_sub_category)
+        if sub_category == requested_sub_category:
+            bonus += 0.10
+        elif sub_category in expanded:
+            bonus += 0.04
+
+    district = (parsed.objective.get("district") or "").strip()
+    if district and _contains_token(place.address, district):
+        bonus += 0.05
+
+    landmark = (parsed.landmark or "").strip()
+    if landmark and (
+        _contains_token(place.name, landmark)
+        or _contains_token(place.address, landmark)
+        or _contains_token(place.description, landmark)
+    ):
+        bonus += 0.04
+
+    name_hits = 0
+    sub_category_hits = 0
+    address_hits = 0
+    description_hits = 0
+    subjective_tokens = _tokenize_query_for_relevance(
+        ParsedQuery(parsed.subjective or "")
+    ) if parsed.subjective else []
+    query_tokens = _tokenize_query_for_relevance(parsed)
+
+    for token in query_tokens:
+        if _contains_token(place.name, token):
+            name_hits += 1
+        if _contains_token(sub_category, token):
+            sub_category_hits += 1
+        if _contains_token(place.address, token):
+            address_hits += 1
+        if _contains_token(place.description, token):
+            description_hits += 1
+
+    subjective_description_hits = sum(
+        1 for token in subjective_tokens if _contains_token(place.description, token)
+    )
+
+    bonus += min(name_hits * 0.04, 0.08)
+    bonus += min(sub_category_hits * 0.03, 0.06)
+    bonus += min(address_hits * 0.02, 0.04)
+    bonus += min(description_hits * 0.015, 0.06)
+    bonus += min(subjective_description_hits * 0.02, 0.08)
+
+    return round(min(bonus, 0.25), 4)
+
+
+def _distance_meters(
+    lat1: float | None,
+    lng1: float | None,
+    lat2: float | None,
+    lng2: float | None,
+) -> float | None:
+    if None in (lat1, lng1, lat2, lng2):
+        return None
+    try:
+        lat1_f, lng1_f = float(lat1), float(lng1)
+        lat2_f, lng2_f = float(lat2), float(lng2)
+    except (TypeError, ValueError):
+        return None
+
+    radius_m = 6371000
+    phi1 = math.radians(lat1_f)
+    phi2 = math.radians(lat2_f)
+    d_phi = math.radians(lat2_f - lat1_f)
+    d_lam = math.radians(lng2_f - lng1_f)
+    a = (
+        math.sin(d_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
+    )
+    return radius_m * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _calc_distance_bonus(place: PlaceModel, parsed: ParsedQuery) -> float:
+    if not parsed.landmark_coords:
+        return 0.0
+    lat, lng = parsed.landmark_coords
+    distance = _distance_meters(lat, lng, place.latitude, place.longitude)
+    if distance is None:
+        return 0.0
+    if distance <= 1000:
+        return 0.08
+    if distance <= 2000:
+        return 0.05
+    if distance <= 3000:
+        return 0.03
+    return 0.0
+
+
+def _calc_category_match_bonus(place: PlaceModel, parsed: ParsedQuery) -> float:
+    requested = (parsed.objective.get("sub_category") or "").strip()
+    if not requested:
+        return 0.0
+    sub_category = (place.sub_category or "").strip()
+    if sub_category == requested:
+        return 0.05
+    if sub_category in _expand_sub_categories(requested):
+        return 0.02
+    return 0.0
+
+
+def _calc_time_match_bonus(place: PlaceModel, parsed: ParsedQuery) -> float:
+    time_condition = parsed.time_condition
+    if not time_condition or not place.operation_info or NO_INFO in place.operation_info:
+        return 0.0
+    hours = _parse_operation_hours(place.operation_info)
+    if not hours:
+        return 0.0
+
+    earliest = hours.get("earliest_open", 2400)
+    latest = hours.get("latest_close", 0)
+
+    if time_condition == OPEN_24H and hours.get("is_24hours", False):
+        return 0.06
+    if time_condition == ALWAYS_OPEN and hours.get("always_open", False):
+        return 0.05
+    if time_condition == WEEKEND and hours.get("has_weekend", False):
+        return 0.04
+    if time_condition == EARLY_MORNING and earliest <= 800:
+        return 0.04
+    if time_condition == MORNING and earliest <= 900:
+        return 0.03
+    if time_condition == LUNCH and earliest <= 1100 and latest >= 1500:
+        return 0.03
+    if time_condition == EVENING and latest >= 1900:
+        return 0.03
+    if time_condition == NIGHT and latest >= 2200:
+        return 0.04
+    return 0.0
+
+
+def _calc_condition_match_bonus(place: PlaceModel, parsed: ParsedQuery) -> float:
+    """Small explicit-condition bonus for RDB fallback tie-breaking."""
+    bonus = (
+        _calc_distance_bonus(place, parsed)
+        + _calc_category_match_bonus(place, parsed)
+        + _calc_time_match_bonus(place, parsed)
+    )
+    return round(min(bonus, 0.15), 4)
+
+
 def _apply_outing_priority(
     places: list[dict],
     parsed: ParsedQuery,
@@ -983,9 +1188,39 @@ async def _filter_by_rdb(
 
     async def _execute(extra_conditions: list | None = None) -> list[str]:
         all_conditions = conditions + (extra_conditions or [])
+        order_by = []
+        if parsed.landmark_coords:
+            lat, lng = parsed.landmark_coords
+            distance_expr = func.ST_Distance_Sphere(
+                func.point(PlaceModel.longitude, PlaceModel.latitude),
+                func.point(lng, lat),
+            )
+            order_by.append(distance_expr.asc())
+        else:
+            order_by.extend(
+                [
+                    case((PlaceModel.pet_zone_type == FULL_ZONE, 1), else_=0).desc(),
+                    case(
+                        (
+                            or_(
+                                PlaceModel.pet_restrictions.is_(None),
+                                PlaceModel.pet_restrictions == "",
+                                PlaceModel.pet_restrictions == NO_RESTRICTION,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    ).desc(),
+                    case((PlaceModel.has_parking == "Y", 1), else_=0).desc(),
+                    case((PlaceModel.is_indoor.is_(True), 1), else_=0).desc(),
+                    case((PlaceModel.is_outdoor.is_(True), 1), else_=0).desc(),
+                ]
+            )
+        order_by.append(PlaceModel.content_id.asc())
         stmt = (
             select(PlaceModel.content_id)
             .where(and_(*all_conditions) if all_conditions else True)
+            .order_by(*order_by)
             .limit(max_candidates)
         )
         result = await db.execute(stmt)
@@ -1255,13 +1490,100 @@ async def _fallback_rdb_only(
         d = _to_dict(p)
         d["rule_score"] = _calc_rule_score(p)
         d["category_bias"] = _calc_category_bias(p, parsed)
-        d["final_score"] = round(d["rule_score"] + d["category_bias"], 4)
+        d["query_relevance_bonus"] = _calc_query_relevance_bonus(p, parsed)
+        d["condition_match_bonus"] = _calc_condition_match_bonus(p, parsed)
+        d["final_score"] = round(
+            d["rule_score"]
+            + d["category_bias"]
+            + d["query_relevance_bonus"]
+            + d["condition_match_bonus"],
+            4,
+        )
         scored.append(d)
 
     category_filtered = _apply_category_guard(scored, parsed, source="fallback")
     prioritized = _apply_outing_priority(category_filtered, parsed, n_results)
     fee_filtered = _apply_fee_hard_filter(prioritized, parsed, source="fallback")
     return _apply_restriction_hard_filter(fee_filtered, parsed, source="fallback")
+
+
+async def diagnose_rdb_retrieval(
+    query: str,
+    db: AsyncSession,
+    request: Request = None,
+    user_lat: float = None,
+    user_lng: float = None,
+    pre_parsed: dict | ParsedQuery | None = None,
+) -> dict:
+    """Return evaluation-only diagnostics for the RDB candidate/ranking path.
+
+    This helper does not change production search behavior. It mirrors the
+    RDB candidate path used by rdb_only/fallback so evaluation output can tell
+    whether a miss came from parsing, candidate generation, or ranking.
+    """
+    try:
+        if isinstance(pre_parsed, ParsedQuery):
+            parsed = _clone_parsed(pre_parsed)
+        elif pre_parsed:
+            parsed = ParsedQuery(query)
+            parsed.objective = deepcopy(pre_parsed["objective"])
+            parsed.subjective = pre_parsed.get("subjective", query)
+            parsed.time_condition = pre_parsed.get("time_condition")
+            parsed.use_current_location = pre_parsed.get("use_current_location", False)
+            parsed.landmark = pre_parsed.get("landmark")
+            parsed.landmark_coords = pre_parsed.get("landmark_coords")
+        else:
+            parsed = await _parse_query_with_llm(query, request)
+
+        if parsed.use_current_location:
+            parsed.landmark = None
+            if user_lat and user_lng:
+                parsed.landmark_coords = (user_lat, user_lng)
+        elif parsed.landmark:
+            parsed.landmark_coords = await _get_landmark_coords(parsed.landmark)
+
+        if not parsed.landmark_coords and user_lat and user_lng:
+            parsed.landmark_coords = (user_lat, user_lng)
+
+        candidate_ids, parsed = await _filter_with_relaxation(
+            parsed,
+            db,
+            max_candidates=RDB_FILTER_MAX_CANDIDATES,
+        )
+        candidate_ids = await _filter_candidate_ids_by_requested_place_type(
+            candidate_ids, query, parsed, db
+        )
+        if parsed.time_condition:
+            candidate_ids = await _filter_by_time(candidate_ids, parsed.time_condition, db)
+
+        candidate_names: list[str] = []
+        if candidate_ids:
+            stmt = select(PlaceModel).where(PlaceModel.content_id.in_(candidate_ids))
+            result = await db.execute(stmt)
+            places_by_id = {p.content_id: p for p in result.scalars().all()}
+            candidate_names = [
+                places_by_id[cid].name or ""
+                for cid in candidate_ids
+                if cid in places_by_id
+            ]
+
+        ranked = await _fallback_rdb_only(parsed, candidate_ids, db, len(candidate_ids))
+        ranked_names = [p.get("name", "") for p in ranked if p.get("name")]
+
+        return {
+            "parsed_objective": parsed.objective,
+            "parsed_subjective": parsed.subjective,
+            "time_condition": parsed.time_condition,
+            "use_current_location": parsed.use_current_location,
+            "landmark": parsed.landmark,
+            "landmark_coords": parsed.landmark_coords,
+            "rdb_candidate_count": len(candidate_ids),
+            "rdb_candidate_names": candidate_names,
+            "rdb_ranked_names": ranked_names,
+        }
+    except Exception as e:
+        logger.warning("[PlaceService] RDB diagnostic failed: %s", e)
+        return {"diagnostic_error": str(e)}
 
 
 async def _filter_with_relaxation(

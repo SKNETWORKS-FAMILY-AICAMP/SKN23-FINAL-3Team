@@ -91,6 +91,19 @@ def save_ablation_results(records: list[dict], output_path: str = None, run_id: 
             row[f"top{i}"] = tops[i - 1] if len(tops) >= i else ""
         row["hit_at_k"] = r.get("hit_at_k", "")
         row["recall_at_k"] = r.get("recall_at_k", "")
+        row["parsed_objective"] = r.get("parsed_objective", "")
+        row["parsed_subjective"] = r.get("parsed_subjective", "")
+        row["time_condition"] = r.get("time_condition", "")
+        row["use_current_location"] = r.get("use_current_location", "")
+        row["landmark"] = r.get("landmark", "")
+        row["landmark_coords"] = r.get("landmark_coords", "")
+        row["rdb_candidate_count"] = r.get("rdb_candidate_count", "")
+        row["answer_in_rdb_candidates"] = r.get("answer_in_rdb_candidates", "")
+        row["answer_candidate_rank"] = r.get("answer_candidate_rank", "")
+        row["answer_rank_rdb"] = r.get("answer_rank_rdb", "")
+        row["failure_type"] = r.get("failure_type", "")
+        row["rdb_debug_top_names"] = r.get("rdb_debug_top_names", "")
+        row["diagnostic_error"] = r.get("diagnostic_error", "")
         row["비고"] = f"ERROR: {r['error']}" if r.get("error") else ""
         raw_rows.append(row)
 

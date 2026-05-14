@@ -9,7 +9,12 @@ import json
 from core.deps import get_db
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from services.place_service import _parse_query_with_llm, search_places_from_db
+from services.chat_response_service import _rerank_places_with_profile
+from services.place_service import (
+    _parse_query_with_llm,
+    diagnose_rdb_retrieval,
+    search_places_from_db,
+)
 
 router = APIRouter(tags=["Eval"])
 
@@ -44,8 +49,11 @@ async def eval_search_places(
     mode: str = "combined",
     n: int = 5,
     parsed: str = None,
+    dog_tags: str | None = None,
+    owner_tags: str | None = None,
     user_lat: float | None = None,
     user_lng: float | None = None,
+    debug: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     """Ablation 평가 전용 장소 검색.
@@ -72,4 +80,28 @@ async def eval_search_places(
         user_lat=user_lat,
         user_lng=user_lng,
     )
-    return {"names": [p["name"] for p in places if p.get("name")]}
+    dog_tag_list = [tag.strip() for tag in (dog_tags or "").split(";") if tag.strip()]
+    owner_tag_list = [tag.strip() for tag in (owner_tags or "").split(";") if tag.strip()]
+    if dog_tag_list or owner_tag_list:
+        places = _rerank_places_with_profile(
+            places,
+            {"dog_tags": dog_tag_list, "owner_tags": owner_tag_list},
+            request=request,
+        )
+
+    payload = {
+        "names": [p["name"] for p in places if p.get("name")],
+        "places": places,
+    }
+    if debug:
+        payload["debug"] = {
+            "rdb": await diagnose_rdb_retrieval(
+                query,
+                db,
+                request=request,
+                pre_parsed=pre_parsed,
+                user_lat=user_lat,
+                user_lng=user_lng,
+            )
+        }
+    return payload

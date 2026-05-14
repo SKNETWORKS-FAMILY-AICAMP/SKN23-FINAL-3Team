@@ -63,6 +63,8 @@ def search_places_eval(
     parsed: dict = None,
     user_lat: float | None = None,
     user_lng: float | None = None,
+    debug: bool = False,
+    return_payload: bool = False,
 ) -> list[str]:
     """GET /api/eval/places/search 호출 — ablation 평가 전용.
 
@@ -82,6 +84,8 @@ def search_places_eval(
         "n": n_results,
         "mode": mode,
     }
+    if debug:
+        params["debug"] = "true"
     if user_lat is not None and user_lng is not None:
         params["user_lat"] = user_lat
         params["user_lng"] = user_lng
@@ -96,4 +100,57 @@ def search_places_eval(
     data = resp.json()
     names = data.get("names", [])
     logger.debug("eval query=%r mode=%s n=%d -> %d results", query, mode, n_results, len(names))
+    if return_payload:
+        return data
     return names
+
+
+def search_places_eval_with_profile(
+    query: str,
+    dog_tags: list[str] | None = None,
+    owner_tags: list[str] | None = None,
+    n_results: int = 20,
+    mode: str = "combined",
+    parsed: dict | None = None,
+    user_lat: float | None = None,
+    user_lng: float | None = None,
+) -> list[dict]:
+    """Call the eval search endpoint with an explicit dog/owner profile.
+
+    The normal place-search API loads tags from the logged-in user's DB state.
+    Trait evaluation needs every spreadsheet row to supply its own profile, so
+    this client uses the eval endpoint parameters added for offline evaluation.
+    """
+    eval_endpoint = f"{BASE_URL}/api/eval/places/search"
+    params: dict = {
+        "query": query,
+        "n": n_results,
+        "mode": mode,
+    }
+    if dog_tags:
+        params["dog_tags"] = ";".join(dog_tags)
+    if owner_tags:
+        params["owner_tags"] = ";".join(owner_tags)
+    if parsed is not None:
+        params["parsed"] = json.dumps(parsed, ensure_ascii=False)
+    if user_lat is not None and user_lng is not None:
+        params["user_lat"] = user_lat
+        params["user_lng"] = user_lng
+
+    resp = requests.get(
+        eval_endpoint,
+        params=params,
+        timeout=REQUEST_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    places = data.get("places", [])
+    logger.debug(
+        "trait eval query=%r dog=%s owner=%s n=%d -> %d results",
+        query,
+        dog_tags,
+        owner_tags,
+        n_results,
+        len(places),
+    )
+    return places
