@@ -20,12 +20,13 @@ routers/users.py
 
 from __future__ import annotations
 
+from core.utils import kst_now
 from models.user import User
 from services import user_service as user_svc
 from core.deps import get_current_user, get_db
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from schemas.user import UserResponse, UserUpdate
+from schemas.user import AgreementsRequest, UserResponse, UserUpdate
 
 router = APIRouter(tags=["Users"])
 
@@ -40,6 +41,37 @@ async def get_me(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     """JWT 기반으로 로그인 사용자 본인 정보를 반환합니다."""
+    return UserResponse.model_validate(current_user)
+
+
+@router.post(
+    "/me/agreements",
+    response_model=UserResponse,
+    summary="약관·개인정보처리방침 동의 처리",
+    description=(
+        "현재 로그인 사용자의 `terms_agreed_at` / `privacy_agreed_at` 에 동의 시점(KST)을 기록합니다.\n\n"
+        "- 둘 다 `true` 여야 동의 완료 처리. 하나라도 `false` 면 **400**.\n"
+        "- 이미 동의 완료 상태에서 재호출 시 새 timestamp 로 갱신 (재동의 흐름 대비).\n"
+        "- /step 회원가입 첫 단계에서 호출. 응답으로 갱신된 UserResponse 반환."
+    ),
+)
+async def submit_agreements(
+    data: AgreementsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    """약관·개인정보처리방침 동의 처리 — 외부팀 QA #76 / 정보통신망법 제22조."""
+    if not (data.terms_agreed and data.privacy_agreed):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이용약관과 개인정보처리방침 모두 동의해야 가입을 완료할 수 있습니다.",
+        )
+
+    now = kst_now()
+    current_user.terms_agreed_at = now
+    current_user.privacy_agreed_at = now
+    await db.flush()
+    await db.refresh(current_user)
     return UserResponse.model_validate(current_user)
 
 

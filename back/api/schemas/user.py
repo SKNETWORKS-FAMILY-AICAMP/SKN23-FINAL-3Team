@@ -49,11 +49,29 @@ class UserResponse(BaseModel):
     selected_tags: list[Any] | None = Field(None, description="선택한 여행 성향 태그 목록")
     created_at: datetime = Field(..., description="가입 일시")
     updated_at: datetime = Field(..., description="최종 수정 일시")
+    terms_agreed_at: datetime | None = Field(
+        None,
+        description="서비스 이용약관 동의 시점. NULL 이면 /step 재진입 필요.",
+    )
+    privacy_agreed_at: datetime | None = Field(
+        None,
+        description="개인정보처리방침 동의 시점. NULL 이면 /step 재진입 필요.",
+    )
 
     @computed_field
     @property
     def age(self) -> int | None:
         return calculate_age(self.birth_date)
+
+
+class AgreementsRequest(BaseModel):
+    """약관·개인정보처리방침 동의 요청 (POST /users/me/agreements).
+
+    둘 다 true 일 때만 동의 완료 처리. 하나라도 false 면 400.
+    """
+
+    terms_agreed: bool = Field(..., description="서비스 이용약관 동의 여부 (true 필수)")
+    privacy_agreed: bool = Field(..., description="개인정보처리방침 동의 여부 (true 필수)")
 
 
 class UserUpdate(BaseModel):

@@ -76,6 +76,19 @@ class User(Base):
 
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 여행 성향 태그 목록")
 
+    # 약관·개인정보처리방침 동의 시점 (NULL = 미동의 → /step 재진입).
+    # 회원가입 시 /step 첫 단계에서 두 동의 모두 받고 동시에 timestamp 박힘.
+    # 정책상 둘은 함께 갱신되지만 약관별 변경 시점 추적 가능성 위해 컬럼 분리.
+    # 컬럼 정의 순서는 운영 RDS 물리 컬럼 순서 정합 (BEFORE created_at).
+    terms_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None,
+        comment="서비스 이용약관 동의 시점 (KST). NULL = 미동의."
+    )
+    privacy_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None,
+        comment="개인정보처리방침 동의 시점 (KST). NULL = 미동의."
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
         default=kst_now, server_default=func.now(),
