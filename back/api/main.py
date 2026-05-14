@@ -462,6 +462,13 @@ async def generate_diary(
     if not _AI_AVAILABLE:
         raise HTTPException(status_code=503, detail="AI 모듈을 사용할 수 없습니다.")
 
+    # ── 인젝션/탈옥 사전 차단 ─────────────────────────────────────────────
+    from services.diary_response_service import _contains_injection
+    all_text = " ".join(req.main_answers + req.additional_answers)
+    if _contains_injection(all_text):
+        logger.warning(f"[Diary] 인젝션 시도 차단 (generate): {all_text[:80]}")
+        raise HTTPException(status_code=400, detail="부적절한 내용이 포함되어 있어요. 다른 이야기를 들려주세요!")
+
     # ── DB 기반 컨텍스트 자동 조회 (클라이언트 값보다 DB 우선) ──────────────
     db_breed = req.breed
     db_breed_en = req.breed_en

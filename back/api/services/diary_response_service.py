@@ -156,6 +156,47 @@ _DIARY_START_FLOW_EXACT: frozenset[str] = frozenset({
 # 프론트엔드로 보내는 특수 트리거 마커
 _DIARY_FLOW_TRIGGER = "%%TRIGGER:START_DIARY%%"
 
+# ── 인젝션 / 탈옥 사전 차단 ────────────────────────────────────────────────
+# 한국어: "이전 지시" 단독이면 "이전 지시한 산책 코스" 같은 정상 문장도 차단되므로
+# "이전 지시 무시", "이전 지시를 무시" 등 공격 의도가 명확한 구문만 등록.
+# "역할을 바꿔" → "역할을 바꿔줘" / "역할을 바꿔서"는 정상이므로 "바꿔줘"로 한정.
+_INJECTION_KEYWORDS_KO: tuple[str, ...] = (
+    "이전 지시를 무시", "이전 지시 무시", "이전 지시는 무시",
+    "프롬프트 무시", "프롬프트를 무시",
+    "시스템 프롬프트",
+    "지금부터 너는",
+    "역할을 바꿔줘", "역할 변경해줘", "역할을 변경해",
+    "다른 캐릭터로", "다른 캐릭터야",
+    "탈옥",
+    "롤플레이 시작",
+)
+# 영어: "bypass", "disregard" 단독은 정상 문맥에서도 등장 가능하므로 구문 단위로 한정.
+_INJECTION_KEYWORDS_EN: tuple[str, ...] = (
+    "ignore previous", "ignore all instructions", "ignore above",
+    "system prompt", "you are now",
+    "developer mode", "jailbreak",
+    "override instructions",
+    "disregard all", "disregard previous",
+)
+_INJECTION_RESPONSE = (
+    "일기 작성과 관련 없는 요청이에요. "
+    "오늘 반려견과 있었던 일을 알려주시면 일기를 써드릴게요! 🐾"
+)
+
+
+def _contains_injection(text: str) -> bool:
+    """인젝션/탈옥 키워드가 포함되어 있는지 검사."""
+    normalized = text.lower().replace(" ", "")
+    for kw in _INJECTION_KEYWORDS_KO:
+        if kw.replace(" ", "") in normalized:
+            return True
+    lower_en = text.lower()
+    for kw in _INJECTION_KEYWORDS_EN:
+        if kw in lower_en:
+            return True
+    return False
+
+
 _DIARY_EVENT_KEYWORDS: tuple[str, ...] = (
     "산책", "목욕", "병원", "입양", "처음", "만남", "여행", "외출", "공원",
     "카페", "갔어", "왔어", "했어", "놀았", "먹었", "잤어", "아팠",
@@ -628,6 +669,10 @@ async def _load_pet_context(ctx: Any) -> PetContextResult:
 
 
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
+    if _contains_injection(query):
+        logger.warning(f"[Diary] 인젝션 시도 차단: {query[:80]}")
+        return None
+
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
 
@@ -900,6 +945,11 @@ async def _ask_diary_followup(turn: int, ctx: Any) -> str:
 
 
 async def _handle_diary_mini_flow(query: str, ctx: Any) -> str:
+    # ── 인젝션/탈옥 사전 차단 (LLM 호출 전) ──────────────────────────────
+    if _contains_injection(query):
+        logger.warning(f"[DiaryMiniFlow] 인젝션 시도 차단: {query[:80]}")
+        return _INJECTION_RESPONSE
+
     is_explicit = _is_explicit_diary_request(query)
     is_direct = _is_direct_diary_request(query)
     is_followup = _is_followup_diary_request(query)

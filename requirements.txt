@@ -68,6 +68,7 @@ python-multipart
 #   (pip 가 이미 설치된 CPU wheel 을 재사용하므로 CUDA wheel 로 덮어쓰지 않음.)
 torch>=2.0.0
 transformers>=4.35.0
+qwen-vl-utils       # Qwen2.5-VL 이미지 분석 (photo_vlm_service.py)
 numpy>=1.24.0
 tqdm                # 학습 진행률 표시 (transformers 의존성이지만 명시적 고정)
 
