@@ -18,7 +18,7 @@ import { getMe, updateUser, deleteUser, type UserProfile } from "../services/use
 import { getPets, deletePet, type Pet } from "../services/petService";
 import { getAllBreeds, type Breed } from "../services/breedService";
 import { getPlaceFavorites, togglePlaceFavorite, type FavoritePlace } from "../services/placeService";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import ConfirmModal from "../components/ConfirmModal";
 import LoginPromptModal from "../components/LoginPromptModal";
 
@@ -762,14 +762,32 @@ export default function MyPage() {
             )}
           </motion.section>
 
-          <div className="mt-12 mb-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setWithdrawOpen(true)}
-              className="text-xs text-slate-400 underline-offset-2 transition hover:text-red-500 hover:underline"
-            >
-              회원 탈퇴
-            </button>
+          <div className="mt-12 mb-4 grid grid-cols-1 items-center gap-3 text-center sm:grid-cols-3">
+            <div aria-hidden="true" />
+            <div className="flex items-center justify-center gap-3 text-xs text-slate-400">
+              <Link
+                to="/privacy"
+                className="underline-offset-2 transition hover:text-orange-500 hover:underline"
+              >
+                개인정보처리방침
+              </Link>
+              <span className="text-slate-300">|</span>
+              <Link
+                to="/terms"
+                className="underline-offset-2 transition hover:text-orange-500 hover:underline"
+              >
+                서비스 이용약관
+              </Link>
+            </div>
+            <div className="flex justify-center sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setWithdrawOpen(true)}
+                className="text-xs text-slate-400 underline-offset-2 transition hover:text-red-500 hover:underline"
+              >
+                회원 탈퇴
+              </button>
+            </div>
           </div>
         </div>
       </div>

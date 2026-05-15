@@ -22,6 +22,7 @@ import {
 import KeywordChipsField from "../components/KeywordChipsField";
 import AvatarUploadField from "../components/AvatarUploadField";
 import { KeywordChip as Chip } from "../components/KeywordPickerModal";
+import AgreementsStep from "../components/AgreementsStep";
 
 type GuardianGender = "male" | "female" | "other" | undefined;
 type PetGender = "male" | "female" | undefined;
@@ -235,6 +236,64 @@ export default function ProfileSetupPage() {
   const [petKeywordNames, setPetKeywordNames] = useState<string[]>([]);
   const [userKeywordNames, setUserKeywordNames] = useState<string[]>([]);
 
+  // 약관·개인정보처리방침 동의 단계 게이트 (외부팀 QA #76).
+  // null = 로딩 중 / "needed" = 동의 필요 / "ok" = 완료 또는 skip (수정 모드 포함)
+  // 수정 모드 (편집·반려견 추가·보호자 수정) 진입 시 동의 단계는 이미 통과한 것으로 간주 — skip.
+  const [agreementsGate, setAgreementsGate] = useState<
+    null | "needed" | "ok"
+  >(null);
+
+  // /step 진입 시점 me 스냅샷 — 약관 동의 후 펫·닉네임 보유 사용자를 /home 으로
+  // 우회시키기 위한 판정 source. (직전 라운드 보고서 §6 후속 가드)
+  // 신규 사용자 (펫 미등록) 의 경우 hasPet=false → 우회 미발동 → 기존 폼 진입.
+  const [meHasProfile, setMeHasProfile] = useState(false);
+  const [meHasPet, setMeHasPet] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    // 수정 모드 = 신규 가입 흐름 아님 → 동의 단계 skip + 우회 가드 미발동.
+    if (isEditMode || isPetOnlyMode || isUserOnlyMode) {
+      setAgreementsGate("ok");
+      return;
+    }
+    getMe()
+      .then((me) => {
+        if (!active) return;
+        setMeHasProfile(Boolean(me.nickname && me.nickname.trim().length > 0));
+        setMeHasPet(me.primary_pet_id != null);
+        const needsAgreement = !me.terms_agreed_at || !me.privacy_agreed_at;
+        setAgreementsGate(needsAgreement ? "needed" : "ok");
+      })
+      .catch(() => {
+        // getMe 실패 시 = 인증 없음 추정. 동의 게이트 막아도 의미 없으므로 통과 처리.
+        // 후속 createPet/updateUser 호출 시 401 로 자연 redirect.
+        if (active) setAgreementsGate("ok");
+      });
+    return () => {
+      active = false;
+    };
+  }, [isEditMode, isPetOnlyMode, isUserOnlyMode]);
+
+  // 약관 동의 완료 + 닉네임·펫 보유 + 신규 모드 → /home 우회.
+  // 마이그레이션 직후 기존 사용자가 약관 동의 후 빈 회원가입 폼으로 진입하는 케이스
+  // (직전 라운드 보고서 §6 잠재 이슈) 해소. AgreementsStep.onComplete 콜백 후에도
+  // agreementsGate state 변경으로 본 effect 재실행되어 자동 navigate.
+  useEffect(() => {
+    if (agreementsGate !== "ok") return;
+    if (isEditMode || isPetOnlyMode || isUserOnlyMode) return;
+    if (meHasProfile && meHasPet) {
+      navigate("/home", { replace: true });
+    }
+  }, [
+    agreementsGate,
+    meHasProfile,
+    meHasPet,
+    isEditMode,
+    isPetOnlyMode,
+    isUserOnlyMode,
+    navigate,
+  ]);
+
   useEffect(() => {
     let active = true;
     Promise.all([getPetKeywords(), getUserKeywords()])
@@ -403,7 +462,7 @@ export default function ProfileSetupPage() {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
-          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          selected_tags: form.ownerPersonality ?? [],
           profile_id: userProfileId,
         });
         // Navbar 우측 아바타 + getMe 캐시 의존 컴포넌트 즉시 갱신
@@ -482,7 +541,7 @@ export default function ProfileSetupPage() {
             nickname: form.guardianName || undefined,
             gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
             birth_date: form.guardianBirth || undefined,
-            selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+            selected_tags: form.ownerPersonality ?? [],
             profile_id: userProfileId,
           });
         }
@@ -537,7 +596,7 @@ export default function ProfileSetupPage() {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
-          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
+          selected_tags: form.ownerPersonality ?? [],
           profile_id: userProfileId,
         });
         await createPet({
@@ -561,6 +620,30 @@ export default function ProfileSetupPage() {
       setIsSubmitting(false);
     }
   };
+
+  // 약관 동의 게이트 — 로딩 중 / 동의 필요 분기 우선 처리.
+  if (agreementsGate === null) {
+    return (
+      <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (agreementsGate === "needed") {
+    return <AgreementsStep onComplete={() => setAgreementsGate("ok")} />;
+  }
+
+  // /home 우회 가드 — 신규 모드 + 닉네임·펫 보유 시 useEffect 가 navigate 발동.
+  // navigate 직전 회원가입 폼 한 프레임 깜빡임 방지용 spinner.
+  const willRedirectHome =
+    !isEditMode && !isPetOnlyMode && !isUserOnlyMode && meHasProfile && meHasPet;
+  if (willRedirectHome) {
+    return (
+      <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F6F1EC]">

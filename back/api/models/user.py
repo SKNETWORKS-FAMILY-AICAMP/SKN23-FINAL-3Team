@@ -76,6 +76,19 @@ class User(Base):
 
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 여행 성향 태그 목록")
 
+    # 약관·개인정보처리방침 동의 시점 (NULL = 미동의 → /step 재진입).
+    # 회원가입 시 /step 첫 단계에서 두 동의 모두 받고 동시에 timestamp 박힘.
+    # 정책상 둘은 함께 갱신되지만 약관별 변경 시점 추적 가능성 위해 컬럼 분리.
+    # 컬럼 정의 순서는 운영 RDS 물리 컬럼 순서 정합 (BEFORE created_at).
+    terms_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None,
+        comment="서비스 이용약관 동의 시점 (KST). NULL = 미동의."
+    )
+    privacy_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None,
+        comment="개인정보처리방침 동의 시점 (KST). NULL = 미동의."
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
         default=kst_now, server_default=func.now(),
@@ -91,7 +104,8 @@ class User(Base):
     # ── Relationships ──────────────────────────────────────────────────────
     # selectin: UserResponse.model_validate 시 profile_image_url property 자동 매핑용 prefetch.
     profile: Mapped[Image | None] = relationship("Image", foreign_keys=[profile_id], lazy="selectin")
-    keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
+    # selectin: UserResponse.type_name property 가 동기 access 안전하도록 prefetch.
+    type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")
     # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 SQLAlchemy 추론 모호 → foreign_keys 명시.
     pets: Mapped[list[Pet]] = relationship(
         "Pet",
@@ -116,6 +130,15 @@ class User(Base):
         Pet.profile_image_url property 와 동일 패턴.
         """
         return self.profile.file_url if self.profile else None
+
+    @property
+    def type_name(self) -> str | None:
+        """UserResponse 의 from_attributes 매핑용 — keywords.name 동적 추출.
+
+        User.type relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        type_id 가 NULL 이면 None 반환 — 마이페이지에서 "성향 미설정" 표시 분기.
+        """
+        return self.type.name if self.type else None
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} provider={self.provider!r}>"

@@ -11,6 +11,7 @@ class Pet {
     this.gender,
     this.isNeutered,
     this.typeId,
+    this.typeName,
     this.selectedTags,
     required this.createdAt,
     required this.updatedAt,
@@ -25,6 +26,7 @@ class Pet {
   final PetGender? gender;
   final bool? isNeutered;
   final int? typeId;
+  final String? typeName;
   final List<dynamic>? selectedTags;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -40,6 +42,7 @@ class Pet {
       gender: PetGender.fromWire(json['gender'] as String?),
       isNeutered: json['is_neutered'] as bool?,
       typeId: json['type_id'] as int?,
+      typeName: json['type_name'] as String?,
       selectedTags: json['selected_tags'] as List<dynamic>?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -49,6 +52,7 @@ class Pet {
 }
 
 /// `POST /api/pets` 요청 페이로드 (`PetCreate`).
+/// type_id 는 백엔드가 selected_tags 로부터 자동 계산하므로 송신 필드에서 제외.
 class PetCreate {
   const PetCreate({
     required this.breedId,
@@ -56,7 +60,6 @@ class PetCreate {
     this.birthDate,
     this.gender,
     this.isNeutered,
-    this.typeId,
     this.selectedTags,
   });
 
@@ -65,7 +68,6 @@ class PetCreate {
   final DateTime? birthDate;
   final PetGender? gender;
   final bool? isNeutered;
-  final int? typeId;
   final List<dynamic>? selectedTags;
 
   Map<String, dynamic> toJson() => {
@@ -74,12 +76,12 @@ class PetCreate {
         if (birthDate != null) 'birth_date': _formatDate(birthDate!),
         if (gender != null) 'gender': gender!.wire,
         if (isNeutered != null) 'is_neutered': isNeutered,
-        if (typeId != null) 'type_id': typeId,
         if (selectedTags != null) 'selected_tags': selectedTags,
       };
 }
 
 /// `PATCH /api/pets/{id}` 요청 페이로드 (`PetUpdate`).
+/// type_id 는 백엔드가 selected_tags 로부터 자동 재계산하므로 송신 필드에서 제외.
 class PetUpdate {
   const PetUpdate({
     this.breedId,
@@ -87,7 +89,6 @@ class PetUpdate {
     this.birthDate,
     this.gender,
     this.isNeutered,
-    this.typeId,
     this.selectedTags,
   });
 
@@ -96,7 +97,6 @@ class PetUpdate {
   final DateTime? birthDate;
   final PetGender? gender;
   final bool? isNeutered;
-  final int? typeId;
   final List<dynamic>? selectedTags;
 
   Map<String, dynamic> toJson() => {
@@ -105,7 +105,6 @@ class PetUpdate {
         if (birthDate != null) 'birth_date': _formatDate(birthDate!),
         if (gender != null) 'gender': gender!.wire,
         if (isNeutered != null) 'is_neutered': isNeutered,
-        if (typeId != null) 'type_id': typeId,
         if (selectedTags != null) 'selected_tags': selectedTags,
       };
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, MessageSquare, Clock, Pencil, Trash2, Check, X } from 'lucide-react'
+import { ArrowLeft, MessageSquare, Clock, Pencil, Trash2, Check, X, Loader2 } from 'lucide-react'
 import { getMe } from '../services/userService'
 import {
   getChatRooms,
@@ -75,7 +75,12 @@ function renderHistoryPlaceMessage(
                   disabled={isLoading}
                   className="font-semibold text-[#F4845F] underline underline-offset-2 hover:text-[#e8764f] transition-colors disabled:opacity-60"
                 >
-                  {isLoading ? '불러오는 중...' : name}
+                  {isLoading ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      불러오는 중...
+                    </span>
+                  ) : name}
                 </button>
                 {isNotFound && (
                   <span className="ml-2 text-xs text-[#B08B7A]">정보를 찾을 수 없어요</span>
@@ -230,7 +235,10 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
         <div className="flex-1 overflow-y-auto space-y-3 p-4">
           {msgLoading ? (
             <div className="flex h-full items-center justify-center">
-              <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
+              <span className="inline-flex items-center gap-2 text-sm text-[#B08B7A]">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                불러오는 중...
+              </span>
             </div>
           ) : messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
@@ -272,7 +280,10 @@ export default function ChatHistory({ onBack, onShowPlaces }: Props) {
       <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex h-full items-center justify-center">
-            <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
+            <span className="inline-flex items-center gap-2 text-sm text-[#B08B7A]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              불러오는 중...
+            </span>
           </div>
         ) : rooms.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
