@@ -29,6 +29,32 @@ LANDMARK_MIN_RESULTS = 3                     # 장소 후보 최소 3개
 # 잘리는지 확인한다. 기존 기준값은 각각 200, 50이었다.
 RDB_FILTER_MAX_CANDIDATES = 500
 CHROMA_FILTERED_FETCH_N = 200
+LANDMARK_HINTS = (
+    "여의도 공원",
+    "여의도공원",
+    "한강공원",
+    "남산타워",
+    "롯데타워",
+    "경복궁",
+    "광화문",
+    "서울역",
+    "서울숲",
+    "강남역",
+    "홍대역",
+    "홍대",
+    "한강",
+)
+CURRENT_LOCATION_HINTS = (
+    "내 주변",
+    "내 근처",
+    "내주변",
+    "내근처",
+    "여기",
+    "현재 위치",
+    "지금 있는 곳",
+    "이 근방",
+    "이 동네",
+)
 
 
 SEOUL = "서울특별시" # 현재 서비스가 서울만 제공하기 때문에 만든 필터 상수
@@ -108,6 +134,10 @@ GENERIC_PLACE_TARGETS = {
     "스팟",
 }
 PLACE_TYPE_ALIASES = {
+    "카페": {"카페", "애견카페", "애완카페", "반려견카페", "반려견 카페", "커피숍", "브런치카페"},
+    "애견카페": {"카페", "애견카페", "애완카페", "반려견카페"},
+    "애완카페": {"카페", "애견카페", "애완카페", "반려견카페"},
+    "반려견카페": {"카페", "애견카페", "애완카페", "반려견카페"},
     "놀이터": {"놀이터", "반려견놀이터"},
     "강아지놀이터": {"강아지놀이터", "반려견놀이터"},
     "애견놀이터": {"애견놀이터", "반려견놀이터"},
@@ -589,7 +619,47 @@ async def _parse_query_with_llm(query: str, request: Request = None) -> ParsedQu
     _normalize_supply_preferences(parsed)
     _relax_objective_for_restriction_focus(parsed)
     _normalize_indoor_outdoor_subjective(parsed)
+    _normalize_landmark_intent(parsed)
     return parsed
+
+
+def _extract_landmark_hint(query: str) -> str | None:
+    """Recover common landmark intent when the LLM parser misses it."""
+    compact = re.sub(r"\s+", "", query or "")
+    if any(re.sub(r"\s+", "", hint) in compact for hint in CURRENT_LOCATION_HINTS):
+        return None
+
+    if not any(keyword in compact for keyword in ("근처", "주변", "가까운", "앞", "옆")):
+        return None
+
+    for hint in LANDMARK_HINTS:
+        if re.sub(r"\s+", "", hint) in compact:
+            return hint
+    return None
+
+
+def _normalize_landmark_intent(parsed: ParsedQuery) -> None:
+    """Keep explicit nearby-place intent stable even if the LLM omits it."""
+    if parsed.use_current_location:
+        parsed.landmark = None
+        return
+
+    compact = re.sub(r"\s+", "", parsed.raw_query or "")
+    has_current_location_hint = any(
+        re.sub(r"\s+", "", hint) in compact for hint in CURRENT_LOCATION_HINTS
+    )
+    if has_current_location_hint:
+        parsed.use_current_location = True
+        parsed.landmark = None
+        return
+
+    hinted_landmark = _extract_landmark_hint(parsed.raw_query)
+    if hinted_landmark and not parsed.landmark:
+        parsed.landmark = hinted_landmark
+
+    bare_current_location = compact.startswith(("주변", "근처"))
+    if bare_current_location and not parsed.landmark and not parsed.objective.get("district"):
+        parsed.use_current_location = True
 
 
 def _clone_parsed(parsed: ParsedQuery) -> ParsedQuery:
@@ -637,12 +707,21 @@ def _expand_place_type_aliases(place_type: str) -> set[str]:
 def _expand_sub_categories(sub_category: str | None) -> set[str]:
     if not sub_category:
         return set()
-    return {sub_category, *SUB_CATEGORY_GROUPS.get(sub_category, set())}
+    return {
+        sub_category,
+        *SUB_CATEGORY_GROUPS.get(sub_category, set()),
+        *PLACE_TYPE_ALIASES.get(sub_category, set()),
+    }
 
 
 def _normalize_sub_category_intent(parsed: ParsedQuery) -> None:
     query = (parsed.raw_query or "").replace(" ", "")
     if not query:
+        return
+
+    cafe_keywords = ("애완카페", "애견카페", "반려견카페", "강아지카페", "커피숍", "브런치카페")
+    if any(keyword in query for keyword in cafe_keywords):
+        parsed.objective["sub_category"] = "카페"
         return
 
     pet_hotel_keywords = ("강아지호텔", "애견호텔", "펫호텔", "펫시터", "데이케어")
@@ -839,6 +918,117 @@ def _apply_category_guard(
             sorted(allowed),
         )
     return kept
+
+
+def _apply_explicit_objective_guard(
+    places: list[dict],
+    parsed: ParsedQuery,
+    *,
+    source: str,
+) -> list[dict]:
+    """Keep only results that satisfy explicit user objective constraints."""
+    if not places:
+        return places
+
+    kept = places
+    district = (parsed.objective.get("district") or "").strip()
+    if district:
+        before = len(kept)
+        kept = [
+            place
+            for place in kept
+            if district in (place.get("address") or "")
+        ]
+        if len(kept) != before:
+            logger.info(
+                "[PlaceService] explicit district guard (%s): %d -> %d (district=%s)",
+                source,
+                before,
+                len(kept),
+                district,
+            )
+
+    sub_category = (parsed.objective.get("sub_category") or "").strip()
+    if sub_category:
+        allowed = _expand_sub_categories(sub_category)
+        before = len(kept)
+        kept = [
+            place
+            for place in kept
+            if (place.get("sub_category") or "").strip() in allowed
+        ]
+        if len(kept) != before:
+            logger.info(
+                "[PlaceService] explicit category guard (%s): %d -> %d (allowed=%s)",
+                source,
+                before,
+                len(kept),
+                sorted(allowed),
+            )
+
+    return kept
+
+
+def _apply_landmark_distance_guard(
+    places: list[dict],
+    parsed: ParsedQuery,
+    *,
+    source: str,
+) -> list[dict]:
+    """Keep only places within the configured landmark radius."""
+    if not places or not _has_named_landmark(parsed):
+        return places
+
+    max_radius_m = LANDMARK_RADIUS_STEPS_M[-1]
+    lat, lng = parsed.landmark_coords
+    kept: list[dict] = []
+    for place in places:
+        distance = _distance_meters(lat, lng, place.get("lat"), place.get("lng"))
+        if distance is None:
+            continue
+        place["distance_m"] = round(distance, 1)
+        if distance <= max_radius_m:
+            kept.append(place)
+
+    if len(kept) != len(places):
+        logger.info(
+            "[PlaceService] landmark distance guard (%s): %d -> %d (landmark=%s, radius=%dm)",
+            source,
+            len(places),
+            len(kept),
+            parsed.landmark,
+            max_radius_m,
+        )
+    return kept
+
+
+def _merge_unique_places(
+    primary: list[dict],
+    secondary: list[dict],
+    n_results: int,
+) -> list[dict]:
+    """Merge place lists while preserving order and removing duplicates."""
+    merged: list[dict] = []
+    seen: set[str] = set()
+    for place in [*primary, *secondary]:
+        key = (place.get("content_id") or place.get("name") or "").strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(place)
+        if len(merged) >= n_results:
+            break
+    return merged
+
+
+def _has_named_landmark(parsed: ParsedQuery) -> bool:
+    """True only for explicit named landmarks, not GPS current-location searches."""
+    return bool((parsed.landmark or "").strip() and parsed.landmark_coords)
+
+
+def _has_proximity_context(parsed: ParsedQuery) -> bool:
+    """True for either named-landmark searches or GPS current-location searches."""
+    return bool(parsed.landmark_coords and (_has_named_landmark(parsed) or parsed.use_current_location))
 
 
 def _calc_category_bias(place: PlaceModel, parsed: ParsedQuery) -> float:
@@ -1390,7 +1580,16 @@ async def _search_by_chromadb(
 
         # candidate_ids가 있으면 후처리 필터를 위해 여유롭게 더 가져온다
         has_candidates = bool(candidate_ids)
-        fetch_n = max(n_results, CHROMA_FILTERED_FETCH_N) if has_candidates else n_results
+        needs_objective_post_filter = bool(
+            parsed.objective.get("district")
+            or parsed.objective.get("sub_category")
+            or _has_proximity_context(parsed)
+        )
+        fetch_n = (
+            max(n_results, CHROMA_FILTERED_FETCH_N)
+            if has_candidates or needs_objective_post_filter
+            else n_results
+        )
         search_n_results = max(fetch_n, 20) if _has_fee_preferences(parsed) else fetch_n
 
         sub_categories = _expand_sub_categories(parsed.objective.get("sub_category"))
@@ -1465,7 +1664,9 @@ async def _fetch_and_score(
         places.append(place_dict)
 
     category_filtered = _apply_category_guard(places, parsed, source="vector")
-    prioritized = _apply_outing_priority(category_filtered, parsed, n_results)
+    objective_filtered = _apply_explicit_objective_guard(category_filtered, parsed, source="vector")
+    landmark_filtered = _apply_landmark_distance_guard(objective_filtered, parsed, source="vector")
+    prioritized = _apply_outing_priority(landmark_filtered, parsed, n_results)
     fee_filtered = _apply_fee_hard_filter(prioritized, parsed, source="vector")
     return _apply_restriction_hard_filter(fee_filtered, parsed, source="vector")
 
@@ -1502,7 +1703,9 @@ async def _fallback_rdb_only(
         scored.append(d)
 
     category_filtered = _apply_category_guard(scored, parsed, source="fallback")
-    prioritized = _apply_outing_priority(category_filtered, parsed, n_results)
+    objective_filtered = _apply_explicit_objective_guard(category_filtered, parsed, source="fallback")
+    landmark_filtered = _apply_landmark_distance_guard(objective_filtered, parsed, source="fallback")
+    prioritized = _apply_outing_priority(landmark_filtered, parsed, n_results)
     fee_filtered = _apply_fee_hard_filter(prioritized, parsed, source="fallback")
     return _apply_restriction_hard_filter(fee_filtered, parsed, source="fallback")
 
@@ -1598,30 +1801,19 @@ async def _filter_with_relaxation(
 
     attempts: list[tuple[str, ParsedQuery]] = []
 
-    if getattr(parsed, "landmark_coords", None):
-        relaxed = _clone_parsed(parsed)
-        relaxed.landmark = None
-        relaxed.landmark_coords = None
-        attempts.append(("landmark", relaxed))
-
     if parsed.objective.get("district"):
         relaxed = _clone_parsed(parsed)
         relaxed.objective["district"] = None
         attempts.append(("district", relaxed))
 
-    if parsed.objective.get("district") and getattr(parsed, "landmark_coords", None):
+    if (
+        parsed.objective.get("sub_category")
+        and parsed.objective.get("district")
+        and not _has_named_landmark(parsed)
+    ):
         relaxed = _clone_parsed(parsed)
         relaxed.objective["district"] = None
-        relaxed.landmark = None
-        relaxed.landmark_coords = None
-        attempts.append(("district+landmark", relaxed))
-
-    if parsed.objective.get("sub_category") and parsed.objective.get("district"):
-        relaxed = _clone_parsed(parsed)
-        relaxed.objective["district"] = None
-        relaxed.landmark = None
-        relaxed.landmark_coords = None
-        attempts.append(("sub_category+district+landmark", relaxed))
+        attempts.append(("sub_category+district", relaxed))
 
     seen: set[tuple] = set()
     for label, relaxed in attempts:
@@ -1963,10 +2155,11 @@ async def search_places_from_db(
             logger.info("[PlaceService] indoor/outdoor condition detected, skip ChromaDB re-ranking")
             return await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
 
-        # Ablation A2-1: Combined에서도 Chroma 후보를 RDB 후보 안으로 제한하지 않는다.
-        # RAG 후보가 실제로 Combined 성능에 기여할 수 있는지 확인하기 위한 실험이다.
+        # 일반 질문은 Chroma 자유 검색을 유지하되, landmark 질문은 반경 후보 안에서
+        # 재순위해 "근처" 의도를 끝까지 보존한다.
+        vector_candidate_ids = candidate_ids if _has_proximity_context(parsed) else []
         vector_results = await _search_by_chromadb(
-            parsed, [], n_results, request
+            parsed, vector_candidate_ids, n_results, request
         )
 
         if vector_results:
@@ -1974,6 +2167,9 @@ async def search_places_from_db(
             if places:
                 if parsed.time_condition:
                     places = _sort_by_time_certainty(places, parsed.time_condition)
+                if _has_proximity_context(parsed) and len(places) < n_results:
+                    fallback_places = await _fallback_rdb_only(parsed, candidate_ids, db, n_results)
+                    places = _merge_unique_places(places, fallback_places, n_results)
                 return places[:n_results]
 
         if _has_fee_preferences(parsed):

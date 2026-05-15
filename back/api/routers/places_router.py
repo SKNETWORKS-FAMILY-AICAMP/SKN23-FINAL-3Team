@@ -41,14 +41,15 @@ async def search_places(
     Returns:
         {"places": [...]} 형태의 장소 목록
     """
+    candidate_pool_size = 20
     places = await search_places_from_db(
-        query, db, n_results=5, request=request,
+        query, db, n_results=candidate_pool_size, request=request,
         user_lat=user_lat, user_lng=user_lng,
     )
     profile_ctx = await _load_place_preference_context(
         DispatchContext(db=db, pet_id=pet_id)
     )
-    places = _rerank_places_with_profile(places, profile_ctx, request=request)
+    places = _rerank_places_with_profile(places, profile_ctx, request=request)[:5]
 
     places = await enrich_place_images(places)
 

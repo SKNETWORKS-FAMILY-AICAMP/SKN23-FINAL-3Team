@@ -384,17 +384,21 @@ KoELECTRA 의도분류
     ↓
 chat_response_service._handle_places()
     ↓
-성향 타입 분류
-    ↓
 QueryParser 조건 파싱
     ↓
-RDB 후보 필터링
+RDB 후보 필터링 / 위치 기반 반경 후보 생성
     ↓
 ChromaDB 의미 검색
+일반 질문: 자유 검색
+근처·GPS 질문: 반경 후보 안 재순위
     ↓
 rule_score + rag_score 결합
     ↓
+후보 최대 20개 확보
+    ↓
 반려견/보호자 성향 기반 재순위
+    ↓
+상위 5개 선택
     ↓
 GPT-4.1-mini 추천 메시지 생성
     ↓
@@ -427,13 +431,13 @@ owner_tags
 사용자 입력
   → QueryParser
   → objective 조건 추출
-      - 지역 / 장소유형 / 실내외 / 주차 / 시간 / GPS / 반경
+      - 지역 / 장소유형 / 실내외 / 주차 / 시간 / GPS / landmark
   → subjective 조건 추출
       - 조용한 / 넓은 / 분위기 좋은 / 산책하기 좋은 등
   → RDB 후보 필터링
 ```
 
-RDB 후보 필터링은 SQL 조건 기반으로 후보를 좁히는 단계입니다. 6차 평가 이후 기본 후보 상한을 500개로 확대했고, 장소 유형 텍스트 필터 결과가 5개 미만이면 원본 후보를 유지해 과도한 후보 손실을 방지합니다.
+RDB 후보 필터링은 SQL 조건 기반으로 후보를 좁히는 단계입니다. 6차 평가 이후 기본 후보 상한을 500개로 확대했고, 장소 유형 텍스트 필터 결과가 5개 미만이면 원본 후보를 유지해 과도한 후보 손실을 방지합니다. `근처`, `주변`, `내 주변`처럼 위치가 핵심인 질문은 1km → 2km → 3km 순으로 반경을 넓혀 거리 후보를 먼저 만들고, 이후 검색도 이 후보 안에서 재정렬합니다.
 
 > #### Step 3 — ChromaDB 의미 검색
 
@@ -456,11 +460,11 @@ city
 district
 ```
 
-6차 평가 이후 combined 모드에서는 ChromaDB 후보를 RDB 후보 안으로 제한하지 않습니다. 따라서 객관 조건 기반 RDB 검색과 의미 기반 ChromaDB 검색이 각각 후보 품질을 보완하고, 이후 점수 계산에서 결합됩니다.
+6차 평가 이후 일반 combined 모드에서는 ChromaDB 후보를 RDB 후보 안으로 제한하지 않습니다. 따라서 객관 조건 기반 RDB 검색과 의미 기반 ChromaDB 검색이 각각 후보 품질을 보완하고, 이후 점수 계산에서 결합됩니다. 다만 `경복궁 근처`, `서울역 주변`, `내 주변`처럼 위치 의도가 핵심인 질문은 반경 후보 안에서만 ChromaDB 재순위를 수행해 거리 조건을 우선 보존합니다.
 
 > #### Step 4 — 반려견/보호자 성향 기반 재순위
 
-하이브리드 검색으로 가져온 장소 후보에 대해 반려견 성향과 보호자 성향을 함께 반영해 재정렬합니다.
+하이브리드 검색으로 가져온 장소 후보에 대해 반려견 성향과 보호자 성향을 함께 반영해 재정렬합니다. 현재 실서비스는 최종 5개를 바로 고르지 않고, 검색 단계에서 최대 20개 후보를 확보한 뒤 프로필 점수를 더해 상위 5개를 반환합니다.
 
 ```text
 dog_score_vector = DogScorer.calculate_vector(dog_tags)
@@ -468,7 +472,8 @@ owner_score_vector = OwnerScorer.calculate_vector(owner_tags)
 
 활동성 a > 3 + category=공원/놀이터  → +0.10 bonus
 사회성 b > 3 + category=카페/관광지  → +0.05 bonus
-예민도 e > 3 + outdoor=Y            → -0.10 penalty
+예민도 e > 3 + outdoor=Y            → -0.15 penalty
+예민도 e > 3 + 반려견놀이터/레포츠  → -0.15 penalty
 
 자연 선호 a > 3 + outdoor=Y         → +0.08 bonus
 도시 탐험 b > 3 + category=카페/관광지 → +0.05 bonus
@@ -482,23 +487,16 @@ final_score = base_score + profile_bonus
 
 `dog_tags`와 `owner_tags`가 모두 없는 경우에는 이 재정렬 단계를 생략합니다.
 
-> #### Step 5 — GPT 추천 메시지 생성
+> #### Step 5 — 추천 이유 생성
 
-검색 및 재정렬된 장소 후보를 기반으로 GPT-4.1-mini가 사용자에게 보여줄 자연어 추천 메시지와 추천 이유를 생성합니다.
+검색 및 재정렬된 최종 장소 5개를 기반으로 `chat_response_service.generate_place_reasons()` 가 GPT-4.1-mini를 호출해 장소별 추천 이유만 생성합니다. 현재 실서비스 응답 조립은 `chat_response_service` 에서 수행하고, `PlacesChain` 은 성향 재정렬 규칙을 재사용하는 역할로 남아 있습니다.
 
 ```text
-PlacesPromptBuilder
-  → system_prompt
-  → user_prompt
-      - pet_name
-      - dog_type_name
-      - owner_type_name
-      - dog_tags
-      - owner_tags
-      - places_text
-      - user_query
+최종 places[5]
+  → generate_place_reasons()
+  → 사용자 질문 + 후보 장소 메타데이터 전달
   → GPT-4.1-mini
-  → JSON: { message, places[{ name, reason }] }
+  → JSON: { places[{ name, reason }] }
 ```
 
 > #### Step 6 — 결과 병합 및 반환
@@ -507,7 +505,6 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
 
 ```json
 {
-  "message": "GPT 자연어 추천 메시지",
   "places": [
     {
       "name": "장소명",
@@ -518,11 +515,7 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
       "conditions": "반려견 동반 가능 조건",
       "reason": "추천 이유"
     }
-  ],
-  "dog_type": "careful_pup",
-  "dog_type_name": "조심스러운 아이",
-  "owner_type": "nature_lover",
-  "owner_type_name": "자연 애호가"
+  ]
 }
 ```
 
@@ -570,8 +563,10 @@ final_score = (
   → RDB 후보 필터링
   → ChromaDB 의미 검색
   → rag_score / rule_score / category_bias 결합
-  → 반려견 성향 기반 bonus/penalty 재정렬
-  → GPT-4.1-mini 추천 메시지 및 reason 생성
+  → 후보 최대 20개 확보
+  → 반려견/보호자 성향 기반 bonus/penalty 재정렬
+  → 상위 5개 선택
+  → GPT-4.1-mini reason 생성
   → 장소 메타데이터 병합
   → 프론트 반환
 ```
