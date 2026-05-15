@@ -517,6 +517,7 @@ async def _handle_places(
     top_k: int = 5,
     request: Request = None,
 ) -> tuple[str, list[dict]]:
+    candidate_pool_size = max(top_k, 20)
     parsed = await _parse_query_with_llm(query, request=request)
     if await _is_out_of_service_area(query, request=request, parsed=parsed):
         return _OUT_OF_SERVICE_AREA_MESSAGE, []
@@ -524,12 +525,12 @@ async def _handle_places(
     profile_ctx = await _load_place_preference_context(ctx)
 
     if settings.USE_DUMMY_PLACES:
-        places = await Place().find_place(top_k=top_k)
+        places = await Place().find_place(top_k=candidate_pool_size)
     elif ctx.db is not None:
         places = await search_places_from_db(
             query,
             ctx.db,
-            n_results=top_k,
+            n_results=candidate_pool_size,
             request=request,
             user_lat=ctx.user_lat,
             user_lng=ctx.user_lng,
@@ -539,7 +540,7 @@ async def _handle_places(
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
 
-    places = _rerank_places_with_profile(places, profile_ctx, request=request)
+    places = _rerank_places_with_profile(places, profile_ctx, request=request)[:top_k]
 
     if places:
         places = await enrich_place_images(places)

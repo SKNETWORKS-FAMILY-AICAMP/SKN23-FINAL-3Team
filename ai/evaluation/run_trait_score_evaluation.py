@@ -129,6 +129,22 @@ def _category_matches(place: dict, expected_categories: list[str]) -> bool:
     return False
 
 
+def _diagnose_result(
+    hit_at_5: float,
+    preferred_hit_count: int,
+    avoid_violation_count: int,
+) -> str:
+    if avoid_violation_count > 0:
+        return "avoid_violation"
+    if hit_at_5 == 0 and preferred_hit_count == 0:
+        return "retrieval_failure"
+    if hit_at_5 == 0 and preferred_hit_count > 0:
+        return "category_ok_place_mismatch"
+    if preferred_hit_count > 0:
+        return "trait_category_success"
+    return "needs_review"
+
+
 def calc_hit_at_k(answers: list[str], results: list[str], k: int = TOP_K) -> float:
     top_results = results[:k]
     return 1.0 if any(any(_matches(answer, result) for result in top_results) for answer in answers) else 0.0
@@ -196,20 +212,24 @@ def _evaluate_row(row: pd.Series, n_results: int, mode: str, parsed: dict | None
     preferred_hit_count = sum(1 for place in top_places if _category_matches(place, preferred_categories))
     avoid_violation_count = sum(1 for place in top_places if _category_matches(place, avoid_categories))
     returned_count = len(top_places)
+    hit_at_5 = calc_hit_at_k(answers, top_names)
+    recall_at_5 = calc_recall_at_k(answers, top_names)
+    ndcg_at_5 = calc_ndcg_at_k(answers, top_names)
 
     result = {
         "dog_tags_used": ";".join(dog_tags),
         "owner_tags_used": ";".join(owner_tags),
         "answer_count": len(answers),
         "returned_count": returned_count,
-        "hit_at_5": calc_hit_at_k(answers, top_names),
-        "recall_at_5": calc_recall_at_k(answers, top_names),
-        "ndcg_at_5": calc_ndcg_at_k(answers, top_names),
+        "hit_at_5": hit_at_5,
+        "recall_at_5": recall_at_5,
+        "ndcg_at_5": ndcg_at_5,
         "preferred_category_hit_count": preferred_hit_count,
         "preferred_category_rate": round(preferred_hit_count / returned_count, 4) if returned_count else 0.0,
         "avoid_category_violation_count": avoid_violation_count,
         "avoid_category_violation_rate": round(avoid_violation_count / returned_count, 4) if returned_count else 0.0,
         "category_pass": 1.0 if preferred_hit_count > 0 and avoid_violation_count == 0 else 0.0,
+        "diagnosis": _diagnose_result(hit_at_5, preferred_hit_count, avoid_violation_count),
         "top_results": ";".join(top_names),
         "top_result_categories": ";".join(top_categories),
         "error": "",
@@ -282,6 +302,18 @@ def _save_evaluation_workbook(evaluated: pd.DataFrame, output_path: Path) -> Non
             sheet_name="summary_by_question",
             index=False,
         )
+        if "source_category" in evaluated.columns:
+            _summary(evaluated, ["source_category"]).to_excel(
+                writer,
+                sheet_name="summary_by_source_category",
+                index=False,
+            )
+        if "diagnosis" in evaluated.columns:
+            _summary(evaluated, ["diagnosis"]).to_excel(
+                writer,
+                sheet_name="summary_by_diagnosis",
+                index=False,
+            )
 
 
 def print_summary(df: pd.DataFrame) -> None:
@@ -373,6 +405,7 @@ def run(
                 "avoid_category_violation_count": 0,
                 "avoid_category_violation_rate": 0.0,
                 "category_pass": 0.0,
+                "diagnosis": "error",
                 "top_results": "",
                 "top_result_categories": "",
                 "error": str(exc),

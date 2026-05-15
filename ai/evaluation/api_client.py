@@ -1,11 +1,39 @@
 import json
 import logging
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
-import requests
+try:
+    import requests
+except ModuleNotFoundError:  # pragma: no cover - only used in minimal runtimes.
+    requests = None
 
 from config import BASE_URL, REQUEST_TIMEOUT, SEARCH_ENDPOINT
 
 logger = logging.getLogger(__name__)
+
+
+class _SimpleResponse:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status = status
+        self._body = body
+
+    def raise_for_status(self) -> None:
+        if self.status >= 400:
+            raise RuntimeError(f"HTTP {self.status}: {self._body.decode('utf-8', errors='replace')}")
+
+    def json(self) -> dict:
+        return json.loads(self._body.decode("utf-8"))
+
+
+def _get(url: str, params: dict, timeout: int):
+    if requests is not None:
+        return requests.get(url, params=params, timeout=timeout)
+
+    query = urlencode(params, doseq=True)
+    separator = "&" if "?" in url else "?"
+    with urlopen(f"{url}{separator}{query}", timeout=timeout) as response:
+        return _SimpleResponse(response.status, response.read())
 
 
 def parse_query_eval(query: str) -> dict | None:
@@ -16,7 +44,7 @@ def parse_query_eval(query: str) -> dict | None:
     """
     parse_endpoint = f"{BASE_URL}/api/eval/parse"
     try:
-        resp = requests.get(
+        resp = _get(
             parse_endpoint,
             params={"query": query},
             timeout=REQUEST_TIMEOUT,
@@ -43,7 +71,7 @@ def search_places(
         params["user_lat"] = user_lat
         params["user_lng"] = user_lng
 
-    resp = requests.get(
+    resp = _get(
         SEARCH_ENDPOINT,
         params=params,
         timeout=REQUEST_TIMEOUT,
@@ -91,7 +119,7 @@ def search_places_eval(
         params["user_lng"] = user_lng
     if parsed is not None:
         params["parsed"] = json.dumps(parsed, ensure_ascii=False)
-    resp = requests.get(
+    resp = _get(
         eval_endpoint,
         params=params,
         timeout=REQUEST_TIMEOUT,
@@ -137,7 +165,7 @@ def search_places_eval_with_profile(
         params["user_lat"] = user_lat
         params["user_lng"] = user_lng
 
-    resp = requests.get(
+    resp = _get(
         eval_endpoint,
         params=params,
         timeout=REQUEST_TIMEOUT,
