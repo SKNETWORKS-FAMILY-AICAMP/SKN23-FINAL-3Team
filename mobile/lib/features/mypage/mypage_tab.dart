@@ -147,43 +147,61 @@ class _UserCard extends StatelessWidget {
                 ],
               ),
             ),
-            // ── 인사 + 이메일 + 소셜 배지 ──
-            Text(
-              '${user.nickname}님 안녕하세요!',
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: AppColors.darkBrown,
-              ),
-            ),
-            const SizedBox(height: 6),
+            // ── 프로필 사진 + 인사 + 이메일 + 소셜 배지 ──
             Row(
               children: [
-                Flexible(
-                  child: Text(
-                    user.email,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.mutedForeground,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                _ProfileAvatar(
+                  radius: 28,
+                  url: user.profileImageUrl,
+                  fallbackIcon: LucideIcons.user,
+                  iconSize: 24,
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.peach,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '${user.provider} 로그인',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AppColors.brandOrange,
-                      fontWeight: FontWeight.w600,
-                    ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${user.nickname}님 안녕하세요!',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.darkBrown,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              user.email,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.mutedForeground,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.peach,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '${user.provider} 로그인',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppColors.brandOrange,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],

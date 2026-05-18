@@ -72,14 +72,13 @@ export function Navbar() {
   }, [location.pathname]);
 
   // 사용자 프로필 사진 + 활성 반려견 ID 동기화
-  // - 우측 아바타 = 대표 반려견 사진 우선, 없으면 유저 프로필 사진
+  // - 우측 아바타 = users.profile_image_url 단일 출처 (가을쥐 결정 2026-05-07)
   // - selected_pet_id 동기화는 별개 책임 (챗봇·일기 활성 pet 컨텍스트)
   const loadProfilePhoto = async () => {
     if (!isLoggedIn) return;
     try {
       const me = await getMe();
-      // 대표 반려견 사진 우선 → 없으면 유저 프로필 사진
-      setProfilePhoto(me.primary_pet?.image_url ?? me.profile_image_url);
+      setProfilePhoto(me.profile_image_url);
 
       const pets = await getPets(me.id);
       const pet = pets[0] ?? null;

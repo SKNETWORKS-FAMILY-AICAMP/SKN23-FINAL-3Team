@@ -262,6 +262,7 @@ class _OnboardingFormState extends ConsumerState<_OnboardingForm> {
   DateTime? _ownerBirthDate;
   Gender? _ownerGender;
   final Set<int> _ownerKeywordIds = {};
+  String? _ownerPhotoPath;
 
   // 반려견
   final _petNameCtrl = TextEditingController();
@@ -290,6 +291,18 @@ class _OnboardingFormState extends ConsumerState<_OnboardingForm> {
 
     if (picked != null && mounted) {
       setState(() => _petPhotoPath = picked.path);
+    }
+  }
+
+  Future<void> _pickOwnerPhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+
+    if (picked != null && mounted) {
+      setState(() => _ownerPhotoPath = picked.path);
     }
   }
 
@@ -340,7 +353,18 @@ class _OnboardingFormState extends ConsumerState<_OnboardingForm> {
       final petApi = ref.read(petApiProvider);
       final imageApi = ref.read(imageApiProvider);
 
-      // 1. 보호자 프로필 갱신
+      // 1-a. 보호자 프로필 사진 업로드
+      int? ownerProfileId;
+      if (_ownerPhotoPath != null) {
+        final fileSize = await io.File(_ownerPhotoPath!).length();
+        if (fileSize > 5 * 1024 * 1024) {
+          throw Exception('5MB 이하 이미지만 업로드 가능합니다');
+        }
+        final uploaded = await imageApi.upload(_ownerPhotoPath!);
+        ownerProfileId = uploaded.id;
+      }
+
+      // 1-b. 보호자 프로필 갱신
       final updatedUser = await userApi.update(
         auth.user.id,
         UserUpdate(
@@ -348,6 +372,7 @@ class _OnboardingFormState extends ConsumerState<_OnboardingForm> {
           birthDate: _ownerBirthDate,
           gender: _ownerGender,
           selectedTags: _ownerKeywordIds.toList(),
+          profileId: ownerProfileId,
         ),
       );
 
@@ -426,6 +451,8 @@ class _OnboardingFormState extends ConsumerState<_OnboardingForm> {
                       ..addAll(ids);
                   });
                 },
+                photoPath: _ownerPhotoPath,
+                onPhotoTap: _pickOwnerPhoto,
               ),
               const SizedBox(height: 16),
               _PetSection(
@@ -499,6 +526,8 @@ class _OwnerSection extends ConsumerWidget {
     required this.onGenderChanged,
     required this.selectedKeywordIds,
     required this.onKeywordIdsChanged,
+    required this.photoPath,
+    required this.onPhotoTap,
   });
 
   final TextEditingController nicknameCtrl;
@@ -508,6 +537,8 @@ class _OwnerSection extends ConsumerWidget {
   final ValueChanged<Gender> onGenderChanged;
   final Set<int> selectedKeywordIds;
   final ValueChanged<Set<int>> onKeywordIdsChanged;
+  final String? photoPath;
+  final VoidCallback onPhotoTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -522,6 +553,10 @@ class _OwnerSection extends ConsumerWidget {
             const Text(
               '보호자 정보',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: _OwnerPhotoPicker(path: photoPath, onTap: onPhotoTap),
             ),
             const SizedBox(height: 16),
             const _FieldLabel('닉네임'),
@@ -1472,5 +1507,53 @@ class _PetPhotoPicker extends StatelessWidget {
     return path.startsWith('http')
         ? NetworkImage(path)
         : FileImage(io.File(path));
+  }
+}
+
+/// 보호자 프로필 사진 picker — 반려견 수정 모달과 동일한 UX.
+/// 동그란 아바타 + 우하단 주황 카메라 배지, 탭하면 갤러리 열림.
+class _OwnerPhotoPicker extends StatelessWidget {
+  const _OwnerPhotoPicker({required this.path, required this.onTap});
+
+  final String? path;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    ImageProvider? bgImage;
+    if (path != null) {
+      bgImage = path!.startsWith('http')
+          ? NetworkImage(path!)
+          : FileImage(io.File(path!));
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          CircleAvatar(
+            radius: 48,
+            backgroundColor: AppColors.peach,
+            backgroundImage: bgImage,
+            child: bgImage == null
+                ? const Icon(LucideIcons.user,
+                    size: 36, color: AppColors.brandOrange)
+                : null,
+          ),
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.brandOrange,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: const Icon(LucideIcons.camera,
+                size: 14, color: Colors.white),
+          ),
+        ],
+      ),
+    );
   }
 }

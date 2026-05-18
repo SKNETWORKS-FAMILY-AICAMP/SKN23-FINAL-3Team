@@ -1,7 +1,10 @@
+import 'dart:io' as io;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -31,6 +34,8 @@ class _UserEditModalState extends ConsumerState<UserEditModal> {
   bool _saving = false;
   /// 프로필 사진 삭제 여부. true 이면 저장 시 profile_id: null 전송.
   bool _clearProfilePhoto = false;
+  /// 새로 선택한 프로필 사진 로컬 파일 경로.
+  String? _newPhotoPath;
 
   @override
   void initState() {
@@ -60,6 +65,20 @@ class _UserEditModalState extends ConsumerState<UserEditModal> {
     if (picked != null) setState(() => _birthDate = picked);
   }
 
+  Future<void> _pickPhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _newPhotoPath = picked.path;
+        _clearProfilePhoto = false;
+      });
+    }
+  }
+
   Future<void> _save() async {
     final nickname = _nicknameCtrl.text.trim();
     if (nickname.isEmpty) {
@@ -68,6 +87,19 @@ class _UserEditModalState extends ConsumerState<UserEditModal> {
     }
     setState(() => _saving = true);
     try {
+      // 새 사진이 있으면 업로드하여 profileId 획득
+      int? newProfileId;
+      if (_newPhotoPath != null) {
+        final fileSize = await io.File(_newPhotoPath!).length();
+        if (fileSize > 5 * 1024 * 1024) {
+          Fluttertoast.showToast(msg: '5MB 이하 이미지만 업로드 가능합니다.');
+          setState(() => _saving = false);
+          return;
+        }
+        final uploaded =
+            await ref.read(imageApiProvider).upload(_newPhotoPath!);
+        newProfileId = uploaded.id;
+      }
       await ref
           .read(userApiProvider)
           .update(
@@ -77,7 +109,8 @@ class _UserEditModalState extends ConsumerState<UserEditModal> {
               birthDate: _birthDate,
               gender: _gender,
               selectedTags: _selectedTags.toList(),
-              clearProfileId: _clearProfilePhoto,
+              profileId: newProfileId,
+              clearProfileId: _newPhotoPath == null && _clearProfilePhoto,
             ),
           );
       await ref.read(authProvider.notifier).refreshUser();
@@ -99,6 +132,48 @@ class _UserEditModalState extends ConsumerState<UserEditModal> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// 프로필 사진 영역 — 반려견 프로필 수정과 동일한 UX.
+  /// 동그란 아바타 + 우하단 주황 카메라 배지, 탭하면 갤러리 열림.
+  Widget _buildProfilePhotoRow() {
+    ImageProvider? bgImage;
+    if (_newPhotoPath != null) {
+      bgImage = FileImage(io.File(_newPhotoPath!));
+    } else if (!_clearProfilePhoto && widget.user.profileImageUrl != null) {
+      bgImage = NetworkImage(widget.user.profileImageUrl!);
+    }
+
+    return Center(
+      child: GestureDetector(
+        onTap: _pickPhoto,
+        child: Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            CircleAvatar(
+              radius: 48,
+              backgroundColor: AppColors.peach,
+              backgroundImage: bgImage,
+              child: bgImage == null
+                  ? const Icon(LucideIcons.user,
+                      size: 36, color: AppColors.brandOrange)
+                  : null,
+            ),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.brandOrange,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(LucideIcons.camera,
+                  size: 14, color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -172,71 +247,10 @@ class _UserEditModalState extends ConsumerState<UserEditModal> {
                       ],
                     ),
                   ),
-                  // ── 프로필 사진 삭제 ──
-                  if (widget.user.profileImageUrl != null &&
-                      !_clearProfilePhoto) ...[
-                    const SizedBox(height: 16),
-                    const _Label(text: '프로필 사진'),
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 32,
-                          backgroundColor: AppColors.peach,
-                          foregroundImage:
-                              NetworkImage(widget.user.profileImageUrl!),
-                          onForegroundImageError: (_, __) {},
-                          child: const Icon(
-                            LucideIcons.user,
-                            color: AppColors.brandOrange,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              setState(() => _clearProfilePhoto = true),
-                          icon: const Icon(LucideIcons.trash2, size: 14),
-                          label: const Text('삭제'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.destructive,
-                            side: const BorderSide(
-                              color: AppColors.destructive,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else if (_clearProfilePhoto) ...[
-                    const SizedBox(height: 16),
-                    const _Label(text: '프로필 사진'),
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 32,
-                          backgroundColor: AppColors.peach,
-                          child: const Icon(
-                            LucideIcons.user,
-                            color: AppColors.brandOrange,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          '저장 시 삭제됩니다',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.mutedForeground,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => _clearProfilePhoto = false),
-                          child: const Text('취소'),
-                        ),
-                      ],
-                    ),
-                  ],
+                  // ── 프로필 사진 (추가 / 변경 / 삭제) ──
+                  const SizedBox(height: 16),
+                  const _Label(text: '프로필 사진'),
+                  _buildProfilePhotoRow(),
                   const SizedBox(height: 16),
                   const _Label(text: '닉네임'),
                   TextField(

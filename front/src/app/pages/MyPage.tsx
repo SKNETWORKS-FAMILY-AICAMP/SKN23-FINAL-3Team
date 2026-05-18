@@ -368,8 +368,8 @@ export default function MyPage() {
             <div className="flex items-center gap-6">
               <div className="relative shrink-0">
                 <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-orange-100 to-amber-50 shadow-md ring-4 ring-orange-200">
-                  {(user?.primary_pet?.image_url ?? user?.profile_image_url) ? (
-                    <img src={(user?.primary_pet?.image_url ?? user?.profile_image_url)!} alt="프로필" className="h-full w-full object-cover" />
+                  {user?.profile_image_url ? (
+                    <img src={user.profile_image_url} alt="프로필" className="h-full w-full object-cover" />
                   ) : (
                     <User className="h-12 w-12 text-orange-400" />
                   )}
