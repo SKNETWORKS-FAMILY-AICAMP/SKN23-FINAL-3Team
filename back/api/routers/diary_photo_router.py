@@ -4,7 +4,10 @@ routers/diary_photo_router.py
 ------------------------------
 POST /api/diary/photo-style
 
-사진 업로드 -> GPT-4o Vision 분석 -> DALL-E 그림체 변환 -> S3 업로드 -> URL 반환.
+사진 업로드 -> 분석(GPT-4o Vision 또는 YOLO+VLM) -> DALL-E 그림체 변환 -> S3 업로드 -> URL 반환.
+
+USE_YOLO_PIPELINE=true  → YOLO 객체검출 + Qwen2.5-VL 분석
+USE_YOLO_PIPELINE=false → GPT-4o Vision 분석 (기본값)
 
 응답 형식:
   실패: { "type": "bot_text",    "content": "..." }
@@ -146,46 +149,87 @@ async def photo_style(
             detail=f"파일 크기는 {settings.PHOTO_UPLOAD_MAX_MB}MB 이하로 올려주세요.",
         )
 
-    # 3. GPT-4o Vision 분석 (강아지/사람 감지 + 외형 묘사)
-    try:
-        vision_data = await _analyze_with_vision(image_bytes, content_type)
-    except Exception as e:
-        logger.error(f"[photo_style] Vision 분석 실패: {e}")
-        return PhotoStyleResponse(type="bot_text", content=_BOT_FAIL_MSG)
-
-    is_real_photo = bool(vision_data.get("is_real_photo", True))
-    dog_count = max(0, int(vision_data.get("dog_count", 0)))
-    has_person = bool(vision_data.get("has_person", False))
-    person_count = max(0, int(vision_data.get("person_count", 0)))
-    dog_descs = [str(d) for d in vision_data.get("dog_visual_descriptions", [])]
-    person_descs = [str(p) for p in vision_data.get("person_visual_descriptions", [])]
-    scene_description = str(vision_data.get("scene_description", ""))
-
-    logger.info(
-        f"[photo_style] Vision 결과: real={is_real_photo} dogs={dog_count} persons={person_count}"
-    )
-
-    # 4. 검증: 실사 사진 + (강아지 or 사람) 중 하나 이상 필요
-    if not is_real_photo or (dog_count == 0 and person_count == 0):
-        logger.info(f"[photo_style] 검증 실패: real={is_real_photo} dogs={dog_count} persons={person_count}")
-        return PhotoStyleResponse(type="bot_text", content=_BOT_FAIL_MSG)
-
-    # has_person을 person_count 기반으로 보정
-    has_person = person_count > 0
-
-    # 5. DALL-E 프롬프트 빌드
+    # 3. 이미지 분석 — YOLO+VLM 또는 GPT-4o Vision
     from services.photo_illustration_service import build_photo_illustration_prompt
 
-    person_visual_desc = person_descs[0] if person_descs else ""
-    image_prompt = build_photo_illustration_prompt(
-        dog_count=dog_count,
-        has_person=has_person,
-        scene_description=scene_description,
-        dog_visual_descriptions=dog_descs,
-        person_visual_description=person_visual_desc,
-        person_count=person_count,
-        person_visual_descriptions=person_descs,
-    )
+    if settings.USE_YOLO_PIPELINE:
+        # ── YOLO + VLM 파이프라인 ──────────────────────────────────────────
+        from services.photo_detector import detect as yolo_detect
+        from services.photo_vlm_service import analyze as vlm_analyze
+        from services.photo_validation_service import validate as photo_validate
+
+        logger.info("[photo_style] YOLO+VLM 파이프라인 사용")
+
+        try:
+            detection = await yolo_detect(image_bytes)
+        except Exception as e:
+            logger.error(f"[photo_style] YOLO 검출 실패: {e}")
+            return PhotoStyleResponse(type="bot_text", content=_BOT_FAIL_MSG)
+
+        try:
+            vlm_result = await vlm_analyze(image_bytes, content_type)
+        except Exception as e:
+            logger.error(f"[photo_style] VLM 분석 실패: {e}")
+            vlm_result = None
+
+        validation = photo_validate(detection, vlm_result)
+
+        if not validation.is_valid:
+            logger.info(f"[photo_style] YOLO+VLM 검증 실패: {validation.rejection_reason}")
+            return PhotoStyleResponse(type="bot_text", content=_BOT_FAIL_MSG)
+
+        dog_count = validation.dog_count
+        has_person = validation.has_person
+        scene_description = validation.scene_description
+        dog_descs = validation.dog_visual_descriptions
+        person_visual_desc = validation.person_visual_description
+
+        image_prompt = build_photo_illustration_prompt(
+            dog_count=dog_count,
+            has_person=has_person,
+            scene_description=scene_description,
+            dog_visual_descriptions=dog_descs,
+            person_visual_description=person_visual_desc,
+        )
+
+    else:
+        # ── GPT-4o Vision 파이프라인 (기본) ────────────────────────────────
+        logger.info("[photo_style] GPT-4o Vision 파이프라인 사용")
+
+        try:
+            vision_data = await _analyze_with_vision(image_bytes, content_type)
+        except Exception as e:
+            logger.error(f"[photo_style] Vision 분석 실패: {e}")
+            return PhotoStyleResponse(type="bot_text", content=_BOT_FAIL_MSG)
+
+        is_real_photo = bool(vision_data.get("is_real_photo", True))
+        dog_count = max(0, int(vision_data.get("dog_count", 0)))
+        has_person = bool(vision_data.get("has_person", False))
+        person_count = max(0, int(vision_data.get("person_count", 0)))
+        dog_descs = [str(d) for d in vision_data.get("dog_visual_descriptions", [])]
+        person_descs = [str(p) for p in vision_data.get("person_visual_descriptions", [])]
+        scene_description = str(vision_data.get("scene_description", ""))
+
+        logger.info(
+            f"[photo_style] Vision 결과: real={is_real_photo} dogs={dog_count} persons={person_count}"
+        )
+
+        if not is_real_photo or (dog_count == 0 and person_count == 0):
+            logger.info(f"[photo_style] 검증 실패: real={is_real_photo} dogs={dog_count} persons={person_count}")
+            return PhotoStyleResponse(type="bot_text", content=_BOT_FAIL_MSG)
+
+        has_person = person_count > 0
+
+        person_visual_desc = person_descs[0] if person_descs else ""
+        image_prompt = build_photo_illustration_prompt(
+            dog_count=dog_count,
+            has_person=has_person,
+            scene_description=scene_description,
+            dog_visual_descriptions=dog_descs,
+            person_visual_description=person_visual_desc,
+            person_count=person_count,
+            person_visual_descriptions=person_descs,
+        )
 
     # 6. DALL-E 이미지 생성
     try:

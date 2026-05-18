@@ -41,12 +41,11 @@ logger = logging.getLogger(__name__)
 
 
 # ── 정책 #71 — 욕설 검사 대상 필드 ────────────────────────────────────────────
-# title / content 는 AI 생성 텍스트이므로 검사 대상에서 제외.
-# 6하원칙 슬롯만 사용자 직접 입력 → 이 필드만 검사.
-_PROFANITY_FIELDS_DIARY = (
-    "when_text", "where_text", "who_text",
-    "what_text", "how_text", "why_text",
-)
+# content, 6W(when/where/who/what/how/why) 는 LLM 생성 영역이라 필터 미적용.
+# title 만 사용자 직접 입력 영역이므로 검사.
+_PROFANITY_FIELDS_DIARY = {
+    "title": "다이어리 제목",
+}
 
 
 def _check_diary_profanity(values: dict) -> None:

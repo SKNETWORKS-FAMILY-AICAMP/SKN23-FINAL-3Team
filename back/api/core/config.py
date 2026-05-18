@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     USE_DUMMY_PLACES: bool = Field(default=False)
 
     # ── 사진 그림체 변환 ─────────────────────────────────────────────────────
+    USE_YOLO_PIPELINE: bool = Field(default=False, description="true: YOLO+VLM 파이프라인, false: GPT-4o Vision")
     USE_YOLO_DETECTOR: bool = Field(default=True)
     USE_LOCAL_VLM: bool = Field(default=False)
     VLM_MODEL_NAME: str = Field(default="Qwen/Qwen2.5-VL-3B-Instruct")
