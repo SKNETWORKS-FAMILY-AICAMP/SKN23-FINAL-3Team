@@ -1,6 +1,7 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star, Loader2 } from 'lucide-react';
+import OnboardingTour, { isOnboardingPending } from '../components/OnboardingTour';
 import type { Pet, DiaryEntry, User } from '../types';
 import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
@@ -599,6 +600,10 @@ export default function HomePage({
   const [showPlacePanel, setShowPlacePanel] = useState(false);
   const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  // 온보딩 투어
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourManual, setTourManual] = useState(false);
+  const [tourUserId, setTourUserId] = useState<number | undefined>(undefined);
   // 다이어리 결과 화면 modal 안의 즐겨찾기 별 — useFavoriteToggle 훅 사용.
   const autoPlaceFavorite = useFavoriteToggle();
 
@@ -654,6 +659,30 @@ export default function HomePage({
       if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
     };
   }, []);
+
+  // 온보딩 투어 — 로그인 상태 + 계정별 미완료 시 자동 표시
+  useEffect(() => {
+    if (!localStorage.getItem('access_token')) return;
+    getMe().then((me) => {
+      setTourUserId(me.id);
+      if (isOnboardingPending(me.id)) {
+        setTourManual(false);
+        setTourOpen(true);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Navbar "튜토리얼 다시 보기" 이벤트 수신
+  useEffect(() => {
+    const handler = () => {
+      setTourManual(true);
+      setTourOpen(true);
+    };
+    window.addEventListener('show-onboarding-tour', handler);
+    return () => window.removeEventListener('show-onboarding-tour', handler);
+  }, []);
+
+  const handleTourComplete = useCallback(() => setTourOpen(false), []);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -940,6 +969,7 @@ export default function HomePage({
             <div className="flex min-w-0 flex-[2] flex-col border-r border-gray-200 bg-white">
               <div className="flex border-b border-gray-100 bg-white">
                 <button
+                  data-tour="diary-tab"
                   className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${tab === 'diary'
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
@@ -951,6 +981,7 @@ export default function HomePage({
                 </button>
 
                 <button
+                  data-tour="map-tab"
                   className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${tab === 'map'
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
@@ -1118,7 +1149,7 @@ export default function HomePage({
             </div>
 
             {/* 오른쪽 챗봇 영역 */}
-            <div className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
+            <div data-tour="chatbot" className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
               <div
                 className="flex h-full flex-col overflow-hidden rounded-[28px] border shadow-[0_0_40px_rgba(0,0,0,0.08)]"
                 style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
@@ -1137,6 +1168,7 @@ export default function HomePage({
                         AI 멍봇
                       </p>
                       <button
+                        data-tour="pet-picker"
                         ref={petPickerBtnRef}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1151,7 +1183,7 @@ export default function HomePage({
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5" data-tour="new-chat">
                       {!showChatHistory && (
                         <button
                           onClick={() => {
@@ -1271,6 +1303,8 @@ export default function HomePage({
           })}
         </div>
       )}
+
+      <OnboardingTour open={tourOpen} onComplete={handleTourComplete} manual={tourManual} userId={tourUserId} />
     </>
   );
 }

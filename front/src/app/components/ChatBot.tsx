@@ -250,7 +250,7 @@ export default function ChatBot({
   const isLoggedIn = !!localStorage.getItem('access_token')
 
   const { state, actions } = useChatbot(pet, initialMessage)
-  const { step, messages, isGenerating, generatedDiary } = state
+  const { step, messages, isGenerating, generatedDiary, photoStyleImageUrl } = state
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
   const [photoUploading, setPhotoUploading] = useState(false)
@@ -467,6 +467,18 @@ export default function ChatBot({
                   />
                 )}
               </div>
+              {/* 사진→그림 변환 후 그림일기 만들기 버튼 */}
+              {msg.imageUrl && step === 'welcome' && (
+                <button
+                  onClick={() => {
+                    actions.startPhotoDiary(msg.imageUrl!)
+                    onNavigateToDiary?.()
+                  }}
+                  className="mt-2 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+                >
+                  그림일기 만들기
+                </button>
+              )}
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
               {inlineButtons.length > 0 && (
                 <div className="flex flex-wrap gap-2 pt-2">
@@ -521,12 +533,14 @@ export default function ChatBot({
         {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && !photoUploading && !messages.some(m => m.imageUrl) && (
           <div className="flex flex-wrap gap-2 pt-1 pl-10">
             <button
+              data-tour="diary-button"
               onClick={handleStartDiary}
               className="rounded-full border border-[#F4845F] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#F4845F] transition hover:bg-[#FFF7F3]"
             >
               그림일기
             </button>
             <button
+              data-tour="place-button"
               onClick={() => {
                 actions.submitWelcomeChat('반려견과 함께 가기 좋은 장소를 추천해줘')
                 sendWelcomeMessage('반려견과 함께 가기 좋은 장소를 추천해줘')
@@ -541,13 +555,22 @@ export default function ChatBot({
         {/* 일기 완성 후 인라인 버튼 */}
         {step === 'diary_result' && generatedDiary && (
           <div className="flex flex-wrap gap-2 pt-1">
-            <button
-              onClick={handleGenerateImage}
-              disabled={imageLoading}
-              className="rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f] disabled:opacity-60"
-            >
-              {imageLoading ? '그림 그리는 중... 🎨' : '그림일기로 만들어줘'}
-            </button>
+            {photoStyleImageUrl ? (
+              <button
+                onClick={() => onDiaryReady?.(generatedDiary, photoStyleImageUrl)}
+                className="rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+              >
+                그림일기 완성하기
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerateImage}
+                disabled={imageLoading}
+                className="rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f] disabled:opacity-60"
+              >
+                {imageLoading ? '그림 그리는 중... 🎨' : '그림일기로 만들어줘'}
+              </button>
+            )}
             <button
               onClick={actions.restartDiary}
               className="rounded-full border border-[#F5D6C8] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#8B6355] transition hover:bg-[#FFF0E6]"
@@ -683,6 +706,7 @@ export default function ChatBot({
                     onChange={handlePhotoSelect}
                   />
                   <button
+                    data-tour="photo-upload"
                     onClick={() => photoInputRef.current?.click()}
                     disabled={photoUploading}
                     title="강아지+보호자 사진을 그림체로 변환"

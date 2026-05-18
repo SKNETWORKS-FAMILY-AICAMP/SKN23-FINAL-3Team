@@ -12,6 +12,7 @@ export interface PrimaryPet {
   type_name: string | null
   selected_tags: string[]
   age: number | null
+  image_url: string | null
 }
 
 export interface UserProfile {
