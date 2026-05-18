@@ -18,27 +18,30 @@ final diaryApiProvider = Provider<DiaryApi>((ref) {
 /// 백엔드 재배포 후 자동 1순위 경로 복귀.
 final favoriteCalendarProvider = FutureProvider.autoDispose
     .family<FavoriteCalendar, ({int year, int month})>((ref, key) async {
-  try {
-    return await ref.read(diaryApiProvider).calendar(
-          year: key.year,
-          month: key.month,
-        );
-  } on DioException catch (e) {
-    final code = e.response?.statusCode;
-    if (code != 404 && code != 422) rethrow;
-    // 폴백 — 같은 월의 즐겨찾기 일기를 클라이언트에서 합성
-    final diaries = await ref.read(diaryListProvider.future);
-    final items = diaries
-        .where((d) =>
-            d.isFavorite &&
-            d.diaryDate.year == key.year &&
-            d.diaryDate.month == key.month)
-        .map((d) => FavoriteCalendarItem(
-              date: d.diaryDate,
-              diaryId: d.id,
-              emotion: d.emotion ?? '',
-            ))
-        .toList();
-    return FavoriteCalendar(year: key.year, month: key.month, items: items);
-  }
-});
+      try {
+        return await ref
+            .read(diaryApiProvider)
+            .calendar(year: key.year, month: key.month);
+      } on DioException catch (e) {
+        final code = e.response?.statusCode;
+        if (code != 404 && code != 422) rethrow;
+        // 폴백 — 같은 월의 즐겨찾기 일기를 클라이언트에서 합성
+        final diaries = await ref.read(diaryListProvider.future);
+        final items = diaries
+            .where(
+              (d) =>
+                  d.isFavorite &&
+                  d.diaryDate.year == key.year &&
+                  d.diaryDate.month == key.month,
+            )
+            .map(
+              (d) => FavoriteCalendarItem(
+                date: d.diaryDate,
+                diaryId: d.id,
+                emotion: d.emotion ?? '',
+              ),
+            )
+            .toList();
+        return FavoriteCalendar(year: key.year, month: key.month, items: items);
+      }
+    });

@@ -156,6 +156,47 @@ _DIARY_START_FLOW_EXACT: frozenset[str] = frozenset({
 # 프론트엔드로 보내는 특수 트리거 마커
 _DIARY_FLOW_TRIGGER = "%%TRIGGER:START_DIARY%%"
 
+# ── 인젝션 / 탈옥 사전 차단 ────────────────────────────────────────────────
+# 한국어: "이전 지시" 단독이면 "이전 지시한 산책 코스" 같은 정상 문장도 차단되므로
+# "이전 지시 무시", "이전 지시를 무시" 등 공격 의도가 명확한 구문만 등록.
+# "역할을 바꿔" → "역할을 바꿔줘" / "역할을 바꿔서"는 정상이므로 "바꿔줘"로 한정.
+_INJECTION_KEYWORDS_KO: tuple[str, ...] = (
+    "이전 지시를 무시", "이전 지시 무시", "이전 지시는 무시",
+    "프롬프트 무시", "프롬프트를 무시",
+    "시스템 프롬프트",
+    "지금부터 너는",
+    "역할을 바꿔줘", "역할 변경해줘", "역할을 변경해",
+    "다른 캐릭터로", "다른 캐릭터야",
+    "탈옥",
+    "롤플레이 시작",
+)
+# 영어: "bypass", "disregard" 단독은 정상 문맥에서도 등장 가능하므로 구문 단위로 한정.
+_INJECTION_KEYWORDS_EN: tuple[str, ...] = (
+    "ignore previous", "ignore all instructions", "ignore above",
+    "system prompt", "you are now",
+    "developer mode", "jailbreak",
+    "override instructions",
+    "disregard all", "disregard previous",
+)
+_INJECTION_RESPONSE = (
+    "일기 작성과 관련 없는 요청이에요. "
+    "오늘 반려견과 있었던 일을 알려주시면 일기를 써드릴게요! 🐾"
+)
+
+
+def _contains_injection(text: str) -> bool:
+    """인젝션/탈옥 키워드가 포함되어 있는지 검사."""
+    normalized = text.lower().replace(" ", "")
+    for kw in _INJECTION_KEYWORDS_KO:
+        if kw.replace(" ", "") in normalized:
+            return True
+    lower_en = text.lower()
+    for kw in _INJECTION_KEYWORDS_EN:
+        if kw in lower_en:
+            return True
+    return False
+
+
 _DIARY_EVENT_KEYWORDS: tuple[str, ...] = (
     "산책", "목욕", "병원", "입양", "처음", "만남", "여행", "외출", "공원",
     "카페", "갔어", "왔어", "했어", "놀았", "먹었", "잤어", "아팠",
@@ -371,7 +412,7 @@ def _extract_draft_text(bot_content: str) -> str:
     return draft.strip()
 
 
-def _collect_diary_context(recent_messages: list) -> str:
+def _collect_diary_context(recent_messages: list, owner_label: str = "보호자") -> str:
     lines = []
     for m in recent_messages:
         raw = (m.content or "").strip()
@@ -390,15 +431,22 @@ def _collect_diary_context(recent_messages: list) -> str:
                 and not _is_diary_reassert_request(content)
                 and len(content) >= 5
             ):
-                lines.append(f"보호자: {content}")
+                lines.append(f"{owner_label}: {content}")
     return "\n".join(lines).strip()
 
 
 def _is_context_sufficient(context: str) -> bool:
-    user_lines = [
-        line[len("보호자: "):] for line in context.splitlines()
-        if line.startswith("보호자: ")
-    ]
+    # 봇: 으로 시작하지 않는 라인에서 레이블 제거 후 user 텍스트 추출
+    user_lines = []
+    for line in context.splitlines():
+        if line.startswith("봇: "):
+            continue
+        # "닉네임: 내용" 또는 "보호자: 내용" 형태에서 내용만 추출
+        colon_idx = line.find(": ")
+        if colon_idx != -1 and colon_idx < 20:
+            user_lines.append(line[colon_idx + 2:])
+        else:
+            user_lines.append(line)
     user_text = " ".join(user_lines)
     if len(user_text) >= 20:
         return True
@@ -513,6 +561,14 @@ def _build_pet_ctx(pet: Pet, owner_name: str) -> dict:
     if isinstance(pet.birth_date, date):
         birth_str = pet.birth_date.strftime("%Y-%m-%d")
 
+    # AI 프로필 분석 결과에서 english_prompt / must_include_keywords 추출
+    english_prompt = None
+    must_include_keywords: list[str] = []
+    if hasattr(pet, "profile") and pet.profile and pet.profile.profile_json:
+        cs = pet.profile.profile_json.get("character_sheet", {})
+        english_prompt = cs.get("english_prompt")
+        must_include_keywords = cs.get("must_include_keywords", [])
+
     return {
         "pet_name": pet.name or _DEFAULT_DIARY_PET["pet_name"],
         "breed": breed_ko or _DEFAULT_DIARY_PET["breed"],
@@ -521,6 +577,8 @@ def _build_pet_ctx(pet: Pet, owner_name: str) -> dict:
         "personalities": list(pet.selected_tags or []),
         "owner_name": owner_name,
         "pet_id": pet.id,
+        "english_prompt": english_prompt,
+        "must_include_keywords": must_include_keywords,
     }
 
 
@@ -611,13 +669,22 @@ async def _load_pet_context(ctx: Any) -> PetContextResult:
 
 
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
+    if _contains_injection(query):
+        logger.warning(f"[Diary] 인젝션 시도 차단: {query[:80]}")
+        return None
+
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
 
-    if "보호자:" in query or "봇:" in query:
+    owner_label = pet_ctx.get("owner_name") or "보호자"
+
+    if f"{owner_label}:" in query or "보호자:" in query or "봇:" in query:
         conversation_summary = query.strip()
+        # 보호자 → 실제 닉네임 치환
+        if owner_label != "보호자":
+            conversation_summary = conversation_summary.replace("보호자:", f"{owner_label}:")
     else:
-        conversation_summary = f"보호자: {query.strip()}"
+        conversation_summary = f"{owner_label}: {query.strip()}"
 
     prompt = _diary_prompt_builder.build_diary_prompt(
         pet_name=pet_ctx["pet_name"],
@@ -667,6 +734,7 @@ async def _generate_and_store_image(
         personalities=pet_ctx["personalities"],
         all_answers=[diary_data.get("_conversation", "")],
         emotion=diary_data.get("_emotion", _DEFAULT_DIARY_EMOTION),
+        english_prompt=pet_ctx.get("english_prompt"),
     )
 
     try:
@@ -877,6 +945,11 @@ async def _ask_diary_followup(turn: int, ctx: Any) -> str:
 
 
 async def _handle_diary_mini_flow(query: str, ctx: Any) -> str:
+    # ── 인젝션/탈옥 사전 차단 (LLM 호출 전) ──────────────────────────────
+    if _contains_injection(query):
+        logger.warning(f"[DiaryMiniFlow] 인젝션 시도 차단: {query[:80]}")
+        return _INJECTION_RESPONSE
+
     is_explicit = _is_explicit_diary_request(query)
     is_direct = _is_direct_diary_request(query)
     is_followup = _is_followup_diary_request(query)

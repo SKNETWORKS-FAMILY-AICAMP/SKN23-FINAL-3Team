@@ -10,9 +10,13 @@ import '../../features/home/home_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../shared/models/place.dart';
 
+/// 앱 소개 온보딩 완료 여부 — 앱 시작 시 1회 로드 후 캐시.
+final introCompletedProvider = StateProvider<bool>((ref) => false);
+
 class AppRoutes {
   static const home = '/';
   static const login = '/login';
+  static const intro = '/intro';
   static const onboarding = '/step';
   static const chat = '/chat';
   static const diaryDraft = '/diary/draft';
@@ -29,6 +33,8 @@ GoRouter buildAppRouter(WidgetRef ref) {
     redirect: (context, state) {
       final auth = ref.read(authProvider);
       final loc = state.matchedLocation;
+      // 앱 소개 온보딩은 HomeScreen 위 카드 다이얼로그로 표시 (라우트 리다이렉트 불필요)
+
       // 인증 없이도 접근 허용: 홈(게스트), 로그인
       const guestAllowed = {AppRoutes.home, AppRoutes.login};
       if (auth is AuthAuthenticated) {
@@ -61,16 +67,15 @@ GoRouter buildAppRouter(WidgetRef ref) {
       GoRoute(
         path: AppRoutes.diaryDraft,
         builder: (context, state) {
-          final place = state.extra is PlaceCard ? state.extra as PlaceCard : null;
+          final place = state.extra is PlaceCard
+              ? state.extra as PlaceCard
+              : null;
           return DiaryDraftScreen(contextPlace: place);
         },
       ),
     ],
-    errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Text('경로를 찾을 수 없습니다: ${state.uri}'),
-      ),
-    ),
+    errorBuilder: (context, state) =>
+        Scaffold(body: Center(child: Text('경로를 찾을 수 없습니다: ${state.uri}'))),
   );
 }
 

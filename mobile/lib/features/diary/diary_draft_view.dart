@@ -16,11 +16,7 @@ import 'diary_types.dart';
 /// 다이어리 작성 공통 위젯 — 두 진입점 (챗봇 trigger / 외부 라우트) 재사용.
 /// `onCompleted` 가 호출되면 호출자가 라우트 pop 또는 후속 화면 결정.
 class DiaryDraftView extends ConsumerStatefulWidget {
-  const DiaryDraftView({
-    super.key,
-    this.contextPlace,
-    this.onCompleted,
-  });
+  const DiaryDraftView({super.key, this.contextPlace, this.onCompleted});
 
   final PlaceCard? contextPlace;
   final VoidCallback? onCompleted;
@@ -77,39 +73,42 @@ class _DiaryDraftViewState extends ConsumerState<DiaryDraftView> {
     }
 
     return switch (state.phase) {
-      DiaryDraftPhase.typeSelect =>
-        _TypeSelector(onSelected: notifier.selectType),
+      DiaryDraftPhase.typeSelect => _TypeSelector(
+        onSelected: notifier.selectType,
+      ),
       DiaryDraftPhase.mainQuestions => _Questions(
-          state: state,
-          petName: _resolvePetName(),
-          controllers: _answerCtrls,
-          ensureControllers: _ensureControllers,
-          onAnswerChanged: notifier.setAnswer,
-          onNext: notifier.goEmotion,
-        ),
+        state: state,
+        petName: _resolvePetName(),
+        controllers: _answerCtrls,
+        ensureControllers: _ensureControllers,
+        onAnswerChanged: notifier.setAnswer,
+        onNext: notifier.goEmotion,
+      ),
       DiaryDraftPhase.emotionSelect => _EmotionSelector(
-          state: state,
-          onSelected: notifier.selectEmotion,
-          onGenerate: notifier.generate,
-        ),
-      DiaryDraftPhase.generating => const _LoadingPanel(message: 'AI 가 일기를 만들고 있어요...'),
+        state: state,
+        onSelected: notifier.selectEmotion,
+        onGenerate: notifier.generate,
+      ),
+      DiaryDraftPhase.generating => const _LoadingPanel(
+        message: 'AI 가 일기를 만들고 있어요...',
+      ),
       DiaryDraftPhase.result => _ResultPanel(
-          state: state,
-          onRegenerateImage: notifier.generateImage,
-          onSave: () async {
-            final ok = await notifier.saveDiary();
-            if (ok && context.mounted) {
-              Fluttertoast.showToast(msg: '일기가 저장됐어요 🐾');
-              widget.onCompleted?.call();
-            }
-          },
-        ),
+        state: state,
+        onRegenerateImage: notifier.generateImage,
+        onSave: () async {
+          final ok = await notifier.saveDiary();
+          if (ok && context.mounted) {
+            Fluttertoast.showToast(msg: '일기가 저장됐어요 🐾');
+            widget.onCompleted?.call();
+          }
+        },
+      ),
       DiaryDraftPhase.saving => const _LoadingPanel(message: '저장 중...'),
       DiaryDraftPhase.saved => _ResultPanel(
-          state: state,
-          onRegenerateImage: notifier.generateImage,
-          onSave: null, // 이미 저장됨
-        ),
+        state: state,
+        onRegenerateImage: notifier.generateImage,
+        onSave: null, // 이미 저장됨
+      ),
     };
   }
 }
@@ -172,7 +171,10 @@ class _TypeSelector extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Icon(LucideIcons.chevronRight, color: AppColors.mutedForeground),
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      color: AppColors.mutedForeground,
+                    ),
                   ],
                 ),
               ),
@@ -247,9 +249,7 @@ class _Questions extends StatelessWidget {
             minLines: 2,
             maxLines: 4,
             onChanged: (v) => onAnswerChanged(i, v),
-            decoration: const InputDecoration(
-              hintText: '답변을 입력해주세요',
-            ),
+            decoration: const InputDecoration(hintText: '답변을 입력해주세요'),
           ),
           const SizedBox(height: 16),
         ],
@@ -388,12 +388,19 @@ class _ResultPanel extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(LucideIcons.sparkles, size: 14, color: AppColors.brandOrange),
+                const Icon(
+                  LucideIcons.sparkles,
+                  size: 14,
+                  color: AppColors.brandOrange,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     generated.summary,
-                    style: GoogleFonts.gaegu(fontSize: 12, color: AppColors.brandOrange),
+                    style: GoogleFonts.gaegu(
+                      fontSize: 12,
+                      color: AppColors.brandOrange,
+                    ),
                   ),
                 ),
               ],

@@ -13,9 +13,9 @@ class ApiClient {
     required SecureStorageService storage,
     required UnauthorizedHandler onUnauthorized,
     Dio? dio,
-  })  : _storage = storage,
-        _onUnauthorized = onUnauthorized,
-        _dio = dio ?? Dio() {
+  }) : _storage = storage,
+       _onUnauthorized = onUnauthorized,
+       _dio = dio ?? Dio() {
     _dio.options
       ..baseUrl = Env.apiBaseUrl
       ..connectTimeout = const Duration(seconds: 10)
@@ -23,10 +23,7 @@ class ApiClient {
       ..headers['Content-Type'] = 'application/json';
 
     _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: _attachAuthHeader,
-        onError: _handleError,
-      ),
+      InterceptorsWrapper(onRequest: _attachAuthHeader, onError: _handleError),
     );
   }
 
@@ -67,8 +64,7 @@ class ApiClient {
   Future<T> patch<T>(String path, {Object? body}) =>
       _request<T>(() => _dio.patch<T>(path, data: body));
 
-  Future<T> delete<T>(String path) =>
-      _request<T>(() => _dio.delete<T>(path));
+  Future<T> delete<T>(String path) => _request<T>(() => _dio.delete<T>(path));
 
   Future<T> upload<T>(String path, FormData form) =>
       _request<T>(() => _dio.post<T>(path, data: form));
@@ -84,10 +80,7 @@ class ApiClient {
 
   ApiException _toApiException(DioException err) {
     final detail = _extractDetail(err);
-    return ApiException(
-      statusCode: err.response?.statusCode,
-      detail: detail,
-    );
+    return ApiException(statusCode: err.response?.statusCode, detail: detail);
   }
 
   String _extractDetail(DioException err) {

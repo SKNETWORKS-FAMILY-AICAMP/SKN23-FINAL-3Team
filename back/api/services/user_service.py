@@ -25,6 +25,7 @@ from __future__ import annotations
 from models.user import User
 from models.pet import Pet
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from core.utils import kst_now
 from models.image import Image
 from models.keyword import Keyword
@@ -163,9 +164,11 @@ async def get_user(user_id: int, db: AsyncSession) -> User:
                 HTTPException 404: 존재하지 않거나 탈퇴한 사용자
     """
     result = await db.execute(
-        select(User).where(
-            User.id == user_id,
-            User.deleted_at.is_(None),
+        select(User)
+        .where(User.id == user_id, User.deleted_at.is_(None))
+        .options(
+            selectinload(User.profile),
+            selectinload(User.primary_pet).selectinload(Pet.image),
         )
     )
     user = result.scalar_one_or_none()
@@ -260,9 +263,9 @@ async def update_user(
 
     # updated_at은 onupdate=kst_now 로 자동 반영
     await db.flush()
-    await db.refresh(user)
 
-    return user
+    # selectinload 로 profile / primary_pet.image 를 확실하게 로드
+    return await get_user(user_id, db)
 
 
 async def delete_user(

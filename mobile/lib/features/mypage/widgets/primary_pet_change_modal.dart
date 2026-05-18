@@ -43,10 +43,7 @@ class _PrimaryPetChangeModalState extends ConsumerState<PrimaryPetChangeModal> {
     setState(() => _saving = true);
     try {
       final userApi = ref.read(userApiProvider);
-      await userApi.update(
-        widget.user.id,
-        UserUpdate(primaryPetId: id),
-      );
+      await userApi.update(widget.user.id, UserUpdate(primaryPetId: id));
       // nested primary_pet 갱신 — userApi.update 응답엔 일관 안 되므로 me 재조회
       await ref.read(authProvider.notifier).refreshUser();
       if (!mounted) return;
@@ -117,8 +114,7 @@ class _PrimaryPetChangeModalState extends ConsumerState<PrimaryPetChangeModal> {
                     ),
                   );
                 },
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -189,10 +185,7 @@ class _PetRadioTile extends StatelessWidget {
       subtitle: Text(
         '${pet.age != null ? '${pet.age}세' : ''}'
         '${pet.gender != null ? ' · ${pet.gender!.label}' : ''}',
-        style: const TextStyle(
-          fontSize: 12,
-          color: AppColors.mutedForeground,
-        ),
+        style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
       ),
     );
   }

@@ -1,11 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { Send, LogIn, Lock } from 'lucide-react'
+import { Send, LogIn, Lock, X, Phone, Navigation, ImageIcon } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
 import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
-import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
+import { generateDiaryImage, photoStyle, type GeneratedDiary } from '../services/diaryService'
 import { createChatRoom, sendMessageWithResponse, getPlaceByName, type FacilityCard } from '../services/chatService'
 import type { PlaceResult } from '../services/placeService'
 
@@ -253,10 +253,13 @@ export default function ChatBot({
   const { step, messages, isGenerating, generatedDiary } = state
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
   // welcome 단계 sendMessageWithResponse (KoELECTRA + GPT) 응답 대기 동안 input·send 차단 — race·중복 응답 방지
   const [isResponding, setIsResponding] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
   const storedPetId = Number(localStorage.getItem('selected_pet_id'))
   const selectedPetId = pet.id ?? (Number.isFinite(storedPetId) && storedPetId > 0 ? storedPetId : undefined)
 
@@ -382,6 +385,42 @@ export default function ChatBot({
     onNavigateToDiary?.()
   }
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // 이전 preview URL 해제 후 새로 생성
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+    setPhotoPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handlePhotoCancelPreview = () => {
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+    setPhotoPreviewUrl(null)
+    if (photoInputRef.current) photoInputRef.current.value = ''
+  }
+
+  const handlePhotoUpload = async () => {
+    const file = photoInputRef.current?.files?.[0]
+    if (!file) return
+
+    handlePhotoCancelPreview()           // preview 닫기
+    setPhotoUploading(true)
+    actions.addPhotoBotMsg('사진을 분석하고 그림체로 변환 중이에요... 🎨\n잠깐만 기다려주세요!')
+
+    try {
+      const result = await photoStyle(file, welcomeChatRoomId ?? undefined, selectedPetId)
+      if (result.type === 'bot_text') {
+        actions.addPhotoBotMsg(result.content)
+      } else {
+        actions.addPhotoBotMsg(result.content, result.imageUrl)
+      }
+    } catch {
+      actions.addPhotoBotMsg('사진 변환 중 오류가 발생했어요. 다시 시도해주세요.')
+    } finally {
+      setPhotoUploading(false)
+    }
+  }
+
   return (
     <div className="relative flex h-full flex-col rounded-[20px] overflow-hidden bg-[#FFF8F3]">
       {/* 메시지 목록 */}
@@ -420,6 +459,13 @@ export default function ChatBot({
                           } : undefined)
                         : renderBotText(displayText))
                   : displayText}
+                {msg.imageUrl && (
+                  <img
+                    src={msg.imageUrl}
+                    alt="그림일기 변환 이미지"
+                    className="mt-2 w-full rounded-xl object-cover"
+                  />
+                )}
               </div>
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
               {inlineButtons.length > 0 && (
@@ -472,7 +518,7 @@ export default function ChatBot({
         )}
 
         {/* 웰컴 버튼: 말풍선 바로 아래 인라인 */}
-        {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && (
+        {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && !photoUploading && !messages.some(m => m.imageUrl) && (
           <div className="flex flex-wrap gap-2 pt-1 pl-10">
             <button
               onClick={handleStartDiary}
@@ -597,9 +643,55 @@ export default function ChatBot({
             </div>
           )}
 
+          {/* 사진 미리보기 + 전송 */}
+          {step === 'welcome' && photoPreviewUrl && (
+            <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+              <div className="relative shrink-0">
+                <img
+                  src={photoPreviewUrl}
+                  alt="선택한 사진"
+                  className="h-14 w-14 rounded-xl object-cover border border-[#F5D6C8]"
+                />
+                <button
+                  onClick={handlePhotoCancelPreview}
+                  className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#8B6355] text-white text-[10px] leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="flex-1 text-xs text-[#8B6355]">반려동물이나 보호자가 담긴 사진을 그림으로 바꿔드려요!</p>
+              <button
+                onClick={handlePhotoUpload}
+                disabled={photoUploading}
+                className="shrink-0 rounded-xl bg-[#F4845F] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                {photoUploading ? '변환 중...' : '변환하기'}
+              </button>
+            </div>
+          )}
+
           {/* 텍스트 입력창 — 응답 진행 중 (welcome 의 KoELECTRA+GPT 또는 다이어리 generating) 입력 차단 */}
           {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
             <div className="flex items-center gap-2 p-3">
+              {step === 'welcome' && (
+                <>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={photoUploading}
+                    title="강아지+보호자 사진을 그림체로 변환"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#F5D6C8] bg-white text-[#C4A99A] transition hover:border-[#F4845F] hover:text-[#F4845F] disabled:opacity-40"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </button>
+                </>
+              )}
               <input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
@@ -617,7 +709,7 @@ export default function ChatBot({
               <button
                 onClick={handleSubmitText}
                 disabled={!inputValue.trim() || isResponding || isGenerating}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F4845F] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Send className="h-4 w-4" />
               </button>

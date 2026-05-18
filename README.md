@@ -61,7 +61,29 @@
 
   <br />
 
-  ---
+  <tr>
+    <td style="padding:14px; line-height:1.6;">
+      서비스 기획<br/>
+      화면 설계 및 구현<br/>
+      프론트엔드 개발 (UX/UI/API 연동)<br/>
+      챗봇 AI 그림일기 플로우 설계<br/>
+      AI 그림일기 생성 파이프라인 및 프롬프트 최적화<br/>
+      S3 이미지 저장 연동<br/>
+      발표 자료 제작 및 발표<br/>
+    </td>
+    <td style="padding:14px; line-height:1.6;">
+    계정 및 리소스 결제 관리<br/>
+    서버 구축 및 관리<br/>
+    RDB 설계 및 관리<br/>
+    FastAPI 구축 및 백엔드 개발<br/>
+    LLM (의도분류) · ML (의도분류)
+    </td>
+    <td style="padding:14px; line-height:1.6;">
+      데이터 수집 · 정제<br/>
+      벡터DB<br/>
+      LLM 개발 (RAG, 장소 추천)
+    </td>
+  </tr>
 
   <br />
 

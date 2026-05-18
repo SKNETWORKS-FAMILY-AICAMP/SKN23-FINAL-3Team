@@ -72,10 +72,7 @@ class DiaryType {
   static const all = [dog, owner, memory, daily];
 
   static DiaryType byId(String id) {
-    return all.firstWhere(
-      (t) => t.id == id,
-      orElse: () => daily,
-    );
+    return all.firstWhere((t) => t.id == id, orElse: () => daily);
   }
 }
 

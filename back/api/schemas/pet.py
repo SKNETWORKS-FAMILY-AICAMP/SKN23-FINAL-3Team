@@ -21,6 +21,12 @@ from core.type.gender import PetGenderEnum
 from utils.validation import clean_text, validate_pet_birth
 
 
+class _Image(BaseModel):
+    """이미지 URL 로딩용 내부 스키마."""
+    model_config = ConfigDict(from_attributes=True)
+    file_url: str
+
+
 class PetCreate(BaseModel):
     """반려견 등록 요청."""
 
@@ -69,6 +75,20 @@ class PetUpdate(BaseModel):
         return validate_pet_birth(v)
 
 
+class _Breed(BaseModel):
+    """견종 이름 로딩용 내부 스키마."""
+    model_config = ConfigDict(from_attributes=True)
+    name_ko: str
+
+
+class _PetProfile(BaseModel):
+    """프로필 분석 결과 내부 스키마."""
+    model_config = ConfigDict(from_attributes=True)
+    profile_json: dict
+    analyzed_at: datetime
+    image_id: int | None = None
+
+
 class PetResponse(BaseModel):
     """반려견 응답 스키마."""
 
@@ -87,14 +107,44 @@ class PetResponse(BaseModel):
         description="성향 타입 한글 표시명 (keywords.name). Pet ORM property 매핑.",
     )
     selected_tags: list[Any] | None = Field(None, description="성격 태그 목록")
-    image_url: str | None = Field(
-        None,
-        description="프로필 이미지 URL (S3 공개 URL). Pet ORM property 매핑.",
-    )
     created_at: datetime = Field(..., description="등록 일시")
     updated_at: datetime = Field(..., description="수정 일시")
+
+    # selectin 로드된 관계 — 직렬화에서 제외, computed_field 내부 참조용
+    breed: _Breed | None = Field(default=None, exclude=True)
+    image: _Image | None = Field(default=None, exclude=True)
+    profile: _PetProfile | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def breed_name(self) -> str | None:
+        """견종 한국어 이름."""
+        return self.breed.name_ko if self.breed else None
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        return self.image.file_url if self.image else None
 
     @computed_field
     @property
     def age(self) -> int | None:
         return calculate_age(self.birth_date)
+
+    @computed_field
+    @property
+    def english_prompt(self) -> str | None:
+        """AI 프로필 분석에서 추출한 영문 외형 프롬프트."""
+        if self.profile and self.profile.profile_json:
+            cs = self.profile.profile_json.get("character_sheet", {})
+            return cs.get("english_prompt")
+        return None
+
+    @computed_field
+    @property
+    def must_include_keywords(self) -> list[str] | None:
+        """AI 프로필 분석에서 추출한 필수 키워드."""
+        if self.profile and self.profile.profile_json:
+            cs = self.profile.profile_json.get("character_sheet", {})
+            return cs.get("must_include_keywords")
+        return None

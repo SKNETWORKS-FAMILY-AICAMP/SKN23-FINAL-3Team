@@ -65,12 +65,14 @@ class Diary {
       content: json['content'] as String?,
       summary: json['summary'] as String?,
       emotion: json['emotion'] as String?,
-      diaryDate:
-          diaryDateStr != null ? DateTime.parse(diaryDateStr) : fallbackDate,
+      diaryDate: diaryDateStr != null
+          ? DateTime.parse(diaryDateStr)
+          : fallbackDate,
       isFavorite: json['is_favorite'] as bool? ?? false,
       createdAt: fallbackDate,
-      updatedAt:
-          updatedAtStr != null ? DateTime.parse(updatedAtStr) : fallbackDate,
+      updatedAt: updatedAtStr != null
+          ? DateTime.parse(updatedAtStr)
+          : fallbackDate,
     );
   }
 }
@@ -108,20 +110,20 @@ class DiaryCreate {
   final DateTime? diaryDate;
 
   Map<String, dynamic> toJson() => {
-        'pet_id': petId,
-        if (whenText != null) 'when_text': whenText,
-        if (whereText != null) 'where_text': whereText,
-        if (whoText != null) 'who_text': whoText,
-        if (whatText != null) 'what_text': whatText,
-        if (howText != null) 'how_text': howText,
-        if (whyText != null) 'why_text': whyText,
-        if (title != null) 'title': title,
-        if (content != null) 'content': content,
-        if (summary != null) 'summary': summary,
-        if (emotion != null) 'emotion': emotion,
-        if (imageId != null) 'image_id': imageId,
-        if (diaryDate != null) 'diary_date': _formatDate(diaryDate!),
-      };
+    'pet_id': petId,
+    if (whenText != null) 'when_text': whenText,
+    if (whereText != null) 'where_text': whereText,
+    if (whoText != null) 'who_text': whoText,
+    if (whatText != null) 'what_text': whatText,
+    if (howText != null) 'how_text': howText,
+    if (whyText != null) 'why_text': whyText,
+    if (title != null) 'title': title,
+    if (content != null) 'content': content,
+    if (summary != null) 'summary': summary,
+    if (emotion != null) 'emotion': emotion,
+    if (imageId != null) 'image_id': imageId,
+    if (diaryDate != null) 'diary_date': _formatDate(diaryDate!),
+  };
 }
 
 /// `PATCH /api/diaries/{id}` 페이로드 (`DiaryUpdate`).
@@ -143,13 +145,13 @@ class DiaryUpdate {
   final DateTime? diaryDate;
 
   Map<String, dynamic> toJson() => {
-        if (title != null) 'title': title,
-        if (content != null) 'content': content,
-        if (summary != null) 'summary': summary,
-        if (emotion != null) 'emotion': emotion,
-        if (imageId != null) 'image_id': imageId,
-        if (diaryDate != null) 'diary_date': _formatDate(diaryDate!),
-      };
+    if (title != null) 'title': title,
+    if (content != null) 'content': content,
+    if (summary != null) 'summary': summary,
+    if (emotion != null) 'emotion': emotion,
+    if (imageId != null) 'image_id': imageId,
+    if (diaryDate != null) 'diary_date': _formatDate(diaryDate!),
+  };
 }
 
 /// `GET /api/diaries/calendar?year=&month=` 응답 (`FavoriteCalendarResponse`).
@@ -165,7 +167,8 @@ class FavoriteCalendar {
   final List<FavoriteCalendarItem> items;
 
   factory FavoriteCalendar.fromJson(Map<String, dynamic> json) {
-    final items = (json['items'] as List<dynamic>?)
+    final items =
+        (json['items'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>()
             .map(FavoriteCalendarItem.fromJson)
             .toList() ??

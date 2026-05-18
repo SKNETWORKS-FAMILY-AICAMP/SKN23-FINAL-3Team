@@ -41,4 +41,9 @@ class AuthApi {
     final response = await _client.get<Map<String, dynamic>>('/users/me');
     return User.fromJson(response);
   }
+
+  /// `DELETE /api/users/{userId}` — 회원 탈퇴 (Soft Delete)
+  Future<void> deleteAccount(int userId) async {
+    await _client.raw.delete('/users/$userId');
+  }
 }

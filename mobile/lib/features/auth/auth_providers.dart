@@ -119,6 +119,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthUnauthenticated();
   }
 
+  /// 회원 탈퇴 — `DELETE /api/users/{id}` + 로컬 토큰 삭제.
+  Future<void> withdraw() async {
+    final current = state;
+    if (current is! AuthAuthenticated) return;
+    await _ref.read(authApiProvider).deleteAccount(current.user.id);
+    await _ref.read(secureStorageProvider).clearAccessToken();
+    state = const AuthUnauthenticated();
+  }
+
   /// dio 401 인터셉터에서 호출.
   void onUnauthorized() {
     state = const AuthUnauthenticated(message: '세션이 만료되었습니다.');

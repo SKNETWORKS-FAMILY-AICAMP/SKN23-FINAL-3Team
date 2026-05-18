@@ -13,6 +13,7 @@ export interface Message {
   content: string
   action?: 'start_diary'
   variant?: 'place' | 'facility'
+  imageUrl?: string
   places?: Array<{
     name: string
     address: string
@@ -72,6 +73,7 @@ export type ChatbotAction =
   | { type: 'RESET' }
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
   | { type: 'TRIGGER_DIARY_FLOW' }
+  | { type: 'ADD_PHOTO_BOT_MSG'; content: string; imageUrl?: string }
   | {
     type: 'RECEIVE_BOT_MESSAGE'
     text: string
@@ -294,6 +296,16 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       }
     }
 
+    case 'ADD_PHOTO_BOT_MSG': {
+      const msg: Message = { id: nextId(), role: 'bot', content: action.content }
+      if (action.imageUrl) msg.imageUrl = action.imageUrl
+      return {
+        ...state,
+        isGenerating: false,
+        messages: [...state.messages, msg],
+      }
+    }
+
     case 'TRIGGER_DIARY_FLOW': {
       return {
         ...state,
@@ -476,6 +488,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
     regenerate: useCallback(() => dispatch({ type: 'REGENERATE' }), []),
     reset: useCallback(() => dispatch({ type: 'RESET' }), []),
     submitWelcomeChat: useCallback((text: string) => dispatch({ type: 'SUBMIT_WELCOME_CHAT', text }), []),
+    addPhotoBotMsg: useCallback((content: string, imageUrl?: string) => dispatch({ type: 'ADD_PHOTO_BOT_MSG', content, imageUrl }), []),
     receiveBotMessage: useCallback(
       (
         text: string,

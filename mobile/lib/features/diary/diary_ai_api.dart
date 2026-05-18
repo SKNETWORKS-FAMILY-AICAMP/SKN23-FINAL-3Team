@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../../core/api/api_client.dart';
 
@@ -16,6 +17,8 @@ class DiaryGenerateRequest {
     this.additionalAnswers = const [],
     required this.diaryType,
     required this.emotionEmoji,
+    this.englishPrompt,
+    this.mustIncludeKeywords = const [],
   });
 
   final String petId;
@@ -29,20 +32,25 @@ class DiaryGenerateRequest {
   final List<String> additionalAnswers;
   final String diaryType;
   final String emotionEmoji;
+  final String? englishPrompt;
+  final List<String> mustIncludeKeywords;
 
   Map<String, dynamic> toJson() => {
-        'pet_id': petId,
-        'pet_name': petName,
-        'breed': breed,
-        if (breedEn != null) 'breed_en': breedEn,
-        if (birthDate != null) 'birth_date': birthDate,
-        'personalities': personalities,
-        'owner_name': ownerName,
-        'main_answers': mainAnswers,
-        'additional_answers': additionalAnswers,
-        'diary_type': diaryType,
-        'emotion_emoji': emotionEmoji,
-      };
+    'pet_id': petId,
+    'pet_name': petName,
+    'breed': breed,
+    if (breedEn != null) 'breed_en': breedEn,
+    if (birthDate != null) 'birth_date': birthDate,
+    'personalities': personalities,
+    'owner_name': ownerName,
+    'main_answers': mainAnswers,
+    'additional_answers': additionalAnswers,
+    'diary_type': diaryType,
+    'emotion_emoji': emotionEmoji,
+    if (englishPrompt != null) 'english_prompt': englishPrompt,
+    if (mustIncludeKeywords.isNotEmpty)
+      'must_include_keywords': mustIncludeKeywords,
+  };
 }
 
 /// `POST /api/diary/generate` 응답.
@@ -108,5 +116,62 @@ class DiaryAiApi {
       options: Options(receiveTimeout: const Duration(seconds: 180)),
     );
     return response.data!['image_base64'] as String;
+  }
+
+  /// `POST /api/diary/photo-style` — 사진 → 일러스트 변환.
+  ///
+  /// GPT-4o Vision 분석 + DALL-E 일러스트 생성 + S3 업로드.
+  /// 응답: `{ type, content, image_url? }`.
+  Future<PhotoStyleResponse> photoStyle({
+    required String filePath,
+    int? chatRoomId,
+    int? dogId,
+  }) async {
+    final fileName = filePath.split('/').last.split('\\').last;
+    final ext = fileName.split('.').last.toLowerCase();
+    final mimeType = switch (ext) {
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: fileName,
+        contentType: MediaType.parse(mimeType),
+      ),
+      if (chatRoomId != null) 'chat_room_id': chatRoomId,
+      if (dogId != null) 'dog_id': dogId,
+    });
+
+    final response = await _client.raw.post<Map<String, dynamic>>(
+      '/diary/photo-style',
+      data: formData,
+      options: Options(receiveTimeout: const Duration(seconds: 180)),
+    );
+    return PhotoStyleResponse.fromJson(response.data!);
+  }
+}
+
+/// `POST /api/diary/photo-style` 응답.
+class PhotoStyleResponse {
+  const PhotoStyleResponse({
+    required this.type,
+    required this.content,
+    this.imageUrl,
+  });
+
+  final String type; // 'image_diary' | 'bot_text'
+  final String content;
+  final String? imageUrl;
+
+  factory PhotoStyleResponse.fromJson(Map<String, dynamic> json) {
+    return PhotoStyleResponse(
+      type: json['type'] as String? ?? 'bot_text',
+      content: json['content'] as String? ?? '',
+      imageUrl: json['image_url'] as String?,
+    );
   }
 }

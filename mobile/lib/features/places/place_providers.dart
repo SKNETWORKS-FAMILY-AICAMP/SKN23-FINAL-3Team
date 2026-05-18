@@ -1,12 +1,17 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/directions/directions_api.dart';
 import '../../shared/models/place.dart';
 import '../auth/auth_providers.dart';
 import 'place_api.dart';
 
 final placeApiProvider = Provider<PlaceApi>((ref) {
   return PlaceApi(ref.watch(apiClientProvider));
+});
+
+final directionsApiProvider = Provider<DirectionsApi>((ref) {
+  return DirectionsApi(ref.watch(apiClientProvider));
 });
 
 /// 즐겨찾기 content_id 집합 — 옵티미스틱 UI 의 권위 source.
@@ -51,8 +56,8 @@ class FavoriteContentIdsNotifier extends StateNotifier<Set<String>> {
 
 final favoriteContentIdsProvider =
     StateNotifierProvider<FavoriteContentIdsNotifier, Set<String>>((ref) {
-  return FavoriteContentIdsNotifier(ref);
-});
+      return FavoriteContentIdsNotifier(ref);
+    });
 
 /// MyPage 즐겨찾기 장소 그리드용 — 풀 페이로드 (`PlaceFavoriteItem` 리스트).
 /// `favoriteContentIdsProvider` 와 별개 — 후자는 ❤️ 토글 시 빠른 set lookup 용.
@@ -61,12 +66,12 @@ final favoriteContentIdsProvider =
 /// 시 빈 리스트로 폴백 (UI 그레이스풀 표시). 백엔드 재배포 후 자연 동작.
 final favoritePlacesProvider =
     FutureProvider.autoDispose<List<PlaceFavoriteItem>>((ref) async {
-  final auth = ref.watch(authProvider);
-  if (auth is! AuthAuthenticated) return const [];
-  try {
-    return await ref.read(placeApiProvider).listFavorites();
-  } on DioException catch (e) {
-    if (e.response?.statusCode == 404) return const [];
-    rethrow;
-  }
-});
+      final auth = ref.watch(authProvider);
+      if (auth is! AuthAuthenticated) return const [];
+      try {
+        return await ref.read(placeApiProvider).listFavorites();
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) return const [];
+        rethrow;
+      }
+    });

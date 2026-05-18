@@ -55,11 +55,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final url = OAuthUrlBuilder.authUrl(provider, state: state);
     final result = await Navigator.of(context).push<OAuthResult>(
       MaterialPageRoute(
-        builder: (_) => OAuthWebViewScreen(
-          provider: provider,
-          authUrl: url,
-          state: state,
-        ),
+        builder: (_) =>
+            OAuthWebViewScreen(provider: provider, authUrl: url, state: state),
         fullscreenDialog: true,
       ),
     );
@@ -69,7 +66,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return null;
     }
     final success = result as OAuthSuccess;
-    return ref.read(authProvider.notifier).completeLogin(
+    return ref
+        .read(authProvider.notifier)
+        .completeLogin(
           provider: provider,
           code: success.code,
           state: success.state,
@@ -81,7 +80,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<dynamic> _signInWithAppAuth(OAuthProvider provider) async {
     final result = await GoogleAppAuthHelper.authorize();
     if (!mounted) return null;
-    return ref.read(authProvider.notifier).completeLogin(
+    return ref
+        .read(authProvider.notifier)
+        .completeLogin(
           provider: provider,
           code: result.code,
           codeVerifier: result.codeVerifier,
@@ -170,7 +171,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
                     TextButton(
-                      onPressed: _busy ? null : () => context.go(AppRoutes.home),
+                      onPressed: _busy
+                          ? null
+                          : () => context.go(AppRoutes.home),
                       child: const Text(
                         '홈으로 돌아가기',
                         style: TextStyle(color: AppColors.subBrown2),
@@ -200,18 +203,11 @@ class _LogoHeader extends StatelessWidget {
         // "withDOG" 임시 텍스트 모두 제거 → logo.png 직접 표시.
         // SVG 사용 시 fill 미명시로 검정 fallback (R1 회귀 #1, 2026-05-04 밤4) →
         // PNG 로 전환. front/ 의 SVG 는 React currentColor 흐름이라 그대로 유지.
-        Image.asset(
-          'assets/logo.png',
-          height: 144,
-          semanticLabel: '위드독',
-        ),
+        Image.asset('assets/logo.png', height: 144, semanticLabel: '위드독'),
         const SizedBox(height: 16),
         Text(
           busy ? '로그인 중...' : '로그인',
-          style: const TextStyle(
-            fontSize: 18,
-            color: AppColors.darkBrown,
-          ),
+          style: const TextStyle(fontSize: 18, color: AppColors.darkBrown),
         ),
       ],
     );

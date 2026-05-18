@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.3
+  sdk: ">=3.11.1 <4.0.0"
 
 dependencies:
   flutter:
@@ -46,8 +46,23 @@ dependencies:
   # Toast
   fluttertoast: ^8.2.10
 
+  # 외부 URL 열기 (길찾기 — 카카오맵/네이버지도 앱 딥링크)
+  url_launcher: ^6.3.1
+
   # 다이어리 손글씨 폰트 (Gaegu) — React tailwind.css `.font-diary` 정합성
   google_fonts: ^6.2.1
+  video_player: ^2.11.1
+  intl: ^0.20.2
+
+  # 앱 버전 정보
+  package_info_plus: ^8.2.1
+
+  # 앱 소개 온보딩 페이지 인디케이터
+  smooth_page_indicator: ^1.2.0+3
+
+  # 문의 전송 (Web3Forms)
+  http: ^1.2.0
+
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +85,8 @@ flutter:
     - assets/
     - assets/kakao_map.html
     - assets/icon/
+    - assets/videos/
+    - assets/onboarding/
 
   # 한국어 폰트 (Pretendard) — 자산 추가 시 활성화
   # fonts:

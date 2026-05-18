@@ -34,6 +34,13 @@ class _OAuthWebViewScreenState extends State<OAuthWebViewScreen> {
   bool _loading = true;
 
   @override
+  void initState() {
+    super.initState();
+    // 이전 OAuth 세션 쿠키 제거 — 실패 후 재시도 시 오래된 세션으로 인한 오류 방지
+    CookieManager.instance().deleteAllCookies();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -53,14 +60,22 @@ class _OAuthWebViewScreenState extends State<OAuthWebViewScreen> {
               clearCache: true,
             ),
             shouldOverrideUrlLoading: (controller, action) async {
-              final url = action.request.url?.toString();
+              final uri = action.request.url;
+              final url = uri?.toString();
               if (url == null) return NavigationActionPolicy.ALLOW;
+              // http/https 가 아닌 딥링크 (naverapp://, intent://, kakaokompassauth:// 등)
+              // → WebView 에서 열 수 없으므로 조용히 취소 (실패 처리 없이)
+              final scheme = uri!.scheme.toLowerCase();
+              if (scheme != 'http' && scheme != 'https') {
+                return NavigationActionPolicy.CANCEL;
+              }
               return _interceptCallback(url);
             },
             onLoadStart: (_, _) => setState(() => _loading = true),
             onLoadStop: (_, _) => setState(() => _loading = false),
             onReceivedError: (controller, request, error) {
-              // OAuth 페이지 로드 자체 실패 — 사용자 안내 후 닫기
+              // 서브리소스(이미지·폰트 등) 오류나 딥링크 취소로 인한 오류는 무시
+              if (request.isForMainFrame != true) return;
               if (!mounted || _consumed) return;
               _consumed = true;
               Navigator.of(context).pop(
@@ -101,13 +116,8 @@ class _OAuthWebViewScreenState extends State<OAuthWebViewScreen> {
       return NavigationActionPolicy.CANCEL;
     }
     // 네이버는 state 검증 — 나간 state 와 다르면 실패
-    if (widget.provider == OAuthProvider.naver &&
-        state != widget.state) {
-      _popWith(
-        OAuthResult.failure(
-          message: 'state 검증 실패 — CSRF 의심',
-        ),
-      );
+    if (widget.provider == OAuthProvider.naver && state != widget.state) {
+      _popWith(OAuthResult.failure(message: 'state 검증 실패 — CSRF 의심'));
       return NavigationActionPolicy.CANCEL;
     }
     _popWith(OAuthResult.success(code: code, state: state));

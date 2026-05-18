@@ -15,11 +15,7 @@ import '../place_providers.dart';
 /// placeholder. `/by-name` 응답의 FacilityCard 스키마는 image 필드가 없어
 /// 이미지를 별도 source 로 받는 구조 (Bug #3, 2026-05-04 저녁).
 class FacilityModalSheet extends ConsumerWidget {
-  const FacilityModalSheet({
-    super.key,
-    required this.name,
-    this.imageUrl,
-  });
+  const FacilityModalSheet({super.key, required this.name, this.imageUrl});
 
   final String name;
   final String? imageUrl;
@@ -90,10 +86,7 @@ class _Body extends StatelessWidget {
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(LucideIcons.x),
-                onPressed: onClose,
-              ),
+              IconButton(icon: const Icon(LucideIcons.x), onPressed: onClose),
             ],
           ),
         ),

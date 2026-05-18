@@ -24,7 +24,15 @@ class MapFocusNotifier extends StateNotifier<PlaceCard?> {
   }
 }
 
-final mapFocusProvider =
-    StateNotifierProvider<MapFocusNotifier, PlaceCard?>((ref) {
+final mapFocusProvider = StateNotifierProvider<MapFocusNotifier, PlaceCard?>((
+  ref,
+) {
   return MapFocusNotifier();
 });
+
+/// 외부(홈·마이페이지)에서 "지도 탭을 즐겨찾기 목록 상태로 열어달라" 요청.
+///
+/// 흐름:
+/// 1. 홈/마이페이지 [더보기] / [즐겨찾기 장소] 헤더 → state = true + 탭 인덱스 = 2
+/// 2. MapTab build 의 ref.listen 이 감지 → 즉시 false 로 소비 + favorites 뷰로 리셋
+final mapShowFavoritesProvider = StateProvider<bool>((_) => false);
