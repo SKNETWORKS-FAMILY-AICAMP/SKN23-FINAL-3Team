@@ -15,6 +15,7 @@ import {
   BookOpen,
   Images,
   Star,
+  HelpCircle,
 } from "lucide-react";
 import { getMe } from "../services/userService";
 import { getPets } from "../services/petService";
@@ -71,13 +72,14 @@ export function Navbar() {
   }, [location.pathname]);
 
   // 사용자 프로필 사진 + 활성 반려견 ID 동기화
-  // - 우측 아바타 = users.profile_image_url 단일 출처 (가을쥐 결정 2026-05-07)
+  // - 우측 아바타 = 대표 반려견 사진 우선, 없으면 유저 프로필 사진
   // - selected_pet_id 동기화는 별개 책임 (챗봇·일기 활성 pet 컨텍스트)
   const loadProfilePhoto = async () => {
     if (!isLoggedIn) return;
     try {
       const me = await getMe();
-      setProfilePhoto(me.profile_image_url);
+      // 대표 반려견 사진 우선 → 없으면 유저 프로필 사진
+      setProfilePhoto(me.primary_pet?.image_url ?? me.profile_image_url);
 
       const pets = await getPets(me.id);
       const pet = pets[0] ?? null;
@@ -188,6 +190,7 @@ export function Navbar() {
                     className="relative"
                     onMouseEnter={() => item.subItems && setHoveredMenu(item.label)}
                     onMouseLeave={() => setHoveredMenu(null)}
+                    {...(item.label === '다이어리' ? { 'data-tour': 'diary-menu' } : {})}
                   >
                     <button
                       onClick={() => handleNavClick(item)}
@@ -285,6 +288,13 @@ export function Navbar() {
                         >
                           <span className="text-base leading-none">🐾</span>
                           구독 패스
+                        </button>
+                        <button
+                          onClick={() => { setProfileOpen(false); window.dispatchEvent(new Event('show-onboarding-tour')); }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                        >
+                          <HelpCircle className="w-4 h-4" />
+                          튜토리얼 다시 보기
                         </button>
                         <button
                           onClick={() => { setProfileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
@@ -416,6 +426,13 @@ export function Navbar() {
                 >
                   <span className="text-base leading-none">🐾</span>
                   구독 패스
+                </button>
+                <button
+                  onClick={() => { setMobileOpen(false); window.dispatchEvent(new Event('show-onboarding-tour')); }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  튜토리얼 다시 보기
                 </button>
                 <button
                   onClick={() => { setMobileOpen(false); alert('알림 설정은 준비 중이에요!'); }}

@@ -521,12 +521,14 @@ export default function ChatBot({
         {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && !photoUploading && !messages.some(m => m.imageUrl) && (
           <div className="flex flex-wrap gap-2 pt-1 pl-10">
             <button
+              data-tour="diary-button"
               onClick={handleStartDiary}
               className="rounded-full border border-[#F4845F] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#F4845F] transition hover:bg-[#FFF7F3]"
             >
               그림일기
             </button>
             <button
+              data-tour="place-button"
               onClick={() => {
                 actions.submitWelcomeChat('반려견과 함께 가기 좋은 장소를 추천해줘')
                 sendWelcomeMessage('반려견과 함께 가기 좋은 장소를 추천해줘')
@@ -683,6 +685,7 @@ export default function ChatBot({
                     onChange={handlePhotoSelect}
                   />
                   <button
+                    data-tour="photo-upload"
                     onClick={() => photoInputRef.current?.click()}
                     disabled={photoUploading}
                     title="강아지+보호자 사진을 그림체로 변환"
