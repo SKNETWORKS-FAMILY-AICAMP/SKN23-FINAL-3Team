@@ -39,7 +39,7 @@ _PROFANITY_LABELS: set[str] = {
     "지역", "종교", "기타 혐오", "악플/욕설",
 }
 _MODEL_NAME = "smilegate-ai/kor_unsmile"
-_THRESHOLD = 0.5
+_THRESHOLD = 0.75
 
 # 일상 비속어 사전 — kor_unsmile 모델이 혐오·차별 라벨 위주라 일상 비속어
 # (예: "바보") 를 false negative 로 놓치는 한계 보완. 부분 문자열 매칭이라
