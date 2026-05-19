@@ -1,0 +1,21 @@
+# 학습된 인공지능 모델
+
+## 기본 정보
+
+| 항목 | 내용 |
+| --- | --- |
+| 프로젝트 | withDOG |
+| 팀 | 케르베로스 / SKN23-FINAL-3TEAM |
+| 산출물 구분 | LLM활용 소프트웨어 |
+| 제출 방식 | Google Drive 링크 제출 |
+| 원본 파일 | Git 저장소에 직접 포함하지 않음 |
+
+## 산출물 링크
+
+- [학습된 인공지능 모델 - Google Drive](https://drive.google.com/file/d/1USk3TKKFL2tRpH6t3_sti5YGwj1UPlY-/view?usp=sharing)
+
+## Git 저장소 포함 정책
+
+모델 원본 파일은 대용량 바이너리 파일이므로 Git 저장소에는 직접 포함하지 않는다.
+
+대신 산출물 Google Drive에 업로드된 파일을 공식 제출본으로 사용하고, Git 저장소에는 본 문서로 접근 링크와 제출 정보를 남긴다.
