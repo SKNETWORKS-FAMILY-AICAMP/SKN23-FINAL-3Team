@@ -574,3 +574,10 @@ ai/eval_data/
 data/eval/*.xlsx
 
 # ========== 개인 ==============
+.claude/
+outputs/
+tools/
+CLAUDE.md
+GEMINI.md
+AGENTS.md
+SKN23-FINAL-3TEAM.code-workspace
