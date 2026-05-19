@@ -6,9 +6,9 @@
 
   <table align="center">
     <tr>
-      <td align="center" width="220">이승연</td>
-      <td align="center" width="220">정유선</td>
-      <td align="center" width="220">송민채</td>
+      <td align="center">이승연</td>
+      <td align="center">정유선</td>
+      <td align="center">송민채</td>
     </tr>
     <tr>
       <th align="center">APM</th>
