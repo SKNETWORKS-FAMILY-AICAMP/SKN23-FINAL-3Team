@@ -80,5 +80,8 @@ matplotlib
 # openai, pillow, python-dotenv 는 위에서 이미 선언
 openpyxl
 pytest
+opencv-python>=4.8      # CV 평가기 (이미지 품질 메트릭)
+open-clip-torch>=2.24   # CLIP zero-shot (dog_visible, pastel, prompt_reflected 등)
+easyocr>=1.7            # OCR 텍스트 검출 (no_text 평가)
 
 pandas              # 간접 의존 (chromadb 등) — 명시적 고정

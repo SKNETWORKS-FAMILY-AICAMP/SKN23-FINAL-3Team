@@ -120,7 +120,7 @@ class DiaryAiApi {
 
   /// `POST /api/diary/photo-style` — 사진 → 일러스트 변환.
   ///
-  /// GPT-4o Vision 분석 + DALL-E 일러스트 생성 + S3 업로드.
+  /// GPT-4o Vision 분석 + gpt-image-1 일러스트 생성 + S3 업로드.
   /// 응답: `{ type, content, image_url? }`.
   Future<PhotoStyleResponse> photoStyle({
     required String filePath,

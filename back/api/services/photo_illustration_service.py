@@ -6,7 +6,7 @@ services/photo_illustration_service.py
 
 주요:
     - PhotoValidationResult : 검증 결과 dataclass (photo_validation_service 와 공유)
-    - build_photo_illustration_prompt() : DALL-E 프롬프트 빌더
+    - build_photo_illustration_prompt() : 이미지 생성 프롬프트 빌더 (gpt-image-1)
 
 지원 케이스:
     - 강아지만 (dog_count >= 1, has_person=False)
@@ -35,7 +35,7 @@ class PhotoValidationResult:
     person_visual_description: str = ""
 
 
-# ── DALL-E 프롬프트 빌더 ──────────────────────────────────────────────────────
+# ── 이미지 생성 프롬프트 빌더 (gpt-image-1) ───────────────────────────────────
 
 def build_photo_illustration_prompt(
     dog_count: int,
@@ -47,7 +47,7 @@ def build_photo_illustration_prompt(
     person_visual_descriptions: list | None = None,
 ) -> str:
     """
-    사진 분석 결과를 바탕으로 DALL-E 이미지 생성 프롬프트를 빌드합니다.
+    사진 분석 결과를 바탕으로 gpt-image-1 이미지 생성 프롬프트를 빌드합니다.
 
     Args:
         dog_count: 감지된 강아지 수 (0이면 강아지 없음)
