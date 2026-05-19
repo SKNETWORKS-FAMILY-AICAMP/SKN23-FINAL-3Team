@@ -22,26 +22,6 @@
     </tr>
     <tr>
       <td style="text-align:center;">
-        서비스 기획 · 화면 설계<br/>
-        프론트엔드(UX/UI)<br/>
-        LLM 개발 (그림일기)<br/>
-        발표
-      </td>
-      <td style="text-align:center;">
-      계정 및 리소스 결제 관리<br/>
-      서버 구축 및 관리<br/>
-      RDB 설계 및 관리<br/>
-      FastAPI 구축 및 백엔드 개발<br/>
-      LLM (의도분류) · ML (의도분류)
-      </td>
-      <td style="text-align:center;">
-        데이터 수집 · 정제<br/>
-        벡터DB<br/>
-        LLM 개발 (RAG, 장소 추천)
-      </td>
-    </tr>
-    <tr>
-      <td style="text-align:center;">
         <a href="https://github.com/OOOONBBOWQ">
           <img src="https://img.shields.io/badge/OOOONBBOWQ-181717?style=flat-square&logo=github&logoColor=white"/>
         </a>
@@ -57,37 +37,67 @@
         </a>
       </td>
     </tr>
+    <tr>
+      <td style="text-align: center;">
+        서비스 기획<br/>
+        화면 설계 및 구현<br/>
+        모바일 앱 개발<br/>
+        AI 그림일기 생성·평가 플로우 설계 및 개발<br/>
+        이미지 생성 프롬프트 최적화<br/>
+        S3 이미지 저장 연동
+      </td>
+      <td style="text-align: center;">
+        계정 및 리소스 결제 관리<br/>
+        서버 구축 및 관리<br/>
+        RDB 설계 및 관리<br/>
+        FastAPI 구축 및 백엔드 개발<br/>
+        프론트엔드 웹 개발<br/>
+        모바일 앱 개발<br/>
+        LLM 의도분류 모델 개발
+      </td>
+      <td style="text-align: center;">
+        데이터 수집 및 정제<br/>
+        벡터DB 설계 및 관리<br/>
+        장소 추천 RAG 파이프라인 개발<br/>
+        Query Parsing 및 추천 재정렬 로직 개발<br/>
+        성향분석·추천 이유 생성 로직 개발<br/>
+        장소 추천 평가셋 구축 및 성능 평가
+      </td>
+    </tr>
   </table>
 
   <br />
 
-  <tr>
-    <td style="padding:14px; line-height:1.6;">
-      서비스 기획<br/>
-      화면 설계 및 구현<br/>
-      프론트엔드 개발 (UX/UI/API 연동)<br/>
-      챗봇 AI 그림일기 플로우 설계<br/>
-      AI 그림일기 생성 파이프라인 및 프롬프트 최적화<br/>
-      S3 이미지 저장 연동<br/>
-      발표 자료 제작 및 발표<br/>
-    </td>
-    <td style="padding:14px; line-height:1.6;">
-    계정 및 리소스 결제 관리<br/>
-    서버 구축 및 관리<br/>
-    RDB 설계 및 관리<br/>
-    FastAPI 구축 및 백엔드 개발<br/>
-    LLM (의도분류) · ML (의도분류)
-    </td>
-    <td style="padding:14px; line-height:1.6;">
-      데이터 수집 · 정제<br/>
-      벡터DB<br/>
-      LLM 개발 (RAG, 장소 추천)
-    </td>
-  </tr>
+---
 
   <br />
 
   <img src="./assets/logo.png" alt="logo"/>
+
+  <br />
+
+  <table align="center">
+    <tr>
+      <td align="center"><b>기간</b></td>
+      <td>2026-03-26 ~ 2026-05-20 (38일)</td>
+    </tr>
+    <tr>
+      <td align="center"><b>소속</b></td>
+      <td>SKN AI 부트캠프 SKN23기 5차/FINAL 프로젝트</td>
+    </tr>
+    <tr>
+      <td align="center"><b>멘토</b></td>
+      <td>조수현 (신한카드 Data Scientist)</td>
+    </tr>
+    <tr>
+      <td align="center"><b>운영 도메인</b></td>
+      <td><a href="https://withdog.kro.kr">https://withdog.kro.kr</a></td>
+    </tr>
+    <tr>
+      <td align="center"><b>API 문서</b></td>
+      <td><a href="https://withdog.kro.kr/api/docs">https://withdog.kro.kr/api/docs</a> (Swagger UI)</td>
+    </tr>
+  </table>
 
   <br />
 
@@ -162,7 +172,7 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
     ├── MySQL DB 적재 (배치 1,000건 단위)
     └── ChromaDB 벡터화 적재 (ko-sroberta-multitask, 배치 50건 단위)
   ```
-    ▎ 최종 유효 장소: 21,130건 (2026-04-27 측정)
+    ▎ 최종 유효 장소: 22,042건 (한국문화정보원 + 한국관광공사 Tour API 통합)
 
 > #### 주요 전처리 시스템 및 스키마
 
@@ -207,8 +217,8 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 
   **최종 적재 현황**
 
-  - MySQL DB: 21,130건
-  - ChromaDB 벡터: 21,130건 (컬렉션명: dog_places)
+  - MySQL DB: 22,042건
+  - ChromaDB 벡터: 22,042건 (컬렉션명: dog_places)
 
   **카테고리별 적재 분포**
 
@@ -237,6 +247,16 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 
 </div>
 
+> #### RAG / LLM 모델 아키텍처
+
+<div align="center">
+
+  <img src="./assets/RAG_LLM_모델 아키텍처 설계.png" alt="RAG / LLM 모델 아키텍처 설계" width="100%" />
+
+</div>
+
+<br />
+
   | 기능 | 설명 | 핵심 기술 |
   | --- | --- | --- |
   | 1. 챗봇 의도분류 | 사용자 입력을 분석해 다이어리 작성, 장소추천, 시설정보, 기타 응답으로 라우팅합니다. | KoELECTRA Fine-tuning, FastAPI, Intent Routing |
@@ -256,7 +276,8 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 | 분류 클래스 | 다이어리 작성 / 장소추천 / 시설정보 / 기타 |
 | 학습 설정 | epochs=5, batch=16, lr=3e-5, max_length=128 |
 | 평가 지표 | Accuracy, Classification Report, per-class F1 |
-| 학습 결과 | **Accuracy 0.9848** (488 샘플, 5 epoch — 출처: `학습.txt`, gitignore 처리) |
+| 학습 데이터 | 1,117 샘플 (4 카테고리 — 다이어리 작성 / 장소추천 / 시설정보 / 기타) |
+| 학습 결과 | **Accuracy 0.9955** (2026-04-28 GPU 재학습, RTX 3050, 5 epoch, epoch 3 베스트 저장) |
 | 모델 저장 | `ai/intent/model/` |
 | 서비스 구조 | 메인 FastAPI 서버와 별도 포트에서 의도 분류 API 실행 |
 
@@ -838,6 +859,66 @@ Navbar
 
 <div align="center">
 
+  # 5. 빠른 시작
+
+</div>
+
+> #### 사전 준비
+
+```bash
+git clone https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN23-FINAL-3Team.git
+cd SKN23-FINAL-3Team
+```
+
+`.env` 파일을 저장소 root 에 배치합니다. 키 목록 권위는 §9.2 환경 설정 참조 (`.gitignore` 처리, 팀 내부 디스코드로 공유).
+
+> #### 백엔드 + 프론트엔드 (Docker Compose, 권장)
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up --build
+```
+
+- Nginx: `http://localhost` (80 → 443 리다이렉트), 운영 도메인 `https://withdog.kro.kr`
+- FastAPI: 내부 네트워크 (`withdog-net`), Nginx `/api/*` 프록시 경유
+- Swagger UI: `/api/docs`
+
+> #### 백엔드 (로컬)
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate         # Windows
+# source .venv/bin/activate    # macOS / Linux
+
+pip install -r requirements.txt
+uvicorn back.api.main:app --reload --port 8000
+```
+
+`.env` 의 `SERVER=local` 이면 sshtunnel + paramiko 로 EC2 → RDS MySQL 자동 터널링.
+
+> #### 프론트엔드 (로컬)
+
+```bash
+cd front
+pnpm install
+pnpm dev
+```
+
+Vite Dev Server 3000 → FastAPI 8000 자동 프록시 (`/api/*`).
+
+> #### 모바일 (Flutter Android)
+
+```bash
+cd mobile
+flutter pub get
+flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
+```
+
+운영 API (`https://withdog.kro.kr/api`) 를 그대로 재사용합니다. OAuth 분기: 구글 = 시스템 브라우저 (`flutter_appauth`) / 카카오·네이버 = WebView (`flutter_inappwebview`).
+
+---
+
+<div align="center">
+
   # 6. QA 검증 및 평가
 
 </div>
@@ -924,6 +1005,35 @@ python ai/evaluation/run_ablation.py
 
 <br />
 
+> #### 자동화 평가 흐름
+
+평가 시스템은 외부 의존 없이 자체 인프라 (`ai/evaluation/`) 로 구축되어, 검색 로직 변경 후 즉시 회귀 테스트가 가능합니다.
+
+```bash
+# 전체 평가셋 단건 평가
+python ai/evaluation/run_evaluation.py
+
+# Combined / RDB only / RAG only Ablation
+python ai/evaluation/run_ablation.py
+
+# 개선 전·후 비교 (run_id 컬럼으로 다회 실행 구분)
+python ai/evaluation/run_evaluation.py --output evaluation/results/before.xlsx
+# (검색 로직 개선 작업)
+python ai/evaluation/run_evaluation.py --output evaluation/results/after.xlsx
+```
+
+> #### 산출물
+
+| 산출물 | 경로 / 컬럼 |
+| --- | --- |
+| 결과 엑셀 | `evaluation/results/eval_results_YYYYMMDD_HHMMSS.xlsx` |
+| 실행 로그 | `evaluation/logs/run_YYYYMMDD_HHMMSS.log` (쿼리별 상세 기록) |
+| 주요 컬럼 | `run_id`, `query_id`, `카테고리`, `사용자질문`, `정답`, `top1~top5`, `hit_at_5`, `recall_at_5`, `refusal` |
+
+CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필터), `--verbose` (각 쿼리 top5 출력), `--input` (외부 평가셋 지정) 등을 지원합니다.
+
+<br />
+
 ## 6.3. AI 그림일기
 
 그림일기 QA는 생성 이미지의 품질을 점검하고, 저품질 결과를 개선하기 위한 평가 흐름입니다.  
@@ -964,16 +1074,6 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
   # 7. 서비스 아키텍처
 
   ![시스템아키텍처](./assets/시스템아키텍처.png)
-
-</div>
-
-<br />
-
-### 전체 구성도
-
-<div align="center">
-
-  ![전체구성도](./assets/전체구성도.png)
 
 </div>
 
@@ -1033,7 +1133,7 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
 
 </div>
 
-> #### 테이블 목록 (총 9개)
+> #### 테이블 목록 (총 10개)
 
 | 테이블 | 용도 | Soft Delete | 비고 |
 | --- | --- | --- | --- |
@@ -1045,7 +1145,8 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
 | `chat_messages` | 대화 메시지 | ✗ (영구 보존) | role: user / assistant / system |
 | `diaries` | 그림일기 (6하원칙) | ✓ | image_id nullable (2-phase) |
 | `images` | S3 이미지 메타 | ✓ | file_url, file_name |
-| `places` | 반려견 동반 장소 (21,130건) | — | content_id UNIQUE |
+| `places` | 반려견 동반 장소 (22,042건) | — | content_id UNIQUE |
+| `favorite_places` | 사용자별 즐겨찾기 장소 | — | UNIQUE(user_id, place_id) |
 
 <br />
 
@@ -1060,6 +1161,7 @@ diaries.image_id  ── 1 images   (RESTRICT, nullable)
 pets.breed_id     ── 1 breeds   (RESTRICT)
 pets.type_id      ── 1 keywords (RESTRICT, PET 카테고리)
 users.type_id     ── 1 keywords (RESTRICT, USER 카테고리)
+users N ─── M places   via favorite_places (CASCADE)
 ```
 
 <br />
@@ -1094,9 +1196,9 @@ SKN23-FINAL-3Team/
 │   ├── main.py                 # 진입점 (back/api/main.py 로더)
 │   ├── api/                    # FastAPI 백엔드
 │   │   ├── main.py             # FastAPI 앱 (lifespan, 라우터 등록)
-│   │   ├── routers/            # 12종 (auth, users, pets, diaries, chat-rooms, chat-messages, images, places, breeds, keywords, intent, admin)
-│   │   ├── services/           # 16종 (chat_response, diary_response, chat_message, place, user, pet, diary, chat_room, image, breed, keyword, intent, auth, admin, common, scheduler)
-│   │   ├── models/             # 9개 SQLAlchemy 모델
+│   │   ├── routers/            # 15종 (auth, users, pets, diaries, chat-rooms, chat-messages, images, places, breeds, keywords, intent, admin, diary_photo, directions, eval)
+│   │   ├── services/           # 23종 (chat_response, diary_response, chat_message, place, user, pet, diary, chat_room, image, breed, keyword, intent, auth, admin, common, scheduler, favorite_place, pet_profile, photo_detector, photo_illustration, photo_validation, photo_vlm, place_image)
+│   │   ├── models/             # 11개 SQLAlchemy 모델
 │   │   ├── schemas/            # 10개 Pydantic 스키마
 │   │   └── core/               # config, database, deps, location, type
 │   ├── data/scripts/           # breeds / keywords / places 시드 (2026-04-27 back/db/seeds/ 에서 이동)
@@ -1114,6 +1216,15 @@ SKN23-FINAL-3Team/
 │   ├── core/                   # ChromaDB 클라이언트, 인터페이스
 │   └── utils/                  # 공통 유틸리티
 │
+├── mobile/                     # Flutter 모바일 (Android 풀 포팅, 5/20 시연 데모)
+│   ├── lib/
+│   │   ├── features/           # auth, calendar, chat, diary, home, inquiry,
+│   │   │                       #   intro, mypage, notification, onboarding, places
+│   │   ├── shared/             # 공통 위젯·모델·서비스
+│   │   └── core/               # theme, network, env helper
+│   ├── pubspec.yaml            # Flutter 3.41 / Riverpod / Dio / image_picker / InAppWebView
+│   └── android/                # Android 빌드 설정 (mipmap, Adaptive Icon)
+│
 ├── data/                       # 장소·견종 데이터 및 임베딩 스크립트
 ├── infra/docker/               # Dockerfile, docker-compose
 └── requirements.txt
@@ -1129,6 +1240,7 @@ SKN23-FINAL-3Team/
 | POST | `/api/auth/{provider}` | 소셜 로그인 (kakao / google / naver) |
 | GET | `/api/admin/token` | 개발용 무기한 JWT (`X-Admin-Key` 헤더) |
 | GET | `/api/users/me` | 내 정보 조회 |
+| POST | `/api/users/me/agreements` | 약관·개인정보처리방침 동의 저장 |
 | GET | `/api/users/{id}` | 사용자 조회 |
 | PATCH | `/api/users/{id}` | 유저 정보 수정 |
 | DELETE | `/api/users/{id}` | 유저 soft delete (10일 후 hard delete) |
@@ -1139,10 +1251,13 @@ SKN23-FINAL-3Team/
 | DELETE | `/api/pets/{id}` | 반려견 soft delete |
 | GET | `/api/diaries?pet_id={id}` | 일기 목록 조회 |
 | POST | `/api/diaries` | 일기 생성 (image_id 없이도 생성 가능) |
+| GET | `/api/diaries/calendar?year=&month=` | 즐겨찾기 일기 캘린더 조회 |
 | PATCH | `/api/diaries/{id}` | 일기 수정 (image_id 바인딩 포함) |
+| PATCH | `/api/diaries/{id}/favorite` | 일기 즐겨찾기 토글 |
 | DELETE | `/api/diaries/{id}` | 일기 soft delete |
 | POST | `/api/diary/generate` | AI 일기 텍스트 생성 (GPT-4.1-mini) |
 | POST | `/api/diary/generate-image` | AI 일기 이미지 생성 (gpt-image-1) |
+| POST | `/api/diary/photo-style` | 사진 업로드 기반 그림체 변환 |
 | POST | `/api/images` | 이미지 S3 업로드 |
 | DELETE | `/api/images/{id}` | 이미지 soft delete (FK RESTRICT 검증) |
 | POST | `/api/chat-rooms` | 채팅방 생성 (title NULL이면 첫 메시지로 자동) |
@@ -1153,7 +1268,11 @@ SKN23-FINAL-3Team/
 | POST | `/api/chat-rooms/{id}/messages` | 채팅 메시지 전송 (챗봇 한 턴 처리) |
 | GET | `/api/chat-rooms/{id}/messages` | 채팅 메시지 조회 |
 | GET | `/api/places/search?query=&category=&city=` | 장소 추천 검색 (RAG + LLM reason) |
+| GET | `/api/places/by-name?name=` | 장소명 기반 시설 상세 조회 |
+| GET | `/api/places/favorites` | 즐겨찾기 장소 목록 조회 |
 | GET | `/api/places/{content_id}` | 장소 상세 |
+| PATCH | `/api/places/{content_id}/favorite` | 장소 즐겨찾기 토글 |
+| POST | `/api/directions/route` | 카카오 Mobility 경로 조회 |
 | GET | `/api/breeds` | 견종 목록 조회 |
 | GET | `/api/keywords?category=PET` | 강아지 성향 태그 |
 | GET | `/api/keywords?category=USER` | 사용자 여행 성향 태그 |
@@ -1169,7 +1288,7 @@ SKN23-FINAL-3Team/
 
 > ### 환경변수 (.env)
 
-총 41개 키. 카테고리별로 정리된 템플릿입니다. 값은 환경별로 직접 채워 사용하세요 (`.env`는 `.gitignore` 처리됨).
+카테고리별로 정리한 주요 환경변수 템플릿입니다. 값은 환경별로 직접 채워 사용하세요 (`.env`는 `.gitignore` 처리됨).
 
 ```env
 # ── 서버 환경 ───────────────────────────────────────────────
@@ -1202,6 +1321,7 @@ KAKAO_REST_API_KEY=   # 카카오 REST API (랜드마크 좌표 조회)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+GOOGLE_ANDROID_CLIENT_ID=
 KAKAO_CLIENT_ID=
 KAKAO_CLIENT_SECRET=
 KAKAO_REDIRECT_URI=
@@ -1223,6 +1343,7 @@ AWS_S3_BUCKET_NAME=
 
 # ── 보안 ────────────────────────────────────────────────────
 SECRET_KEY=           # JWT 서명 + 관리자 토큰 발급 (이중 용도)
+ACCESS_TOKEN_EXPIRE_MINUTES=
 
 # ── LLM / 임베딩 모델 ───────────────────────────────────────
 GPT_MODEL=            # 기본 모델 ID (예: gpt-4.1-mini)
@@ -1232,6 +1353,13 @@ EMBED_MODEL_NAME=     # sentence-transformers 모델
 # ── Hugging Face / Transformers ────────────────────────────
 HF_HUB_OFFLINE=       # 0 | 1
 TRANSFORMERS_OFFLINE= # 0 | 1
+
+# ── 사진 분석 / 그림체 변환 ─────────────────────────────────
+USE_YOLO_PIPELINE=    # true: YOLO+VLM, false: GPT-4o Vision
+USE_YOLO_DETECTOR=
+USE_LOCAL_VLM=
+PHOTO_UPLOAD_MAX_MB=
+PHOTO_STYLE_MOCK_MODE=
 
 # ── 기타 ────────────────────────────────────────────────────
 ANONYMIZED_TELEMETRY= # ChromaDB 텔레메트리 무력화
@@ -1391,10 +1519,22 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
 | Build | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) |
 | Styling | ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white) |
 | Router | ![React Router](https://img.shields.io/badge/React_Router_v7-CA4245?style=flat-square&logo=reactrouter&logoColor=white) |
-| Animation | ![Framer Motion](https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
-| UI | ![Radix UI](https://img.shields.io/badge/Radix_UI-161618?style=flat-square&logo=radixui&logoColor=white) ![Lucide React](https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white) |
+| Animation | ![Motion](https://img.shields.io/badge/Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
+| UI | ![Lucide React](https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white) |
 | Map | ![Kakao Maps SDK](https://img.shields.io/badge/Kakao_Maps_SDK-FFCD00?style=flat-square&logo=kakao&logoColor=black) |
 | Design | ![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat-square&logo=figma&logoColor=white) ![Adobe Photoshop](https://img.shields.io/badge/Photoshop-31A8FF?style=flat-square&logo=adobephotoshop&logoColor=white) ![Adobe Illustrator](https://img.shields.io/badge/Illustrator-FF9A00?style=flat-square&logo=adobeillustrator&logoColor=white) |
+
+> ### Mobile
+
+| 분류 | 기술 |
+|------|------|
+| Framework | ![Flutter](https://img.shields.io/badge/Flutter_3.41-02569B?style=flat-square&logo=flutter&logoColor=white) ![Dart](https://img.shields.io/badge/Dart-0175C2?style=flat-square&logo=dart&logoColor=white) |
+| State | ![Riverpod](https://img.shields.io/badge/Riverpod-0553B1?style=flat-square&logo=flutter&logoColor=white) |
+| Network | ![Dio](https://img.shields.io/badge/Dio-0175C2?style=flat-square&logo=dart&logoColor=white) |
+| Routing | ![go_router](https://img.shields.io/badge/go__router-02569B?style=flat-square&logo=flutter&logoColor=white) |
+| OAuth | ![flutter_appauth](https://img.shields.io/badge/flutter__appauth-02569B?style=flat-square) ![flutter_inappwebview](https://img.shields.io/badge/flutter__inappwebview-02569B?style=flat-square) |
+| Storage | ![flutter_secure_storage](https://img.shields.io/badge/flutter__secure__storage-02569B?style=flat-square) |
+| Platform | ![Android](https://img.shields.io/badge/Android-3DDC84?style=flat-square&logo=android&logoColor=white) |
 
 > ### Infra
 
@@ -1417,23 +1557,3 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
 | 소셜 로그인 | ![Kakao OAuth](https://img.shields.io/badge/Kakao_OAuth-FFCD00?style=flat-square&logo=kakao&logoColor=black) ![Google OAuth](https://img.shields.io/badge/Google_OAuth-4285F4?style=flat-square&logo=google&logoColor=white) ![Naver OAuth](https://img.shields.io/badge/Naver_OAuth-03C75A?style=flat-square&logo=naver&logoColor=white) |
 
 <br />
-
-<!-- 최종 발표떄 추가
----
-
-<div align="center">
-
-  # 회고
-
-</div>
-
-> 정유선 <br>
-> ...
-
-> 이승연 <br>
-> ...
-
-> 송민채 <br>
-> ... 
-
--->
