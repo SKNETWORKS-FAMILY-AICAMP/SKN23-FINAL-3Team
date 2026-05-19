@@ -88,7 +88,7 @@
     </tr>
     <tr>
       <td align="center"><b>멘토</b></td>
-      <td>조수현 (신한카드 Data Scientist)</td>
+      <td>조수현 (Data Scientist)</td>
     </tr>
     <tr>
       <td align="center"><b>운영 도메인</b></td>
@@ -96,7 +96,10 @@
     </tr>
     <tr>
       <td align="center"><b>API 문서</b></td>
-      <td><a href="https://withdog.kro.kr/api/docs">https://withdog.kro.kr/api/docs</a> (Swagger UI)</td>
+      <td>
+        <a href="https://documenter.getpostman.com/view/53095517/2sBXqCPipg">PostMan</a>
+        <a href="https://withdog.kro.kr/api/docs">Swagger UI</a>
+      </td>
     </tr>
   </table>
 
@@ -412,7 +415,7 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 <table width="100%">
   <thead>
     <tr>
-      <th>기능</th>
+      <th width="23%">기능</th>
       <th>설명</th>
       <th>핵심 기술</th>
     </tr>
@@ -2735,6 +2738,11 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 
 > #### 테이블 목록 (총 12개)
 
+<details>
+<summary><b>테이블 목록 펼쳐 보기 (총 12개)</b></summary>
+
+<br />
+
 <table width="100%">
   <thead>
     <tr>
@@ -2820,9 +2828,14 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
   </tbody>
 </table>
 
+</details>
+
 <br />
 
 > #### 관계 (ER)
+
+<details>
+<summary><b>ER 관계 펼쳐 보기</b></summary>
 
 ```text
 users 1 ─── N pets
@@ -2840,6 +2853,8 @@ pet_profiles.image_id ── 1 images   (nullable)
 users N ─── M places      via favorite_places
 api_costs                 독립 비용 추적 테이블
 ```
+
+</details>
 
 <br />
 
@@ -2860,6 +2875,9 @@ api_costs                 독립 비용 추적 테이블
   #  10. 디렉토리 구조
 
 </div>
+
+<details>
+<summary><b>디렉토리 구조 펼쳐 보기</b></summary>
 
 ```
 SKN23-FINAL-3Team/
@@ -2909,9 +2927,16 @@ SKN23-FINAL-3Team/
 └── requirements.txt
 ```
 
+</details>
+
 <br />
 
 ## 10.1. 주요 API 엔드포인트
+
+<details>
+<summary><b>주요 API 엔드포인트 펼쳐 보기</b></summary>
+
+<br />
 
 <table width="100%">
   <thead>
@@ -3155,6 +3180,8 @@ SKN23-FINAL-3Team/
   </tbody>
 </table>
 
+</details>
+
 <br />
 
 - API 명세서 (Postman): https://documenter.getpostman.com/view/53095517/2sBXqCPipg
@@ -3168,81 +3195,86 @@ SKN23-FINAL-3Team/
 
 카테고리별로 정리한 주요 환경변수 템플릿입니다. 값은 환경별로 직접 채워 사용하세요 (`.env`는 `.gitignore` 처리됨).
 
-```env
-# ── 서버 환경 ───────────────────────────────────────────────
-SERVER=               # local | ec2
-APP_ENV=
-DEBUG=
-FRONTEND_BASE_URL=
-VITE_API_URL=
+<details>
+<summary><b>환경변수 템플릿 펼쳐 보기</b></summary>
 
-# ── 데이터베이스 (AWS RDS MySQL) ────────────────────────────
-DB_HOST=
-DB_PORT=
-DB_USER=
-DB_PASSWORD=
-DB_NAME=
+  ```env
+  # ── 서버 환경 ───────────────────────────────────────────────
+  SERVER=               # local | ec2
+  APP_ENV=
+  DEBUG=
+  FRONTEND_BASE_URL=
+  VITE_API_URL=
 
-# ── SSH 터널 (local 환경 전용) ──────────────────────────────
-SSH_HOST=
-SSH_PORT=
-SSH_USER=
-SSH_PKEY=
+  # ── 데이터베이스 (AWS RDS MySQL) ────────────────────────────
+  DB_HOST=
+  DB_PORT=
+  DB_USER=
+  DB_PASSWORD=
+  DB_NAME=
 
-# ── 외부 API ────────────────────────────────────────────────
-OPENAI_API_KEY=
-DOG_API_KEY=          # The Dog API
-TOUR_API_KEY=         # 한국관광공사 OpenAPI
-KAKAO_REST_API_KEY=   # 카카오 REST API (랜드마크 좌표 조회)
+  # ── SSH 터널 (local 환경 전용) ──────────────────────────────
+  SSH_HOST=
+  SSH_PORT=
+  SSH_USER=
+  SSH_PKEY=
 
-# ── OAuth 2.0 (백엔드) ──────────────────────────────────────
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=
-GOOGLE_ANDROID_CLIENT_ID=
-KAKAO_CLIENT_ID=
-KAKAO_CLIENT_SECRET=
-KAKAO_REDIRECT_URI=
-NAVER_CLIENT_ID=
-NAVER_CLIENT_SECRET=
-NAVER_REDIRECT_URI=
+  # ── 외부 API ────────────────────────────────────────────────
+  OPENAI_API_KEY=
+  DOG_API_KEY=          # The Dog API
+  TOUR_API_KEY=         # 한국관광공사 OpenAPI
+  KAKAO_REST_API_KEY=   # 카카오 REST API (랜드마크 좌표 조회)
 
-# ── OAuth 2.0 (프론트, Vite 노출) ───────────────────────────
-VITE_GOOGLE_CLIENT_ID=
-VITE_KAKAO_CLIENT_ID=
-VITE_KAKAO_JAVASCRIPT_API_KEY=    # 카카오 지도 SDK
-VITE_NAVER_CLIENT_ID=
+  # ── OAuth 2.0 (백엔드) ──────────────────────────────────────
+  GOOGLE_CLIENT_ID=
+  GOOGLE_CLIENT_SECRET=
+  GOOGLE_REDIRECT_URI=
+  GOOGLE_ANDROID_CLIENT_ID=
+  KAKAO_CLIENT_ID=
+  KAKAO_CLIENT_SECRET=
+  KAKAO_REDIRECT_URI=
+  NAVER_CLIENT_ID=
+  NAVER_CLIENT_SECRET=
+  NAVER_REDIRECT_URI=
 
-# ── AWS S3 ──────────────────────────────────────────────────
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=
-AWS_S3_BUCKET_NAME=
+  # ── OAuth 2.0 (프론트, Vite 노출) ───────────────────────────
+  VITE_GOOGLE_CLIENT_ID=
+  VITE_KAKAO_CLIENT_ID=
+  VITE_KAKAO_JAVASCRIPT_API_KEY=    # 카카오 지도 SDK
+  VITE_NAVER_CLIENT_ID=
 
-# ── 보안 ────────────────────────────────────────────────────
-SECRET_KEY=           # JWT 서명 + 관리자 토큰 발급 (이중 용도)
-ACCESS_TOKEN_EXPIRE_MINUTES=
+  # ── AWS S3 ──────────────────────────────────────────────────
+  AWS_ACCESS_KEY_ID=
+  AWS_SECRET_ACCESS_KEY=
+  AWS_REGION=
+  AWS_S3_BUCKET_NAME=
 
-# ── LLM / 임베딩 모델 ───────────────────────────────────────
-GPT_MODEL=            # 기본 모델 ID (예: gpt-4.1-mini)
-GPT_IMAGE_MODEL=      # 이미지 생성 모델 (현재 gpt-image-1)
-EMBED_MODEL_NAME=     # sentence-transformers 모델
+  # ── 보안 ────────────────────────────────────────────────────
+  SECRET_KEY=           # JWT 서명 + 관리자 토큰 발급 (이중 용도)
+  ACCESS_TOKEN_EXPIRE_MINUTES=
 
-# ── Hugging Face / Transformers ────────────────────────────
-HF_HUB_OFFLINE=       # 0 | 1
-TRANSFORMERS_OFFLINE= # 0 | 1
+  # ── LLM / 임베딩 모델 ───────────────────────────────────────
+  GPT_MODEL=            # 기본 모델 ID (예: gpt-4.1-mini)
+  GPT_IMAGE_MODEL=      # 이미지 생성 모델 (현재 gpt-image-1)
+  EMBED_MODEL_NAME=     # sentence-transformers 모델
 
-# ── 사진 분석 / 그림체 변환 ─────────────────────────────────
-USE_YOLO_PIPELINE=    # true: YOLO+VLM, false: GPT-4o Vision
-USE_YOLO_DETECTOR=
-USE_LOCAL_VLM=
-PHOTO_UPLOAD_MAX_MB=
-PHOTO_STYLE_MOCK_MODE=
+  # ── Hugging Face / Transformers ────────────────────────────
+  HF_HUB_OFFLINE=       # 0 | 1
+  TRANSFORMERS_OFFLINE= # 0 | 1
 
-# ── 기타 ────────────────────────────────────────────────────
-ANONYMIZED_TELEMETRY= # ChromaDB 텔레메트리 무력화
-USE_DUMMY_PLACES=     # 장소 검색 디버깅용 더미 데이터 플래그
-```
+  # ── 사진 분석 / 그림체 변환 ─────────────────────────────────
+  USE_YOLO_PIPELINE=    # true: YOLO+VLM, false: GPT-4o Vision
+  USE_YOLO_DETECTOR=
+  USE_LOCAL_VLM=
+  PHOTO_UPLOAD_MAX_MB=
+  PHOTO_STYLE_MOCK_MODE=
+
+  # ── 기타 ────────────────────────────────────────────────────
+  ANONYMIZED_TELEMETRY= # ChromaDB 텔레메트리 무력화
+  USE_DUMMY_PLACES=     # 장소 검색 디버깅용 더미 데이터 플래그
+  ```
+
+</details>
 
 <br />
 
@@ -3568,27 +3600,27 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
   <tbody>
     <tr>
       <td>Framework</td>
-      <td>![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" /></td>
     </tr>
     <tr>
       <td>ORM</td>
-      <td>![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white) ![AsyncIO](https://img.shields.io/badge/AsyncIO-3776AB?style=flat-square&logo=python&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy" /> <img src="https://img.shields.io/badge/AsyncIO-3776AB?style=flat-square&logo=python&logoColor=white" alt="AsyncIO" /></td>
     </tr>
     <tr>
       <td>Database</td>
-      <td>![AWS RDS](https://img.shields.io/badge/AWS_RDS-527FFF?style=flat-square&logo=amazonrds&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=flat-square&logo=mysql&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/AWS_RDS-527FFF?style=flat-square&logo=amazonrds&logoColor=white" alt="AWS RDS" /> <img src="https://img.shields.io/badge/MySQL-4479A1?style=flat-square&logo=mysql&logoColor=white" alt="MySQL" /></td>
     </tr>
     <tr>
       <td>Auth</td>
-      <td>![JWT](https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white) ![OAuth 2.0](https://img.shields.io/badge/OAuth_2.0-EB5424?style=flat-square&logo=auth0&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white" alt="JWT" /> <img src="https://img.shields.io/badge/OAuth_2.0-EB5424?style=flat-square&logo=auth0&logoColor=white" alt="OAuth 2.0" /></td>
     </tr>
     <tr>
       <td>Storage</td>
-      <td>![AWS S3](https://img.shields.io/badge/AWS_S3-569A31?style=flat-square&logo=amazons3&logoColor=white) ![aioboto3](https://img.shields.io/badge/aioboto3-3776AB?style=flat-square&logo=python&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/AWS_S3-569A31?style=flat-square&logo=amazons3&logoColor=white" alt="AWS S3" /> <img src="https://img.shields.io/badge/aioboto3-3776AB?style=flat-square&logo=python&logoColor=white" alt="aioboto3" /></td>
     </tr>
     <tr>
       <td>Scheduler</td>
-      <td>![APScheduler](https://img.shields.io/badge/APScheduler-333333?style=flat-square&logo=python&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/APScheduler-333333?style=flat-square&logo=python&logoColor=white" alt="APScheduler" /></td>
     </tr>
   </tbody>
 </table>
@@ -3605,31 +3637,31 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
   <tbody>
     <tr>
       <td>텍스트 일기 생성</td>
-      <td>![GPT-4.1-mini](https://img.shields.io/badge/GPT--4.1--mini-412991?style=flat-square&logo=openai&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/GPT--4.1--mini-412991?style=flat-square&logo=openai&logoColor=white" alt="GPT-4.1-mini" /></td>
     </tr>
     <tr>
       <td>이미지 생성</td>
-      <td>![gpt-image-1](https://img.shields.io/badge/gpt--image--1-412991?style=flat-square&logo=openai&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/gpt--image--1-412991?style=flat-square&logo=openai&logoColor=white" alt="gpt-image-1" /></td>
     </tr>
     <tr>
       <td>의도 분류</td>
-      <td>![KoELECTRA](https://img.shields.io/badge/KoELECTRA-FF6F00?style=flat-square&logo=huggingface&logoColor=white) ![Fine-tuned](https://img.shields.io/badge/Fine--tuned-FFB000?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/KoELECTRA-FF6F00?style=flat-square&logo=huggingface&logoColor=white" alt="KoELECTRA" /> <img src="https://img.shields.io/badge/Fine--tuned-FFB000?style=flat-square" alt="Fine-tuned" /></td>
     </tr>
     <tr>
       <td>임베딩</td>
-      <td>![ko-sroberta-multitask](https://img.shields.io/badge/ko--sroberta--multitask-FF6F00?style=flat-square&logo=huggingface&logoColor=white) ![sentence-transformers](https://img.shields.io/badge/sentence--transformers-FFB000?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/ko--sroberta--multitask-FF6F00?style=flat-square&logo=huggingface&logoColor=white" alt="ko-sroberta-multitask" /> <img src="https://img.shields.io/badge/sentence--transformers-FFB000?style=flat-square" alt="sentence-transformers" /></td>
     </tr>
     <tr>
       <td>Vector DB</td>
-      <td>![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6B35?style=flat-square) ![RAG](https://img.shields.io/badge/RAG_x3-6A5ACD?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/ChromaDB-FF6B35?style=flat-square" alt="ChromaDB" /> <img src="https://img.shields.io/badge/RAG_x3-6A5ACD?style=flat-square" alt="RAG" /></td>
     </tr>
     <tr>
       <td>군집·시각화</td>
-      <td>![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white) ![KMeans](https://img.shields.io/badge/KMeans-3776AB?style=flat-square) ![matplotlib](https://img.shields.io/badge/matplotlib-11557C?style=flat-square) ![PCA·t--SNE](https://img.shields.io/badge/PCA·t--SNE-6A5ACD?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white" alt="scikit-learn" /> <img src="https://img.shields.io/badge/KMeans-3776AB?style=flat-square" alt="KMeans" /> <img src="https://img.shields.io/badge/matplotlib-11557C?style=flat-square" alt="matplotlib" /> <img src="https://img.shields.io/badge/PCA·t--SNE-6A5ACD?style=flat-square" alt="PCA·t--SNE" /></td>
     </tr>
     <tr>
       <td>이미지 평가</td>
-      <td>![CLIP](https://img.shields.io/badge/CLIP-412991?style=flat-square&logo=openai&logoColor=white) ![YOLOv8n](https://img.shields.io/badge/YOLOv8n-00FFFF?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/CLIP-412991?style=flat-square&logo=openai&logoColor=white" alt="CLIP" /> <img src="https://img.shields.io/badge/YOLOv8n-00FFFF?style=flat-square" alt="YOLOv8n" /></td>
     </tr>
   </tbody>
 </table>
@@ -3646,35 +3678,35 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
   <tbody>
     <tr>
       <td>Framework</td>
-      <td>![React](https://img.shields.io/badge/React_18-61DAFB?style=flat-square&logo=react&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/React_18-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /> <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></td>
     </tr>
     <tr>
       <td>Build</td>
-      <td>![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /></td>
     </tr>
     <tr>
       <td>Styling</td>
-      <td>![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="TailwindCSS" /></td>
     </tr>
     <tr>
       <td>Router</td>
-      <td>![React Router](https://img.shields.io/badge/React_Router_v7-CA4245?style=flat-square&logo=reactrouter&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/React_Router_v7-CA4245?style=flat-square&logo=reactrouter&logoColor=white" alt="React Router" /></td>
     </tr>
     <tr>
       <td>Animation</td>
-      <td>![Motion](https://img.shields.io/badge/Motion-0055FF?style=flat-square&logo=framer&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Motion-0055FF?style=flat-square&logo=framer&logoColor=white" alt="Motion" /></td>
     </tr>
     <tr>
       <td>UI</td>
-      <td>![Lucide React](https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white" alt="Lucide React" /></td>
     </tr>
     <tr>
       <td>Map</td>
-      <td>![Kakao Maps SDK](https://img.shields.io/badge/Kakao_Maps_SDK-FFCD00?style=flat-square&logo=kakao&logoColor=black)</td>
+      <td><img src="https://img.shields.io/badge/Kakao_Maps_SDK-FFCD00?style=flat-square&logo=kakao&logoColor=black" alt="Kakao Maps SDK" /></td>
     </tr>
     <tr>
       <td>Design</td>
-      <td>![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat-square&logo=figma&logoColor=white) ![Adobe Photoshop](https://img.shields.io/badge/Photoshop-31A8FF?style=flat-square&logo=adobephotoshop&logoColor=white) ![Adobe Illustrator](https://img.shields.io/badge/Illustrator-FF9A00?style=flat-square&logo=adobeillustrator&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Figma-F24E1E?style=flat-square&logo=figma&logoColor=white" alt="Figma" /> <img src="https://img.shields.io/badge/Photoshop-31A8FF?style=flat-square&logo=adobephotoshop&logoColor=white" alt="Adobe Photoshop" /> <img src="https://img.shields.io/badge/Illustrator-FF9A00?style=flat-square&logo=adobeillustrator&logoColor=white" alt="Adobe Illustrator" /></td>
     </tr>
   </tbody>
 </table>
@@ -3691,31 +3723,31 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
   <tbody>
     <tr>
       <td>Framework</td>
-      <td>![Flutter](https://img.shields.io/badge/Flutter_3.41-02569B?style=flat-square&logo=flutter&logoColor=white) ![Dart](https://img.shields.io/badge/Dart-0175C2?style=flat-square&logo=dart&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Flutter_3.41-02569B?style=flat-square&logo=flutter&logoColor=white" alt="Flutter" /> <img src="https://img.shields.io/badge/Dart-0175C2?style=flat-square&logo=dart&logoColor=white" alt="Dart" /></td>
     </tr>
     <tr>
       <td>State</td>
-      <td>![Riverpod](https://img.shields.io/badge/Riverpod-0553B1?style=flat-square&logo=flutter&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Riverpod-0553B1?style=flat-square&logo=flutter&logoColor=white" alt="Riverpod" /></td>
     </tr>
     <tr>
       <td>Network</td>
-      <td>![Dio](https://img.shields.io/badge/Dio-0175C2?style=flat-square&logo=dart&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Dio-0175C2?style=flat-square&logo=dart&logoColor=white" alt="Dio" /></td>
     </tr>
     <tr>
       <td>Routing</td>
-      <td>![go_router](https://img.shields.io/badge/go__router-02569B?style=flat-square&logo=flutter&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/go__router-02569B?style=flat-square&logo=flutter&logoColor=white" alt="go_router" /></td>
     </tr>
     <tr>
       <td>OAuth</td>
-      <td>![flutter_appauth](https://img.shields.io/badge/flutter__appauth-02569B?style=flat-square) ![flutter_inappwebview](https://img.shields.io/badge/flutter__inappwebview-02569B?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/flutter__appauth-02569B?style=flat-square" alt="flutter_appauth" /> <img src="https://img.shields.io/badge/flutter__inappwebview-02569B?style=flat-square" alt="flutter_inappwebview" /></td>
     </tr>
     <tr>
       <td>Storage</td>
-      <td>![flutter_secure_storage](https://img.shields.io/badge/flutter__secure__storage-02569B?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/flutter__secure__storage-02569B?style=flat-square" alt="flutter_secure_storage" /></td>
     </tr>
     <tr>
       <td>Platform</td>
-      <td>![Android](https://img.shields.io/badge/Android-3DDC84?style=flat-square&logo=android&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Android-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android" /></td>
     </tr>
   </tbody>
 </table>
@@ -3732,23 +3764,23 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
   <tbody>
     <tr>
       <td>Cloud</td>
-      <td>![AWS EC2](https://img.shields.io/badge/AWS_EC2-FF9900?style=flat-square&logo=amazonec2&logoColor=white) ![AWS RDS](https://img.shields.io/badge/AWS_RDS-527FFF?style=flat-square&logo=amazonrds&logoColor=white) ![AWS S3](https://img.shields.io/badge/AWS_S3-569A31?style=flat-square&logo=amazons3&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/AWS_EC2-FF9900?style=flat-square&logo=amazonec2&logoColor=white" alt="AWS EC2" /> <img src="https://img.shields.io/badge/AWS_RDS-527FFF?style=flat-square&logo=amazonrds&logoColor=white" alt="AWS RDS" /> <img src="https://img.shields.io/badge/AWS_S3-569A31?style=flat-square&logo=amazons3&logoColor=white" alt="AWS S3" /></td>
     </tr>
     <tr>
       <td>Container</td>
-      <td>![Docker Compose](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Compose" /></td>
     </tr>
     <tr>
       <td>Web Server</td>
-      <td>![Nginx](https://img.shields.io/badge/Nginx_1.25-009639?style=flat-square&logo=nginx&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Nginx_1.25-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx" /></td>
     </tr>
     <tr>
       <td>Domain</td>
-      <td>![withdog.kro.kr](https://img.shields.io/badge/withdog.kro.kr-000000?style=flat-square&logo=googlechrome&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/withdog.kro.kr-000000?style=flat-square&logo=googlechrome&logoColor=white" alt="withdog.kro.kr" /></td>
     </tr>
     <tr>
       <td>터널링</td>
-      <td>![SSH Tunnel](https://img.shields.io/badge/SSH_Tunnel-4D4D4D?style=flat-square&logo=openssh&logoColor=white) ![sshtunnel](https://img.shields.io/badge/sshtunnel-3776AB?style=flat-square&logo=python&logoColor=white) ![paramiko](https://img.shields.io/badge/paramiko-3776AB?style=flat-square&logo=python&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/SSH_Tunnel-4D4D4D?style=flat-square&logo=openssh&logoColor=white" alt="SSH Tunnel" /> <img src="https://img.shields.io/badge/sshtunnel-3776AB?style=flat-square&logo=python&logoColor=white" alt="sshtunnel" /> <img src="https://img.shields.io/badge/paramiko-3776AB?style=flat-square&logo=python&logoColor=white" alt="paramiko" /></td>
     </tr>
   </tbody>
 </table>
@@ -3765,23 +3797,23 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
   <tbody>
     <tr>
       <td>LLM / 이미지</td>
-      <td>![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=flat-square&logo=openai&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/OpenAI_API-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI" /></td>
     </tr>
     <tr>
       <td>견종 데이터</td>
-      <td>![The Dog API](https://img.shields.io/badge/The_Dog_API-FFA500?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/The_Dog_API-FFA500?style=flat-square" alt="The Dog API" /></td>
     </tr>
     <tr>
       <td>관광 데이터</td>
-      <td>![한국관광공사 OpenAPI](https://img.shields.io/badge/한국관광공사_OpenAPI-0064FF?style=flat-square)</td>
+      <td><img src="https://img.shields.io/badge/한국관광공사_OpenAPI-0064FF?style=flat-square" alt="한국관광공사 OpenAPI" /></td>
     </tr>
     <tr>
       <td>지도·좌표</td>
-      <td>![Kakao Maps](https://img.shields.io/badge/Kakao_Maps-FFCD00?style=flat-square&logo=kakao&logoColor=black) ![Kakao REST API](https://img.shields.io/badge/Kakao_REST_API-FFCD00?style=flat-square&logo=kakao&logoColor=black)</td>
+      <td><img src="https://img.shields.io/badge/Kakao_Maps-FFCD00?style=flat-square&logo=kakao&logoColor=black" alt="Kakao Maps" /> <img src="https://img.shields.io/badge/Kakao_REST_API-FFCD00?style=flat-square&logo=kakao&logoColor=black" alt="Kakao REST API" /></td>
     </tr>
     <tr>
       <td>소셜 로그인</td>
-      <td>![Kakao OAuth](https://img.shields.io/badge/Kakao_OAuth-FFCD00?style=flat-square&logo=kakao&logoColor=black) ![Google OAuth](https://img.shields.io/badge/Google_OAuth-4285F4?style=flat-square&logo=google&logoColor=white) ![Naver OAuth](https://img.shields.io/badge/Naver_OAuth-03C75A?style=flat-square&logo=naver&logoColor=white)</td>
+      <td><img src="https://img.shields.io/badge/Kakao_OAuth-FFCD00?style=flat-square&logo=kakao&logoColor=black" alt="Kakao OAuth" /> <img src="https://img.shields.io/badge/Google_OAuth-4285F4?style=flat-square&logo=google&logoColor=white" alt="Google OAuth" /> <img src="https://img.shields.io/badge/Naver_OAuth-03C75A?style=flat-square&logo=naver&logoColor=white" alt="Naver OAuth" /></td>
     </tr>
   </tbody>
 </table>
