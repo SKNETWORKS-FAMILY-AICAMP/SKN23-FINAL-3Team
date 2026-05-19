@@ -1242,6 +1242,173 @@ gpt-image-1
   → 앨범·캘린더에서 날짜별 조회
 ```
 
+<br />
+
+## 4.5. 사진 → 그림 변환 (Photo Illustration)
+
+사용자가 촬영한 반려견 사진을 동화책 스타일 일러스트로 변환하는 기능입니다.
+사진 속 피사체를 분석한 뒤, 분석 결과를 바탕으로 gpt-image-1 이미지 생성 프롬프트를 자동 구성합니다.
+
+> #### 전체 파이프라인 흐름
+
+```mermaid
+flowchart TD
+    A["사용자 사진 업로드"] --> B["S3 업로드 + Image 저장"]
+    B --> C{"분석 파이프라인 선택<br>USE_YOLO_PIPELINE"}
+
+    C -->|Cloud| D["GPT-4o Vision 단독 분석<br>피사체·장면·외형 묘사"]
+
+    C -->|Local| E["YOLOv8n 객체 탐지<br>dog_count / person 감지"]
+    E --> F["Qwen2.5-VL-3B 시각 언어 모델<br>장면·외형 상세 묘사"]
+    F --> G["YOLO + VLM 결과 병합<br>PhotoValidationResult"]
+
+    D --> H["프롬프트 빌더<br>build_photo_illustration_prompt()"]
+    G --> H
+
+    H --> I["gpt-image-1<br>1024×1024 일러스트 생성"]
+    I --> J["S3 업로드 + DB 저장"]
+    J --> K["그림일기 만들기 플로우 연결"]
+```
+
+> #### 이중 분석 파이프라인
+
+사진 **분석** 단계에서 Cloud / Local 두 가지 파이프라인을 환경 변수로 전환할 수 있습니다.
+이미지 생성은 두 경로 모두 gpt-image-1 을 사용합니다.
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>구분</th>
+      <th>Cloud (기본)</th>
+      <th>Local</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>환경 변수</td>
+      <td><code>USE_YOLO_PIPELINE=false</code></td>
+      <td><code>USE_YOLO_PIPELINE=true</code></td>
+    </tr>
+    <tr>
+      <td>사진 분석</td>
+      <td>GPT-4o Vision 단독</td>
+      <td>YOLOv8n 탐지 + Qwen2.5-VL-3B 묘사</td>
+    </tr>
+    <tr>
+      <td>장점</td>
+      <td>추가 인프라 불필요, 높은 묘사 정확도</td>
+      <td>GPU 서버 활용 시 API 비용 절감, 오프라인 분석 가능</td>
+    </tr>
+    <tr>
+      <td>이미지 생성</td>
+      <td>gpt-image-1</td>
+      <td>gpt-image-1 (동일)</td>
+    </tr>
+  </tbody>
+</table>
+
+> #### 분석 결과 → 프롬프트 구성
+
+분석 결과는 `PhotoValidationResult` 로 통일되며, 아래 정보를 포함합니다.
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>필드</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>dog_count</code></td>
+      <td>감지된 강아지 수 (0~N)</td>
+    </tr>
+    <tr>
+      <td><code>has_person</code></td>
+      <td>사람 존재 여부</td>
+    </tr>
+    <tr>
+      <td><code>scene_description</code></td>
+      <td>장면 묘사 (배경, 상황)</td>
+    </tr>
+    <tr>
+      <td><code>dog_visual_descriptions</code></td>
+      <td>강아지별 외형 묘사 리스트</td>
+    </tr>
+    <tr>
+      <td><code>person_visual_description</code></td>
+      <td>사람 외형 묘사</td>
+    </tr>
+  </tbody>
+</table>
+
+프롬프트 빌더(`build_photo_illustration_prompt`)는 강아지 수·사람 유무 조합에 따라 주어·구도·얼굴 규칙을 자동으로 분기하며, 한국-일본풍 동화책 스타일(구아슈+색연필 질감, 파스텔 팔레트) 규칙을 공통으로 적용합니다.
+
+<br />
+
+## 4.6. 반려견 프로필 Vision 분석
+
+온보딩 시 등록한 반려견 프로필 사진을 GPT-4o Vision 으로 분석하여, 사진에서만 파악 가능한 시각적 외형 정보를 구조화된 JSON 으로 추출합니다.
+이 분석 결과는 이후 모든 그림일기 이미지 생성 시 **반려견 외형 일관성 유지**에 활용됩니다.
+
+> #### Vision 분석이 추출하는 보조 정보
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>카테고리</th>
+      <th>추출 항목</th>
+      <th>예시</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>fur</code> (털)</td>
+      <td>주 색상, 부 색상, 패턴, 길이, 질감</td>
+      <td>"크림 베이지", "곱슬", "미디엄"</td>
+    </tr>
+    <tr>
+      <td><code>face</code> (얼굴)</td>
+      <td>눈 색상·형태, 코 색상, 입 특이사항</td>
+      <td>"진한 갈색 둥근 눈", "검정 코"</td>
+    </tr>
+    <tr>
+      <td><code>ears</code> (귀)</td>
+      <td>형태, 크기</td>
+      <td>"반쫑긋", "medium"</td>
+    </tr>
+    <tr>
+      <td><code>distinctive_markings</code></td>
+      <td>동일 외형 재현에 필수적인 시각 단서</td>
+      <td>"가슴에 V자 흰털", "네 발 끝 흰 양말"</td>
+    </tr>
+    <tr>
+      <td><code>character_sheet</code></td>
+      <td><code>english_prompt</code> + <code>must_include_keywords</code></td>
+      <td>이미지 생성 모델에 직접 주입할 영문 외형 프롬프트</td>
+    </tr>
+  </tbody>
+</table>
+
+> #### 그림일기 이미지 생성으로의 전달 경로
+
+```text
+프로필 사진 등록
+  → GPT-4o Vision 분석
+  → pet_profiles.profile_json 저장
+      ├── character_sheet.english_prompt
+      └── character_sheet.must_include_keywords
+
+그림일기 생성 시:
+  diary_response_service
+  → pet.profile.profile_json 에서 english_prompt 추출
+  → DiaryPromptBuilder.build_final_image_prompt() 에 주입
+  → 견종 기본 묘사 대신 실제 외형 프롬프트 사용
+  → gpt-image-1 이미지 생성
+```
+
+`english_prompt` 가 존재하면 견종명 기반의 일반 묘사(`one adorable poodle`) 대신 실제 분석된 외형(`cream-colored curly medium-length fur, round dark brown eyes, floppy ears, V-shaped white patch on chest`) 이 프롬프트에 들어가므로, 같은 반려견의 일기 이미지가 매번 일관된 외형으로 생성됩니다.
+
 ---
 
 <div align="center">
@@ -1396,6 +1563,137 @@ Navbar
   ```
 
 </div>
+
+> #### Flutter 모바일 앱 (Android)
+
+웹 서비스의 핵심 기능을 Android 네이티브 앱으로 포팅한 모바일 클라이언트입니다.
+운영 API (`https://withdog.kro.kr/api`) 를 그대로 재사용하며, Flutter 3.41 + Riverpod 상태 관리 기반으로 구현했습니다.
+
+> #### 기술 스택
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>분류</th>
+      <th>기술</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Framework</td>
+      <td>Flutter 3.41 / Dart</td>
+    </tr>
+    <tr>
+      <td>상태 관리</td>
+      <td>Riverpod (StateNotifier + Provider)</td>
+    </tr>
+    <tr>
+      <td>네트워크</td>
+      <td>Dio (토큰 자동 갱신 인터셉터)</td>
+    </tr>
+    <tr>
+      <td>OAuth</td>
+      <td>flutter_appauth (구글) / flutter_inappwebview (카카오·네이버)</td>
+    </tr>
+    <tr>
+      <td>이미지</td>
+      <td>image_picker (카메라·갤러리) / cached_network_image</td>
+    </tr>
+    <tr>
+      <td>지도</td>
+      <td>InAppWebView 기반 카카오 지도 연동</td>
+    </tr>
+  </tbody>
+</table>
+
+> #### 포팅된 주요 기능
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>기능</th>
+      <th>설명</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>소셜 로그인</td>
+      <td>카카오·구글·네이버 3사 OAuth (구글: 시스템 브라우저, 카카오·네이버: WebView)</td>
+    </tr>
+    <tr>
+      <td>온보딩</td>
+      <td>보호자 프로필 + 반려견 정보 + 성격 태그 등록</td>
+    </tr>
+    <tr>
+      <td>홈 미니 챗봇</td>
+      <td>홈 탭 하단 간소화 입력 바 → 텍스트 입력 후 챗봇 탭으로 자동 이동하여 대화 시작</td>
+    </tr>
+    <tr>
+      <td>AI 챗봇</td>
+      <td>의도분류 기반 대화 (그림일기·장소추천·시설정보·일상대화)</td>
+    </tr>
+    <tr>
+      <td>그림일기</td>
+      <td>챗봇 대화 → 텍스트 일기 + 이미지 생성 → 앨범·캘린더 조회</td>
+    </tr>
+    <tr>
+      <td>사진 → 그림</td>
+      <td>사진 촬영/선택 → 동화책 스타일 변환 → 그림일기 만들기 연결</td>
+    </tr>
+    <tr>
+      <td>장소 추천</td>
+      <td>AI 기반 반려견 동반 장소 추천 + 카카오 지도</td>
+    </tr>
+    <tr>
+      <td>경로 찾기</td>
+      <td>현재 위치 → 장소까지 경로 조회 + 지도 Polyline 표시, 카카오맵·네이버지도 앱 연동</td>
+    </tr>
+    <tr>
+      <td>다이어리</td>
+      <td>즐겨찾기 일기 캘린더 조회 + 날짜별 감정 이모지 표시 + 월별 감정 통계</td>
+    </tr>
+    <tr>
+      <td>마이페이지</td>
+      <td>보호자·반려견 프로필 관리, 반려견 추가 등록</td>
+    </tr>
+  </tbody>
+</table>
+
+> #### 인앱 알림
+
+모바일 앱에서는 그림일기 생성 완료, 사진 변환 완료, 일기 작성 리마인더 등의 인앱 알림을 지원합니다.
+알림은 SharedPreferences 기반 로컬 저장이며, 7일 경과 시 자동 삭제됩니다.
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>알림 유형</th>
+      <th>트리거</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>diaryReminder</code></td>
+      <td>하루 한 번 일기 작성 리마인더</td>
+    </tr>
+    <tr>
+      <td><code>diarySaved</code></td>
+      <td>그림일기 저장 완료</td>
+    </tr>
+    <tr>
+      <td><code>imageGenerated</code></td>
+      <td>AI 이미지 생성 완료</td>
+    </tr>
+    <tr>
+      <td><code>photoStyleDone</code></td>
+      <td>사진 → 그림 변환 완료</td>
+    </tr>
+    <tr>
+      <td><code>favoriteAdded</code></td>
+      <td>즐겨찾기 등록</td>
+    </tr>
+  </tbody>
+</table>
 
 ---
 
@@ -1854,53 +2152,402 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 
 ## 7.3. AI 그림일기
 
-그림일기 QA는 생성 이미지의 품질을 점검하고, 저품질 결과를 개선하기 위한 평가 흐름입니다.  
-현재 자동 QA는 CLIP 기반 피사체·스타일 유사도와 YOLOv8n 보조 검출을 함께 사용하며, 수동 QA로 왜곡·스타일 불일치·프롬프트 누락 요소를 병행 점검합니다.
+생성 이미지의 품질을 자동으로 측정하고, 저품질 결과를 사전 필터링하기 위한 CV + LLM 하이브리드 평가 시스템입니다.
+139장의 사람 평가 정답(Ground Truth)을 기준으로 7차에 걸쳐 개선하였습니다.
 
 <br />
 
-### 품질 등급
+> #### 품질 등급 (L0~L5)
 
-생성된 이미지는 품질 상태에 따라 `Lv0~Lv5` 등급으로 분류합니다.
+생성된 이미지는 품질 상태에 따라 `L0~L5` 등급으로 분류합니다.
 
 <table width="100%">
   <thead>
     <tr>
       <th>등급</th>
+      <th>점수</th>
       <th>의미</th>
+      <th>설명</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>Lv0</td>
-      <td>생성 실패 또는 주요 피사체 인식 실패</td>
+      <td>L0</td>
+      <td>0~2점</td>
+      <td>생성 실패</td>
+      <td>이미지 생성 실패, 저장 실패, 이미지 손상, 형태 식별 불가</td>
     </tr>
     <tr>
-      <td>Lv1</td>
-      <td>저품질 이미지</td>
+      <td>L1</td>
+      <td>3~6점</td>
+      <td>사용 불가</td>
+      <td>강아지 미검출, 강아지 수 오류, 심한 왜곡, 멀티패널, 텍스트 삽입 등 치명 오류</td>
     </tr>
     <tr>
-      <td>Lv2</td>
-      <td>기본 조건을 충족한 이미지</td>
+      <td>L2</td>
+      <td>7~10점</td>
+      <td>매우 미흡</td>
+      <td>강아지는 보이나 얼굴/다리/배경/스타일 오류가 많아 그림일기로 쓰기 어려움</td>
     </tr>
     <tr>
-      <td>Lv3</td>
-      <td>배경과 스타일이 안정적인 이미지</td>
+      <td>L3</td>
+      <td>11~13점</td>
+      <td>미흡</td>
+      <td>기본 장면은 보이나 프롬프트 반영, 배경, 선명도, 스타일 완성도가 부족함</td>
     </tr>
     <tr>
-      <td>Lv4</td>
-      <td>강아지와 사람의 상호작용이 표현된 이미지</td>
+      <td>L4</td>
+      <td>14~16점</td>
+      <td>보통</td>
+      <td>강아지와 장면이 대체로 자연스럽고, 그림일기 스타일로 활용 가능</td>
     </tr>
     <tr>
-      <td>Lv5</td>
-      <td>서비스 적용에 적합한 완성도 높은 이미지</td>
+      <td>L5</td>
+      <td>17~18점</td>
+      <td>우수</td>
+      <td>강아지 외형, 장면, 스타일, 배경, 프롬프트 반영이 모두 우수하고 치명 오류 없음</td>
     </tr>
   </tbody>
 </table>
 
 <br />
 
-> #### QA 방식
+> #### 캡 규칙 (치명 오류 → 최대 레벨 강제)
+
+총점과 무관하게 치명 오류가 있으면 해당 등급 이하로 강제 분류합니다.
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>치명 오류</th>
+      <th>최대 레벨</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>이미지 생성 실패 / 강아지 없음</td>
+      <td>L0</td>
+    </tr>
+    <tr>
+      <td>강아지 1마리 아님 / 멀티패널·분할 화면</td>
+      <td>L1</td>
+    </tr>
+    <tr>
+      <td>심한 얼굴·다리 왜곡</td>
+      <td>L2</td>
+    </tr>
+    <tr>
+      <td>텍스트 삽입 / 프롬프트 핵심 장면 불일치</td>
+      <td>L3 이하</td>
+    </tr>
+  </tbody>
+</table>
+
+<br />
+
+> #### 평가 항목 18종 — 평가기별 실제 모델 적용
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>카테고리</th>
+      <th>item_key</th>
+      <th>체크 항목</th>
+      <th>CV7</th>
+      <th>LLM4</th>
+      <th>Hybrid</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>피사체</td>
+      <td><code>dog_visible</code></td>
+      <td>강아지가 명확히 검출되는가</td>
+      <td>CLIP cosine diff (θ=0.020)</td>
+      <td>GPT-4o</td>
+      <td><b>CV</b></td>
+    </tr>
+    <tr>
+      <td>피사체</td>
+      <td><code>face_clear</code></td>
+      <td>강아지 얼굴이 왜곡 없이 선명한가</td>
+      <td>CLIP ¹</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>피사체</td>
+      <td><code>no_duplicate_face_parts</code></td>
+      <td>눈·코·귀가 중복 생성되지 않았는가</td>
+      <td>기본값 1 ²</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>피사체</td>
+      <td><code>no_extra_legs</code></td>
+      <td>다리가 추가 생성되지 않았는가</td>
+      <td>기본값 1 ²</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>피사체</td>
+      <td><code>one_dog</code></td>
+      <td>강아지가 정확히 1마리인가</td>
+      <td>YOLOv8 ³</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>구도</td>
+      <td><code>no_mirror</code></td>
+      <td>반사/거울 이미지가 없는가</td>
+      <td>기본값 1 ²</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>구도</td>
+      <td><code>no_multi_panel</code></td>
+      <td>단일 장면인가</td>
+      <td>OpenCV Hough Lines</td>
+      <td>GPT-4o</td>
+      <td><b>CV</b></td>
+    </tr>
+    <tr>
+      <td>스타일</td>
+      <td><code>pastel_style</code></td>
+      <td>파스텔 그림책 스타일인가</td>
+      <td>CLIP ⁴</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>스타일</td>
+      <td><code>no_realistic_rendering</code></td>
+      <td>사실적 렌더링이 혼입되지 않았는가</td>
+      <td>CLIP ⁴</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>사람</td>
+      <td><code>human_prompt_consistency</code></td>
+      <td>사람 표현이 보호자 설명과 일치하는가</td>
+      <td>— (null)</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>사람</td>
+      <td><code>human_face_clear</code></td>
+      <td>사람 얼굴이 왜곡되지 않았는가</td>
+      <td>— (null)</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>프롬프트</td>
+      <td><code>prompt_reflected</code></td>
+      <td>프롬프트 장면이 반영되었는가</td>
+      <td>CLIP 활동 키워드 (18종)</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>배경</td>
+      <td><code>brightness_ok</code></td>
+      <td>밝기가 적절한가</td>
+      <td>OpenCV 평균 밝기 (55~215)</td>
+      <td>GPT-4o</td>
+      <td><b>CV</b></td>
+    </tr>
+    <tr>
+      <td>배경</td>
+      <td><code>sharpness_ok</code></td>
+      <td>충분히 선명한가</td>
+      <td>OpenCV Laplacian (≥80)</td>
+      <td>GPT-4o</td>
+      <td><b>CV</b></td>
+    </tr>
+    <tr>
+      <td>배경</td>
+      <td><code>pastel_color_ok</code></td>
+      <td>파스텔 색감 범위 내인가</td>
+      <td>OpenCV HSV 채도 (20~165) ⁴</td>
+      <td>GPT-4o</td>
+      <td><b>CV</b></td>
+    </tr>
+    <tr>
+      <td>배경</td>
+      <td><code>time_palette_ok</code></td>
+      <td>주간/야간 팔레트가 일치하는가</td>
+      <td>OpenCV 밝기 + 시간 키워드</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>배경</td>
+      <td><code>place_context_ok</code></td>
+      <td>배경 장소가 활동과 일치하는가</td>
+      <td>CLIP 장소 키워드 (13종)</td>
+      <td>GPT-4o</td>
+      <td><b>LLM</b></td>
+    </tr>
+    <tr>
+      <td>기타</td>
+      <td><code>no_text</code></td>
+      <td>텍스트가 삽입되지 않았는가</td>
+      <td>EasyOCR</td>
+      <td>GPT-4o</td>
+      <td><b>CV</b></td>
+    </tr>
+  </tbody>
+</table>
+
+> ¹ CLIP face_clear는 정밀도가 낮아 Hybrid에서 LLM으로 대체
+> ² GT 139장에서 전수 통과 확인 → 평가 미수행, 기본값 1 처리
+> ³ YOLOv8은 파스텔 일러스트에서 인식률이 낮아 Hybrid에서 LLM으로 대체
+> ⁴ 139장 전체에서 동일 점수 → 현재 데이터셋 내 변별력 없음, 데이터 확장 시 재평가 필요
+> Hybrid: `dog_visible=0` 시 LLM 호출 스킵 (비용 최적화)
+> Hybrid 구성: CV 6개 항목 (객관 측정) + LLM 12개 항목 (주관 판단)
+
+<br />
+
+> #### 평가기 성능 비교 (139장 기준)
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>평가기</th>
+      <th>평가 항목 수</th>
+      <th align="right">정확 일치율</th>
+      <th align="right">±1 등급 정확도</th>
+      <th align="right">평균 오차 (MAE)</th>
+      <th>편향</th>
+      <th align="right">API 비용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CV7 단독</td>
+      <td>16개</td>
+      <td align="right">28.1%</td>
+      <td align="right"><b>79.1%</b></td>
+      <td align="right"><b>0.99</b></td>
+      <td>-0.18 (약간 과소평가)</td>
+      <td align="right"><b>$0</b></td>
+    </tr>
+    <tr>
+      <td>LLM4 단독 (GPT-4o)</td>
+      <td>18개</td>
+      <td align="right">34.5%</td>
+      <td align="right">71.2%</td>
+      <td align="right">1.08</td>
+      <td>+0.68 (과대평가)</td>
+      <td align="right">$1.58</td>
+    </tr>
+    <tr>
+      <td><b>Hybrid (CV7 + LLM4)</b></td>
+      <td><b>18개</b> (CV 6 + LLM 12)</td>
+      <td align="right"><b>37.4%</b></td>
+      <td align="right">72.7%</td>
+      <td align="right">1.07</td>
+      <td>+0.53 (과대평가)</td>
+      <td align="right">$1.10</td>
+    </tr>
+  </tbody>
+</table>
+
+> Hybrid는 LLM의 과대평가 경향이 유입되면서 ±1 정확도는 CV7보다 하락하지만, 정확 일치율은 세 평가기 중 최고. CV7의 과소평가와 LLM4의 과대평가가 상호 보정되어 정확 일치에서 이점을 가짐.
+
+<br />
+
+> #### 사용 모델
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>모델</th>
+      <th>용도</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CLIP (ViT-B-32)</td>
+      <td>강아지 검출, 스타일 분류, 프롬프트·장소 키워드 매칭</td>
+    </tr>
+    <tr>
+      <td>YOLOv8-nano</td>
+      <td>강아지 수 카운팅 (보조)</td>
+    </tr>
+    <tr>
+      <td>GPT-4o Vision</td>
+      <td>주관적 항목 12종 평가 (LLM / Hybrid)</td>
+    </tr>
+    <tr>
+      <td>EasyOCR</td>
+      <td>이미지 내 텍스트 검출</td>
+    </tr>
+    <tr>
+      <td>OpenCV</td>
+      <td>밝기, 선명도(Laplacian), 색감(HSV), 분할선(Hough Lines)</td>
+    </tr>
+  </tbody>
+</table>
+
+<br />
+
+> #### GT 점수 분포 (139장)
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>등급</th>
+      <th align="right">이미지 수</th>
+      <th align="right">비율</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>L0</td>
+      <td align="right">0장</td>
+      <td align="right">0%</td>
+    </tr>
+    <tr>
+      <td>L1</td>
+      <td align="right">6장</td>
+      <td align="right">4.3%</td>
+    </tr>
+    <tr>
+      <td>L2</td>
+      <td align="right">26장</td>
+      <td align="right">18.7%</td>
+    </tr>
+    <tr>
+      <td>L3</td>
+      <td align="right">21장</td>
+      <td align="right">15.1%</td>
+    </tr>
+    <tr>
+      <td>L4</td>
+      <td align="right">42장</td>
+      <td align="right">30.2%</td>
+    </tr>
+    <tr>
+      <td>L5</td>
+      <td align="right">44장</td>
+      <td align="right">31.7%</td>
+    </tr>
+  </tbody>
+</table>
+
+> 평균 총점: 13.81 / 18점. L0이 0장인 이유는 평가셋이 생성 성공 이미지만 수집한 결과.
+
+<br />
+
+> #### 사용자 가치
 
 <table width="100%">
   <thead>
@@ -1911,12 +2558,83 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
   </thead>
   <tbody>
     <tr>
-      <td>자동 QA</td>
-      <td>CLIP 기반 피사체/스타일 유사도와 YOLOv8n 보조 검출, 배경 품질 지표를 결합해 Lv0~Lv5 등급으로 분류.</td>
+      <td>저품질 필터링</td>
+      <td>L0~L2 이미지를 자동 감지하여 서비스 노출 전 차단</td>
     </tr>
     <tr>
-      <td>수동 QA</td>
-      <td>생성 이미지를 사람이 직접 확인해 왜곡·스타일 불일치·프롬프트 누락 요소를 기록하고, 자동 QA의 평가 기준을 만드는 근거 자료로 활용.</td>
+      <td>품질 모니터링</td>
+      <td>수동 QA 없이 생성 품질을 정량적으로 추적</td>
+    </tr>
+    <tr>
+      <td>비용 효율</td>
+      <td>Hybrid 평가기로 비용 30% 절감 ($1.58 → $1.10) 하면서 최고 정확 일치율 달성</td>
+    </tr>
+  </tbody>
+</table>
+
+<br />
+
+> #### 향후 개선 방향
+
+현재 Hybrid는 18개 항목 중 CV 6개 / LLM 12개로 구성되어 LLM 의존도가 높습니다.
+비전 모델을 단계적으로 도입하여 CV 커버리지를 확대하고, LLM 호출량과 비용을 줄이는 방향입니다.
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>도입 모델</th>
+      <th>대상 항목</th>
+      <th>기대 효과</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>동물 자세 추정 (AnimalPose 등) + 커스텀 keypoint 학습</td>
+      <td><code>no_duplicate_face_parts</code>, <code>no_extra_legs</code></td>
+      <td>기본값 1 → 실측 평가 전환</td>
+    </tr>
+    <tr>
+      <td>경량 VLM (Qwen2.5-VL 등)</td>
+      <td><code>no_mirror</code>, <code>human_prompt_consistency</code>, <code>pastel_style</code>, <code>time_palette_ok</code>, <code>place_context_ok</code></td>
+      <td>LLM 전용 5개 항목 → CV로 이관</td>
+    </tr>
+    <tr>
+      <td>얼굴 검출 (MediaPipe 등)</td>
+      <td><code>human_face_clear</code></td>
+      <td>null → 사람 얼굴 왜곡 실탐지</td>
+    </tr>
+    <tr>
+      <td>CLIP ViT-L-14</td>
+      <td><code>no_realistic_rendering</code>, <code>prompt_reflected</code></td>
+      <td>비전형 견종·스타일 인식 정밀도 향상</td>
+    </tr>
+    <tr>
+      <td>PaddleOCR</td>
+      <td><code>no_text</code></td>
+      <td>EasyOCR 대비 인식률 개선 검토</td>
+    </tr>
+  </tbody>
+</table>
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>과제</th>
+      <th>내용</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CV 항목 확대</td>
+      <td>현재 6 / 18 → 단계적으로 CV 커버리지 확대, LLM 호출량 절감</td>
+    </tr>
+    <tr>
+      <td>저품질 변별력 강화</td>
+      <td>GT=L1~L2 이미지를 과대평가하는 문제(13건)가 주요 오차 원인, 해당 영역 우선 개선</td>
+    </tr>
+    <tr>
+      <td>등급 경계 보정</td>
+      <td>총점 → 등급 변환 함수를 데이터 기반으로 세밀화하여 정확 일치율 향상</td>
     </tr>
   </tbody>
 </table>
@@ -2819,8 +3537,8 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
     </tr>
     <tr>
       <td>**Phase 2** (6개월)</td>
-      <td>모바일 앱 출시 · MAU 1만</td>
-      <td>푸시 알림, 소셜 공유, 오프라인 파트너 연동</td>
+      <td>사용자 확장</td>
+      <td>MAU 1만, 푸시 알림, 소셜 공유, 오프라인 파트너 연동</td>
     </tr>
     <tr>
       <td>**Phase 3** (1년)</td>
