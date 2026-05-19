@@ -4,7 +4,7 @@ routers/diary_photo_router.py
 ------------------------------
 POST /api/diary/photo-style
 
-사진 업로드 -> 분석(GPT-4o Vision 또는 YOLO+VLM) -> DALL-E 그림체 변환 -> S3 업로드 -> URL 반환.
+사진 업로드 -> 분석(GPT-4o Vision 또는 YOLO+VLM) -> gpt-image-1 그림체 변환 -> S3 업로드 -> URL 반환.
 
 USE_YOLO_PIPELINE=true  → YOLO 객체검출 + Qwen2.5-VL 분석
 USE_YOLO_PIPELINE=false → GPT-4o Vision 분석 (기본값)
@@ -231,9 +231,9 @@ async def photo_style(
             person_visual_descriptions=person_descs,
         )
 
-    # 6. DALL-E 이미지 생성
+    # 6. gpt-image-1 이미지 생성
     try:
-        dalle_response = await _get_client().images.generate(
+        img_response = await _get_client().images.generate(
             model=settings.GPT_IMAGE_MODEL,
             prompt=image_prompt,
             size="1024x1024",
@@ -241,10 +241,10 @@ async def photo_style(
             n=1,
         )
     except Exception as e:
-        logger.error(f"[photo_style] DALL-E 생성 실패: {e}")
+        logger.error(f"[photo_style] 이미지 생성 실패: {e}")
         raise HTTPException(status_code=500, detail="이미지 생성 중 오류가 발생했어요.")
 
-    b64 = dalle_response.data[0].b64_json
+    b64 = img_response.data[0].b64_json
     if not b64:
         raise HTTPException(status_code=500, detail="이미지 생성 결과가 비어 있어요.")
 

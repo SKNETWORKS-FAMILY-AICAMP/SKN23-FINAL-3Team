@@ -376,7 +376,7 @@ _api_router.include_router(eval_router.router,          prefix="/eval",       ta
 # 길찾기 (Kakao Mobility Directions)
 _api_router.include_router(directions_router.router,    prefix="/directions", tags=["Directions"])
 
-# 사진 그림체 변환 (YOLO + VLM + DALL-E)
+# 사진 그림체 변환 (YOLO + VLM + gpt-image-1)
 _api_router.include_router(diary_photo_router.router,   prefix="/diary",      tags=["AI Diary"])
 
 app.include_router(_api_router)

@@ -573,4 +573,10 @@ ai/eval_data/
 # 평가셋 엑셀 (용량 초과)
 data/eval/*.xlsx
 
+# 이미지 평가 — 모델 가중치 (대용량)
+ai/eval/image_eval/models/*.pt
+ai/eval/image_eval/models/*.pth
+ai/eval/image_eval/models/*.bin
+ai/eval/image_eval/models/*.onnx
+
 # ========== 개인 ==============
