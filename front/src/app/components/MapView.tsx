@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, Navigation, Phone } from 'lucide-react';
+import { LocateFixed, Star } from 'lucide-react';
 import type { PlaceResult } from '../services/placeService';
+import { togglePlaceFavorite, getPlaceFavorites } from '../services/placeService';
+import PlaceDetailCard from './PlaceDetailCard';
+import PlaceBadges from './PlaceBadges';
 
 declare global {
   interface Window {
@@ -13,21 +16,73 @@ interface Props {
   places: PlaceResult[];
   onUsePlace: (place: PlaceResult) => void;
   initialSelectedId?: string;
+  userLocation?: { lat: number; lng: number };
 }
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.9780 };
 
-export default function MapView({ places, onUsePlace, initialSelectedId }: Props) {
+export default function MapView({ places, onUsePlace, initialSelectedId, userLocation }: Props) {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(initialSelectedId ?? null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    getPlaceFavorites()
+      .then((items) => setFavoriteIds(new Set(items.map((i) => i.content_id))))
+      .catch(() => {});
+  }, []);
+
+  const handleToggleFavorite = async (contentId: string) => {
+    console.log('[Star] clicked, content_id:', contentId);
+    if (!contentId) {
+      alert('content_id가 없습니다: ' + String(contentId));
+      return;
+    }
+    if (togglingIds.has(contentId)) return;
+    setTogglingIds((prev) => new Set(prev).add(contentId));
+    const wasFavorite = favoriteIds.has(contentId);
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      wasFavorite ? next.delete(contentId) : next.add(contentId);
+      return next;
+    });
+    try {
+      await togglePlaceFavorite(contentId);
+    } catch (err) {
+      alert('즐겨찾기 오류: ' + String(err));
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        wasFavorite ? next.add(contentId) : next.delete(contentId);
+        return next;
+      });
+    } finally {
+      setTogglingIds((prev) => { const next = new Set(prev); next.delete(contentId); return next; });
+    }
+  };
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const infoWindowRef = useRef<any>(null);
   const relayoutTimerRef = useRef<number | null>(null);
+  const userOverlayRef = useRef<any>(null);
+  const defaultMarkerRef = useRef<any>(null);
+  const hasInitialCenteredRef = useRef(false);
+  const userLocationRef = useRef(userLocation);
 
   const clearMarkers = () => {
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current = [];
+  };
+
+  const clearDefaultMarker = () => {
+    if (defaultMarkerRef.current) {
+      defaultMarkerRef.current.setMap(null);
+      defaultMarkerRef.current = null;
+    }
   };
 
   const fitMapToPlaces = () => {
@@ -57,6 +112,45 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
     mapInstanceRef.current.relayout();
   };
 
+  const renderUserOverlay = (loc: { lat: number; lng: number }) => {
+    if (!mapInstanceRef.current || !window.kakao?.maps) return;
+
+    if (userOverlayRef.current) {
+      userOverlayRef.current.setMap(null);
+    }
+
+    const position = new window.kakao.maps.LatLng(loc.lat, loc.lng);
+    const content = `
+      <div style="
+        width:16px;height:16px;border-radius:50%;
+        background:#4285F4;border:3px solid white;
+        box-shadow:0 0 0 4px rgba(66,133,244,0.25);
+      "></div>`;
+    userOverlayRef.current = new window.kakao.maps.CustomOverlay({
+      position,
+      content,
+      map: mapInstanceRef.current,
+      zIndex: 10,
+    });
+  };
+
+  useEffect(() => {
+    userLocationRef.current = userLocation;
+  }, [userLocation]);
+
+  const handleGpsClick = () => {
+    if (!userLocation) {
+      setGpsError('위치 권한을 허용해주세요.');
+      setTimeout(() => setGpsError(null), 3000);
+      return;
+    }
+    if (mapInstanceRef.current && window.kakao?.maps) {
+      renderUserOverlay(userLocation);
+      mapInstanceRef.current.setCenter(new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng));
+      mapInstanceRef.current.setLevel(5);
+    }
+  };
+
   const renderMarkers = () => {
     if (!mapInstanceRef.current || !window.kakao?.maps) {
       return;
@@ -69,23 +163,21 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
     }
 
     if (places.length === 0) {
-      const defaultPosition = new window.kakao.maps.LatLng(
-        DEFAULT_CENTER.lat,
-        DEFAULT_CENTER.lng,
-      );
-
-      mapInstanceRef.current.setCenter(defaultPosition);
-      mapInstanceRef.current.setLevel(7);
-
-      const defaultMarker = new window.kakao.maps.Marker({
-        map: mapInstanceRef.current,
-        position: defaultPosition,
-        title: '기본 위치',
-      });
-
-      markersRef.current.push(defaultMarker);
+      // GPS 미허용일 때만 서울시청 마커 표시
+      if (!userLocationRef.current) {
+        const defaultPosition = new window.kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        mapInstanceRef.current.setCenter(defaultPosition);
+        mapInstanceRef.current.setLevel(7);
+        defaultMarkerRef.current = new window.kakao.maps.Marker({
+          map: mapInstanceRef.current,
+          position: defaultPosition,
+          title: '서울시청',
+        });
+      }
       return;
     }
+
+    clearDefaultMarker();
 
     places.forEach((place) => {
       if (!place.lat || !place.lng) return;
@@ -115,9 +207,15 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
       }
 
       window.kakao.maps.load(() => {
+        const initLoc = userLocationRef.current;
+        const initCenter = initLoc
+          ? new window.kakao.maps.LatLng(initLoc.lat, initLoc.lng)
+          : new window.kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        const initLevel = initLoc ? 5 : 7;
+
         mapInstanceRef.current = new window.kakao.maps.Map(mapRef.current, {
-          center: new window.kakao.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng),
-          level: 7,
+          center: initCenter,
+          level: initLevel,
         });
 
         infoWindowRef.current = new window.kakao.maps.InfoWindow({
@@ -125,6 +223,17 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
         });
 
         renderMarkers();
+
+        // GPS가 이미 있으면 즉시 파란 점 그리기 + 초기 센터링 완료 표시
+        const loc = userLocationRef.current;
+        if (loc) {
+          const pos = new window.kakao.maps.LatLng(loc.lat, loc.lng);
+          const content = `<div style="width:16px;height:16px;border-radius:50%;background:#4285F4;border:3px solid white;box-shadow:0 0 0 4px rgba(66,133,244,0.25);"></div>`;
+          userOverlayRef.current = new window.kakao.maps.CustomOverlay({ position: pos, content, map: mapInstanceRef.current, zIndex: 10 });
+          hasInitialCenteredRef.current = true;
+        }
+
+        setMapReady(true);
       });
     };
     waitForKakao();
@@ -136,6 +245,21 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
     setSelectedPlaceId(null);
     renderMarkers();
   }, [places]);
+
+  useEffect(() => {
+    if (!userLocation || !mapInstanceRef.current) return;
+    renderUserOverlay(userLocation);
+
+    // 처음 위치가 잡히는 순간 서울시청 마커 제거 + 지도 중심 이동
+    if (!hasInitialCenteredRef.current && window.kakao?.maps) {
+      clearDefaultMarker();
+      mapInstanceRef.current.setCenter(
+        new window.kakao.maps.LatLng(userLocation.lat, userLocation.lng),
+      );
+      mapInstanceRef.current.setLevel(5);
+      hasInitialCenteredRef.current = true;
+    }
+  }, [userLocation, mapReady]);
 
   useEffect(() => {
     if (!mapInstanceRef.current) {
@@ -229,11 +353,24 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
         <div className="min-w-0">
           <div className="space-y-4 rounded-[24px] border border-[#F2E7DD] bg-white p-4 shadow-sm md:p-5">
             <div
-              className={`overflow-hidden rounded-2xl border border-[#EDE3DA] transition-all duration-300 ${
+              className={`relative overflow-hidden rounded-2xl border border-[#EDE3DA] transition-all duration-300 ${
                 selectedPlace ? 'h-[480px]' : 'h-[640px]'
               }`}
             >
               <div ref={mapRef} className="h-full w-full" />
+              <button
+                type="button"
+                onClick={handleGpsClick}
+                title="현재 위치로 이동"
+                className="absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md hover:bg-gray-50"
+              >
+                <LocateFixed className={`h-5 w-5 ${userLocation ? 'text-blue-500' : 'text-gray-400'}`} />
+              </button>
+              {gpsError && (
+                <div className="absolute bottom-16 right-4 z-10 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 shadow">
+                  {gpsError}
+                </div>
+              )}
             </div>
 
             <div>
@@ -283,13 +420,8 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
                       >
                         <div className="text-base font-semibold text-gray-800">📍 {item.name}</div>
                         <div className="mt-1 text-sm text-gray-600">{item.address}</div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
-                          {item.category && <span>{item.category}</span>}
-                          {item.sub_category && <span>{item.sub_category}</span>}
-                          {item.indoor === 'Y' && <span>실내</span>}
-                          {item.outdoor === 'Y' && <span>실외</span>}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <PlaceBadges place={item} variant="simple" />
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => (isActive ? handleCloseDetail() : handleSelectPlace(itemId))}
@@ -308,6 +440,18 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
                           >
                             이 장소로 일기 쓰기 →
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFavorite(item.content_id)}
+                            disabled={togglingIds.has(item.content_id)}
+                            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F4845F] transition hover:bg-[#e8764f] active:scale-95 disabled:opacity-50"
+                          >
+                            <Star
+                              className="h-5 w-5"
+                              fill={favoriteIds.has(item.content_id) ? 'white' : 'none'}
+                              stroke="white"
+                            />
+                          </button>
                         </div>
                       </div>
                     );
@@ -320,121 +464,18 @@ export default function MapView({ places, onUsePlace, initialSelectedId }: Props
 
         {selectedPlace && (
           <div className="min-w-0">
-            <div className="overflow-hidden rounded-[28px] border border-[#F2E7DD] bg-white shadow-sm">
-              {selectedPlace.image || selectedPlace.firstimage ? (
-                <img
-                  src={selectedPlace.image || selectedPlace.firstimage}
-                  alt={selectedPlace.name}
-                  className="h-[200px] w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-[200px] w-full items-center justify-center bg-[#F6EFE8] text-5xl">
-                  🐾
-                </div>
-              )}
-
-              <div className="border-b border-[#F5EAE1] p-5">
-                <div className="text-2xl font-bold text-[#2F241D]">{selectedPlace.name}</div>
-                <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-                  <MapPin className="h-4 w-4" />
-                  <span>{selectedPlace.address}</span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {selectedPlace.category && (
-                    <span className="rounded-md bg-[#F6EFE8] px-2.5 py-1 text-xs font-medium text-[#8A6A58]">
-                      {selectedPlace.category}
-                    </span>
-                  )}
-                  {selectedPlace.sub_category && (
-                    <span className="rounded-md bg-[#F6EFE8] px-2.5 py-1 text-xs font-medium text-[#8A6A58]">
-                      {selectedPlace.sub_category}
-                    </span>
-                  )}
-                  {selectedPlace.indoor === 'Y' && (
-                    <span className="rounded-md bg-[#EFF6FF] px-2.5 py-1 text-xs font-medium text-blue-600">
-                      실내 가능
-                    </span>
-                  )}
-                  {selectedPlace.outdoor === 'Y' && (
-                    <span className="rounded-md bg-[#F0FDF4] px-2.5 py-1 text-xs font-medium text-green-600">
-                      실외 가능
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-6 px-5 py-5">
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">이용조건</div>
-                  <p className="text-sm leading-7 text-gray-700">
-                    {selectedPlace.conditions || '제한사항 없음'}
-                  </p>
-                </section>
-
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">운영시간</div>
-                  <p className="whitespace-pre-wrap text-sm text-gray-700">
-                    {selectedPlace.operation || '정보 없음'}
-                  </p>
-                </section>
-
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">반려견 이용 정보</div>
-                  <div className="space-y-1 text-sm text-gray-700">
-                    <p>반려견 구역: {selectedPlace.pet_zone || '정보 없음'}</p>
-                    <p>크기 제한: {selectedPlace.pet_size || '정보 없음'}</p>
-                    <p>주차: {selectedPlace.has_parking === 'Y' ? '가능' : '정보 없음'}</p>
-                  </div>
-                </section>
-
-                {selectedPlace.tel && (
-                  <section>
-                    <div className="mb-3 text-base font-bold text-[#2F241D]">매장 연락처</div>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-gray-700">{selectedPlace.tel}</p>
-                      <a
-                        href={`tel:${selectedPlace.tel}`}
-                        className="inline-flex items-center gap-1 rounded-full border border-pink-200 px-4 py-2 text-sm font-medium text-pink-500 hover:bg-pink-50"
-                      >
-                        <Phone className="h-4 w-4" />
-                        전화하기
-                      </a>
-                    </div>
-                  </section>
-                )}
-
-                <section>
-                  <div className="mb-3 text-base font-bold text-[#2F241D]">매장 위치</div>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-gray-700">{selectedPlace.address}</p>
-                    <a
-                      href={`https://map.kakao.com/link/search/${encodeURIComponent(selectedPlace.name)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-full border border-pink-200 px-4 py-2 text-sm font-medium text-pink-500 hover:bg-pink-50"
-                    >
-                      <Navigation className="h-4 w-4" />
-                      길찾기
-                    </a>
-                  </div>
-                </section>
-
-                {selectedPlace.description && (
-                  <section>
-                    <div className="mb-3 text-base font-bold text-[#2F241D]">장소 설명</div>
-                    <p className="text-sm leading-7 text-gray-700">{selectedPlace.description}</p>
-                  </section>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => onUsePlace(selectedPlace)}
-                  className="w-full rounded-2xl bg-[#F08A4B] py-3 text-sm font-bold text-white hover:bg-[#E67D3C]"
-                >
-                  이 장소로 일기 쓰기 →
-                </button>
-              </div>
-            </div>
+            <PlaceDetailCard
+              place={selectedPlace}
+              variant="panel"
+              showImage
+              showPetInfo
+              showDescription
+              showLocationSection
+              isFavorite={favoriteIds.has(selectedPlace.content_id)}
+              onToggleFavorite={() => handleToggleFavorite(selectedPlace.content_id)}
+              favoriteToggling={togglingIds.has(selectedPlace.content_id)}
+              onSelectForDiary={() => onUsePlace(selectedPlace)}
+            />
           </div>
         )}
       </div>

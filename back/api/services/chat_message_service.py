@@ -99,10 +99,10 @@ async def create_message_with_response(
     db: AsyncSession,
     current_user_id: int,
     request: Request | None = None,
-) -> tuple[ChatMessage, ChatMessage, IntentResult, dict | None]:
+) -> tuple[ChatMessage, ChatMessage, IntentResult, dict | None, list[dict] | None]:
     """
         사용자 메시지를 저장하고, 의도분류 → 도메인 서비스 디스패치를 거쳐
-        assistant 응답 메시지를 저장한 뒤 세 값을 함께 반환합니다.
+        assistant 응답 메시지를 저장한 뒤 관련 카드 페이로드와 함께 반환합니다.
 
         [처리 흐름]
             1. 채팅방 소유권/존재 확인 + 제목 자동 생성
@@ -124,7 +124,7 @@ async def create_message_with_response(
                 current_user_id: 현재 로그인 사용자 ID
 
         Returns:
-                (user_message, assistant_message, intent_result)
+                (user_message, assistant_message, intent_result, facility, places)
 
         Raises:
                 HTTPException 403: 본인 채팅방 아님
@@ -181,7 +181,14 @@ async def create_message_with_response(
             strategy=intent_service.RAG_STRATEGY_MAP.get("다이어리 작성", {}),
         )
 
-    ctx = chat_response_service.DispatchContext(user_id=current_user_id, db=db, room_id=room_id)
+    ctx = chat_response_service.DispatchContext(
+        user_id=current_user_id,
+        db=db,
+        room_id=room_id,
+        pet_id=data.pet_id,
+        user_lat=data.user_lat,
+        user_lng=data.user_lng,
+    )
     dispatch_result = await chat_response_service.dispatch(
         intent_result,
         data.content,
@@ -190,6 +197,7 @@ async def create_message_with_response(
     )
     assistant_text = dispatch_result.text or "죄송해요, 응답을 만들지 못했어요. 잠시 후 다시 시도해주세요."
     facility = dispatch_result.facility
+    places = dispatch_result.places
 
     # 3) assistant 메시지 저장
     assistant_message = ChatMessage(
@@ -205,7 +213,7 @@ async def create_message_with_response(
     await db.flush()
     await db.refresh(assistant_message)
 
-    return user_message, assistant_message, intent_result, facility
+    return user_message, assistant_message, intent_result, facility, places
 
 
 async def list_messages(

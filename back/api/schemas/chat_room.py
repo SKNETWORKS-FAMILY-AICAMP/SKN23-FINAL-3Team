@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from utils.validation import clean_text
 
 
 class ChatRoomCreate(BaseModel):
@@ -21,15 +23,27 @@ class ChatRoomCreate(BaseModel):
 
     title: str | None = Field(
         None,
-        max_length=200,
-        description="채팅방 제목 (미입력 시 첫 메시지 내용으로 자동 설정)",
+        description="채팅방 제목 (0~50자, 미입력 시 자동. 욕설 검사는 service 단)",
     )
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _clean_title(cls, v: str | None) -> str | None:
+        return clean_text(v, min_length=0, max_length=50, label="채팅방 제목", allow_blank=True)
 
 
 class ChatRoomUpdateTitle(BaseModel):
     """채팅방 제목 수정 요청."""
 
-    title: str = Field(..., min_length=1, max_length=200, description="새 채팅방 제목")
+    title: str = Field(..., description="새 채팅방 제목 (1~50자, 욕설 검사는 service 단)")
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _clean_title(cls, v: str) -> str:
+        cleaned = clean_text(v, min_length=1, max_length=50, label="채팅방 제목")
+        # required 필드 — clean_text 가 None 반환할 일은 없음 (str 만 들어옴)
+        assert cleaned is not None
+        return cleaned
 
 
 class ChatRoomResponse(BaseModel):

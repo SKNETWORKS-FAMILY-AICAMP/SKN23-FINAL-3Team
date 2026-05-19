@@ -5,6 +5,9 @@ import { OAuthCallbackPage } from "./pages/OAuthCallbackPage";
 import Step2Page from "./pages/Step2Page";
 import MyPage from "./pages/MyPage";
 import CalendarPage from "./pages/CalendarPage";
+import PlaceFavoritesPage from "./pages/PlaceFavoritesPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { TermsPage } from "./pages/TermsPage";
 import { RootLayout } from "./layouts/RootLayout";
 
 export const router = createBrowserRouter([
@@ -17,8 +20,11 @@ export const router = createBrowserRouter([
       { path: "login", Component: LoginPage },
       { path: "oauth/callback", Component: OAuthCallbackPage },
       { path: "calendar", Component: CalendarPage },
+      { path: "place-favorites", Component: PlaceFavoritesPage },
       { path: "step", Component: Step2Page },
       { path: "mypage", Component: MyPage },
+      { path: "privacy", Component: PrivacyPage },
+      { path: "terms", Component: TermsPage },
     ],
   },
 ]);

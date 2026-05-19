@@ -1,13 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { Send, LogIn, Lock, X, Phone, Navigation } from 'lucide-react'
+import { Send, LogIn, Lock, X, Phone, Navigation, ImageIcon } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import type { Pet } from '../types'
 import { useChatbot } from '../hooks/useChatbot'
 import { DIARY_TYPES } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
-import { generateDiaryImage, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, sendMessageWithResponse, updateMessageContent, type FacilityCard } from '../services/chatService'
-import { searchPlaces, type PlaceResult } from '../services/placeService'
+import { generateDiaryImage, photoStyle, type GeneratedDiary } from '../services/diaryService'
+import { createChatRoom, sendMessageWithResponse, getPlaceByName, type FacilityCard } from '../services/chatService'
+import type { PlaceResult } from '../services/placeService'
 
 const BUTTONS_MARKER = '%%BUTTONS%%'
 const DIARY_FLOW_TRIGGER = '%%TRIGGER:START_DIARY%%'
@@ -45,20 +45,6 @@ function renderBotText(content: string): React.ReactNode {
       </span>
     )
   })
-}
-
-// 표시된 장소 목록을 DB 저장용 텍스트로 포맷 (history에서 파싱 가능한 형식)
-function formatPlacesForStorage(places: PlaceResult[]): string {
-  const lines = ['반려견과 함께 가보기 좋은 장소를 정리했어요.', '']
-  places.forEach((place, i) => {
-    lines.push(`${i + 1}. ${place.name}`)
-    lines.push(`- 주소: ${place.address}`)
-    if (place.reason) lines.push(`- 추천 이유: ${place.reason}`)
-    if (place.content_id) lines.push(`- _id: ${place.content_id}`)
-    lines.push('')
-  })
-  lines.push('장소 이름을 누르면 상세 정보를 확인할 수 있어요.')
-  return lines.join('\n')
 }
 
 function splitPlaceMessage(text: string) {
@@ -117,6 +103,7 @@ function renderPlaceMessage(
     has_parking: string
     reason?: string
   }>,
+  onPlaceClick?: (name: string) => void,
 ) {
   const blocks = splitPlaceMessage(text)
   const fallbackIntro = blocks[0]
@@ -131,9 +118,18 @@ function renderPlaceMessage(
             {places.map((place, index) => {
               return (
                 <div key={`${place.name}-${index}`} className="space-y-1">
-                  <p className="font-semibold text-[#2F241D]">
-                    {index + 1}. {place.name}
-                  </p>
+                  {onPlaceClick ? (
+                    <button
+                      onClick={() => onPlaceClick(place.name)}
+                      className="font-semibold text-[#F4845F] underline underline-offset-2 hover:text-[#e8764f] text-left"
+                    >
+                      {index + 1}. {place.name} 📍
+                    </button>
+                  ) : (
+                    <p className="font-semibold text-[#2F241D]">
+                      {index + 1}. {place.name}
+                    </p>
+                  )}
                   <p>- 주소: {place.address}</p>
                   <p>- 추천 이유: {place.reason || buildFallbackPlaceReason(place)}</p>
                 </div>
@@ -154,7 +150,7 @@ function renderPlaceMessage(
   )
 }
 
-function renderFacilityMessage(text: string, facility?: FacilityCard) {
+function renderFacilityMessage(text: string, facility?: FacilityCard, onShowOnMap?: () => void) {
   const lines = text.split('\n').map((l) => l.trim())
 
   return (
@@ -186,6 +182,14 @@ function renderFacilityMessage(text: string, facility?: FacilityCard) {
         <p className="pt-1 text-[12px] text-[#A89282]">
           (추정 매칭이라 다른 시설일 수 있어요. 정확한 이름을 알려주시면 다시 찾아드릴게요.)
         </p>
+      )}
+      {onShowOnMap && facility && (
+        <button
+          onClick={onShowOnMap}
+          className="mt-1 flex items-center gap-1 rounded-full border border-[#F4845F] px-3 py-1 text-[12px] font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
+        >
+          📍 지도에서 보기
+        </button>
       )}
     </div>
   )
@@ -225,6 +229,7 @@ interface Props {
   diaryTrigger?: number
   diaryPlace?: string
   initialMessage?: string
+  userLocation?: { lat: number; lng: number }
 }
 
 const DEFAULT_PET: Pet = { name: '우리 아이', breed: '강아지' }
@@ -239,17 +244,22 @@ export default function ChatBot({
   diaryTrigger,
   diaryPlace,
   initialMessage,
+  userLocation,
 }: Props) {
   const navigate = useNavigate()
   const isLoggedIn = !!localStorage.getItem('access_token')
 
   const { state, actions } = useChatbot(pet, initialMessage)
-  const { step, messages, isGenerating, generatedDiary } = state
+  const { step, messages, isGenerating, generatedDiary, photoStyleImageUrl } = state
   const [inputValue, setInputValue] = useState('')
   const [imageLoading, setImageLoading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
   const [welcomeChatRoomId, setWelcomeChatRoomId] = useState<number | null>(null)
-  const [selectedChatPlace, setSelectedChatPlace] = useState<PlaceResult | null>(null)
+  // welcome 단계 sendMessageWithResponse (KoELECTRA + GPT) 응답 대기 동안 input·send 차단 — race·중복 응답 방지
+  const [isResponding, setIsResponding] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
   const storedPetId = Number(localStorage.getItem('selected_pet_id'))
   const selectedPetId = pet.id ?? (Number.isFinite(storedPetId) && storedPetId > 0 ? storedPetId : undefined)
 
@@ -277,6 +287,7 @@ export default function ChatBot({
 
   // welcome 스텝에서 백엔드 AI 채팅 호출
   const sendWelcomeMessage = async (text: string) => {
+    setIsResponding(true)
     try {
       let roomId = welcomeChatRoomId
       if (roomId === null) {
@@ -284,7 +295,7 @@ export default function ChatBot({
         roomId = room.id
         setWelcomeChatRoomId(roomId)
       }
-      const result = await sendMessageWithResponse(roomId, text, selectedPetId)
+      const result = await sendMessageWithResponse(roomId, text, selectedPetId, userLocation?.lat, userLocation?.lng)
       const intent = result.intent.intent
       const botText = result.assistant_message.content
 
@@ -304,19 +315,9 @@ export default function ChatBot({
           actions.receiveBotMessage(botText)
         }
       } else if (intent === '장소추천') {
-        let places: PlaceResult[] = []
-        try {
-          places = await searchPlaces({ query: text, pet_id: selectedPetId })
-          onPlacesFound?.(places)
-        } catch {
-          onPlacesFound?.([])
-        }
+        const places = result.places ?? []
+        onPlacesFound?.(places)
         actions.receiveBotMessage(botText, undefined, 'place', places)
-        // 화면에 표시된 장소 목록과 DB 저장 내용을 동기화 (채팅 기록과 일치)
-        if (places.length > 0 && roomId !== null && result.assistant_message.id) {
-          const formatted = formatPlacesForStorage(places)
-          updateMessageContent(roomId, result.assistant_message.id, formatted).catch(() => { })
-        }
         setTimeout(() => onNavigateToMap?.(), 800)
       } else if (intent === '시설정보') {
         const facility = result.facility
@@ -333,6 +334,8 @@ export default function ChatBot({
       }
     } catch {
       actions.receiveBotMessage('죄송해요, 지금은 응답을 만들지 못했어요. 다시 시도해주세요.')
+    } finally {
+      setIsResponding(false)
     }
   }
 
@@ -348,6 +351,7 @@ export default function ChatBot({
   }, [diaryTrigger])
 
   const handleSubmitText = () => {
+    if (isResponding || isGenerating) return
     const trimmed = inputValue.trim()
     if (!trimmed) return
     if (step === 'main_questions') actions.submitMainAnswer(trimmed)
@@ -381,6 +385,42 @@ export default function ChatBot({
     onNavigateToDiary?.()
   }
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // 이전 preview URL 해제 후 새로 생성
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+    setPhotoPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handlePhotoCancelPreview = () => {
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+    setPhotoPreviewUrl(null)
+    if (photoInputRef.current) photoInputRef.current.value = ''
+  }
+
+  const handlePhotoUpload = async () => {
+    const file = photoInputRef.current?.files?.[0]
+    if (!file) return
+
+    handlePhotoCancelPreview()           // preview 닫기
+    setPhotoUploading(true)
+    actions.addPhotoBotMsg('사진을 분석하고 그림체로 변환 중이에요... 🎨\n잠깐만 기다려주세요!')
+
+    try {
+      const result = await photoStyle(file, welcomeChatRoomId ?? undefined, selectedPetId)
+      if (result.type === 'bot_text') {
+        actions.addPhotoBotMsg(result.content)
+      } else {
+        actions.addPhotoBotMsg(result.content, result.imageUrl)
+      }
+    } catch {
+      actions.addPhotoBotMsg('사진 변환 중 오류가 발생했어요. 다시 시도해주세요.')
+    } finally {
+      setPhotoUploading(false)
+    }
+  }
+
   return (
     <div className="relative flex h-full flex-col rounded-[20px] overflow-hidden bg-[#FFF8F3]">
       {/* 메시지 목록 */}
@@ -388,7 +428,13 @@ export default function ChatBot({
         {messages.map((msg) => {
           const { text: displayText, buttons: inlineButtons } = parseMessageButtons(msg.content)
           return (
-            <div key={msg.id} className={`max-w-[88%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+            <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              {msg.role === 'bot' && (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center mb-0.5">
+                  <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-8 w-8 object-contain" />
+                </div>
+              )}
+              <div className={`max-w-[80%]`}>
               <div
                 className={`rounded-2xl px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap ${msg.role === 'bot'
                   ? 'bg-white text-[#3D2B1F] shadow-sm'
@@ -397,12 +443,42 @@ export default function ChatBot({
               >
                 {msg.role === 'bot'
                   ? (msg.variant === 'place'
-                      ? renderPlaceMessage(displayText, msg.places)
+                      ? renderPlaceMessage(displayText, msg.places, async (name) => {
+                          try {
+                            const facility = await getPlaceByName(name)
+                            const place = facilityToPlaceResult(facility)
+                            onPlacesFound?.([place])
+                            setTimeout(() => onNavigateToMap?.(), 100)
+                          } catch { /* 장소를 찾지 못한 경우 무시 */ }
+                        })
                       : msg.variant === 'facility'
-                        ? renderFacilityMessage(displayText, msg.facility)
+                        ? renderFacilityMessage(displayText, msg.facility, msg.facility ? () => {
+                            const place = facilityToPlaceResult(msg.facility!)
+                            onPlacesFound?.([place])
+                            setTimeout(() => onNavigateToMap?.(), 100)
+                          } : undefined)
                         : renderBotText(displayText))
                   : displayText}
+                {msg.imageUrl && (
+                  <img
+                    src={msg.imageUrl}
+                    alt="그림일기 변환 이미지"
+                    className="mt-2 w-full rounded-xl object-cover"
+                  />
+                )}
               </div>
+              {/* 사진→그림 변환 후 그림일기 만들기 버튼 */}
+              {msg.imageUrl && step === 'welcome' && (
+                <button
+                  onClick={() => {
+                    actions.startPhotoDiary(msg.imageUrl!)
+                    onNavigateToDiary?.()
+                  }}
+                  className="mt-2 rounded-full border border-[#F4845F] bg-[#F4845F] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+                >
+                  그림일기 만들기
+                </button>
+              )}
               {/* 백엔드 %%BUTTONS%% 인라인 버튼 */}
               {inlineButtons.length > 0 && (
                 <div className="flex flex-wrap gap-2 pt-2">
@@ -432,6 +508,7 @@ export default function ChatBot({
                   그림일기 작성하기
                 </button>
               )}
+              </div>
             </div>
           )
         })}
@@ -453,15 +530,17 @@ export default function ChatBot({
         )}
 
         {/* 웰컴 버튼: 말풍선 바로 아래 인라인 */}
-        {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && (
-          <div className="flex flex-wrap gap-2 pt-1">
+        {step === 'welcome' && isLoggedIn && !messages.some(m => m.role === 'user') && !photoUploading && !messages.some(m => m.imageUrl) && (
+          <div className="flex flex-wrap gap-2 pt-1 pl-10">
             <button
+              data-tour="diary-button"
               onClick={handleStartDiary}
               className="rounded-full border border-[#F4845F] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#F4845F] transition hover:bg-[#FFF7F3]"
             >
               그림일기
             </button>
             <button
+              data-tour="place-button"
               onClick={() => {
                 actions.submitWelcomeChat('반려견과 함께 가기 좋은 장소를 추천해줘')
                 sendWelcomeMessage('반려견과 함께 가기 좋은 장소를 추천해줘')
@@ -476,13 +555,22 @@ export default function ChatBot({
         {/* 일기 완성 후 인라인 버튼 */}
         {step === 'diary_result' && generatedDiary && (
           <div className="flex flex-wrap gap-2 pt-1">
-            <button
-              onClick={handleGenerateImage}
-              disabled={imageLoading}
-              className="rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f] disabled:opacity-60"
-            >
-              {imageLoading ? '그림 그리는 중... 🎨' : '그림일기로 만들어줘'}
-            </button>
+            {photoStyleImageUrl ? (
+              <button
+                onClick={() => onDiaryReady?.(generatedDiary, photoStyleImageUrl)}
+                className="rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f]"
+              >
+                그림일기 완성하기
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerateImage}
+                disabled={imageLoading}
+                className="rounded-full border border-[#F4845F] bg-[#F4845F] px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:bg-[#e8764f] disabled:opacity-60"
+              >
+                {imageLoading ? '그림 그리는 중... 🎨' : '그림일기로 만들어줘'}
+              </button>
+            )}
             <button
               onClick={actions.restartDiary}
               className="rounded-full border border-[#F5D6C8] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#8B6355] transition hover:bg-[#FFF0E6]"
@@ -578,25 +666,74 @@ export default function ChatBot({
             </div>
           )}
 
-          {/* 텍스트 입력창 */}
+          {/* 사진 미리보기 + 전송 */}
+          {step === 'welcome' && photoPreviewUrl && (
+            <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+              <div className="relative shrink-0">
+                <img
+                  src={photoPreviewUrl}
+                  alt="선택한 사진"
+                  className="h-14 w-14 rounded-xl object-cover border border-[#F5D6C8]"
+                />
+                <button
+                  onClick={handlePhotoCancelPreview}
+                  className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#8B6355] text-white text-[10px] leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="flex-1 text-xs text-[#8B6355]">반려동물이나 보호자가 담긴 사진을 그림으로 바꿔드려요!</p>
+              <button
+                onClick={handlePhotoUpload}
+                disabled={photoUploading}
+                className="shrink-0 rounded-xl bg-[#F4845F] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                {photoUploading ? '변환 중...' : '변환하기'}
+              </button>
+            </div>
+          )}
+
+          {/* 텍스트 입력창 — 응답 진행 중 (welcome 의 KoELECTRA+GPT 또는 다이어리 generating) 입력 차단 */}
           {(step === 'welcome' || step === 'main_questions' || step === 'additional_questions') && (
             <div className="flex items-center gap-2 p-3">
+              {step === 'welcome' && (
+                <>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                  <button
+                    data-tour="photo-upload"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={photoUploading}
+                    title="강아지+보호자 사진을 그림체로 변환"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#F5D6C8] bg-white text-[#C4A99A] transition hover:border-[#F4845F] hover:text-[#F4845F] disabled:opacity-40"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </button>
+                </>
+              )}
               <input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
+                    if (isResponding || isGenerating) return
                     handleSubmitText()
                   }
                 }}
-                placeholder="편하게 말씀해주세요..."
-                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F]"
+                disabled={isResponding || isGenerating}
+                placeholder={isResponding || isGenerating ? '응답 받는 중...' : '편하게 말씀해주세요...'}
+                className="flex-1 rounded-xl border border-[#F5D6C8] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#F4845F] disabled:cursor-not-allowed disabled:bg-[#FFF8F3] disabled:text-[#B08B7A]"
               />
               <button
                 onClick={handleSubmitText}
-                disabled={!inputValue.trim()}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F4845F] text-white disabled:opacity-40"
+                disabled={!inputValue.trim() || isResponding || isGenerating}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F4845F] text-white transition disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -605,120 +742,6 @@ export default function ChatBot({
         </>}
       </div>
 
-      {/* 장소 상세 모달 */}
-      {selectedChatPlace && (
-        <div
-          className="absolute inset-0 z-20 flex flex-col bg-white rounded-[20px] overflow-hidden"
-          style={{ top: 0, left: 0 }}
-        >
-          {/* 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#F5D6C8] bg-[#FFF8F3]">
-            <button
-              onClick={() => setSelectedChatPlace(null)}
-              className="flex items-center gap-1.5 text-sm text-[#8B6355] hover:text-[#3D2B1F] transition-colors"
-            >
-              <X className="h-4 w-4" />
-              돌아가기
-            </button>
-            <span className="text-sm font-bold text-[#3D2B1F] truncate max-w-[60%] text-center">{selectedChatPlace.name}</span>
-            <div className="w-16" />
-          </div>
-
-          {/* 내용 */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 text-sm text-[#3D2B1F]">
-            {/* 이름 + 태그 */}
-            <div>
-              <p className="text-lg font-bold">{selectedChatPlace.name}</p>
-              <div className="flex flex-wrap gap-1.5 mt-1.5">
-                {selectedChatPlace.category && (
-                  <span className="rounded-full bg-[#FFF0E6] px-2.5 py-0.5 text-xs text-[#F4845F] font-medium">{selectedChatPlace.category}</span>
-                )}
-                {selectedChatPlace.sub_category && (
-                  <span className="rounded-full bg-[#FFF0E6] px-2.5 py-0.5 text-xs text-[#F4845F] font-medium">{selectedChatPlace.sub_category}</span>
-                )}
-                {selectedChatPlace.indoor === 'Y' && (
-                  <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-500 font-medium">실내 가능</span>
-                )}
-              </div>
-            </div>
-
-            {/* 이용조건 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-              <p className="text-xs font-bold text-[#8B6355]">이용조건</p>
-              <p className="text-sm">{selectedChatPlace.conditions || '제한사항 없음'}</p>
-            </div>
-
-            {/* 운영시간 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-              <p className="text-xs font-bold text-[#8B6355]">운영시간</p>
-              <p className="text-sm">{selectedChatPlace.operation || '정보 없음'}</p>
-            </div>
-
-            {/* 반려견 정보 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-              <p className="text-xs font-bold text-[#8B6355]">반려견 이용 정보</p>
-              <p>반려견 구역: {selectedChatPlace.pet_zone || '정보 없음'}</p>
-              <p>크기 제한: {selectedChatPlace.pet_size || '모두 가능'}</p>
-              <p>주차: {selectedChatPlace.has_parking === 'Y' ? '가능' : '정보 없음'}</p>
-            </div>
-
-            {/* 전화 */}
-            {selectedChatPlace.tel && (
-              <div className="rounded-xl bg-[#FFF8F3] p-3 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-[#8B6355]">매장 연락처</p>
-                  <p className="text-sm mt-0.5">{selectedChatPlace.tel}</p>
-                </div>
-                <a
-                  href={`tel:${selectedChatPlace.tel}`}
-                  className="flex items-center gap-1 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
-                >
-                  <Phone className="h-3 w-3" />
-                  전화하기
-                </a>
-              </div>
-            )}
-
-            {/* 위치 */}
-            <div className="rounded-xl bg-[#FFF8F3] p-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-[#8B6355]">매장 위치</p>
-                <p className="text-sm mt-0.5">{selectedChatPlace.address}</p>
-              </div>
-              <a
-                href={`https://map.kakao.com/link/search/${encodeURIComponent(selectedChatPlace.name)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] hover:bg-[#FFF0E6] transition-colors"
-              >
-                <Navigation className="h-3 w-3" />
-                길찾기
-              </a>
-            </div>
-
-            {/* 장소 설명 */}
-            {selectedChatPlace.description && (
-              <div className="rounded-xl bg-[#FFF8F3] p-3 space-y-1">
-                <p className="text-xs font-bold text-[#8B6355]">장소 설명</p>
-                <p className="text-sm leading-6">{selectedChatPlace.description}</p>
-              </div>
-            )}
-          </div>
-
-          {/* 하단 버튼 */}
-          <div className="px-4 py-3 border-t border-[#F5D6C8] bg-[#FFF8F3]">
-            <button
-              onClick={() => {
-                if (_onSelectPlace) _onSelectPlace(selectedChatPlace)
-                setSelectedChatPlace(null)
-              }}
-              className="w-full rounded-xl bg-[#F4845F] py-3 text-sm font-bold text-white hover:bg-[#e8764f] transition-colors"
-            >
-              이 장소로 일기 쓰기 →
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

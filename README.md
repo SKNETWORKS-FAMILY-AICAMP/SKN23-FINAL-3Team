@@ -22,26 +22,6 @@
     </tr>
     <tr>
       <td style="text-align:center;">
-        서비스 기획 · 화면 설계<br/>
-        프론트엔드(UX/UI)<br/>
-        LLM 개발 (그림일기)<br/>
-        발표
-      </td>
-      <td style="text-align:center;">
-      계정 및 리소스 결제 관리<br/>
-      서버 구축 및 관리<br/>
-      RDB 설계 및 관리<br/>
-      FastAPI 구축 및 백엔드 개발<br/>
-      LLM (의도분류) · ML (의도분류)
-      </td>
-      <td style="text-align:center;">
-        데이터 수집 · 정제<br/>
-        벡터DB<br/>
-        LLM 개발 (RAG, 장소 추천)
-      </td>
-    </tr>
-    <tr>
-      <td style="text-align:center;">
         <a href="https://github.com/OOOONBBOWQ">
           <img src="https://img.shields.io/badge/OOOONBBOWQ-181717?style=flat-square&logo=github&logoColor=white"/>
         </a>
@@ -57,15 +37,67 @@
         </a>
       </td>
     </tr>
+    <tr>
+      <td style="text-align: center;">
+        서비스 기획<br/>
+        화면 설계 및 구현<br/>
+        모바일 앱 개발<br/>
+        AI 그림일기 생성·평가 플로우 설계 및 개발<br/>
+        이미지 생성 프롬프트 최적화<br/>
+        S3 이미지 저장 연동
+      </td>
+      <td style="text-align: center;">
+        계정 및 리소스 결제 관리<br/>
+        서버 구축 및 관리<br/>
+        RDB 설계 및 관리<br/>
+        FastAPI 구축 및 백엔드 개발<br/>
+        프론트엔드 웹 개발<br/>
+        모바일 앱 개발<br/>
+        LLM 의도분류 모델 개발
+      </td>
+      <td style="text-align: center;">
+        데이터 수집 및 정제<br/>
+        벡터DB 설계 및 관리<br/>
+        장소 추천 RAG 파이프라인 개발<br/>
+        Query Parsing 및 추천 재정렬 로직 개발<br/>
+        성향분석·추천 이유 생성 로직 개발<br/>
+        장소 추천 평가셋 구축 및 성능 평가
+      </td>
+    </tr>
   </table>
 
   <br />
 
-  ---
+---
 
   <br />
 
   <img src="./assets/logo.png" alt="logo"/>
+
+  <br />
+
+  <table align="center">
+    <tr>
+      <td align="center"><b>기간</b></td>
+      <td>2026-03-26 ~ 2026-05-20 (38일)</td>
+    </tr>
+    <tr>
+      <td align="center"><b>소속</b></td>
+      <td>SKN AI 부트캠프 SKN23기 5차/FINAL 프로젝트</td>
+    </tr>
+    <tr>
+      <td align="center"><b>멘토</b></td>
+      <td>조수현 (신한카드 Data Scientist)</td>
+    </tr>
+    <tr>
+      <td align="center"><b>운영 도메인</b></td>
+      <td><a href="https://withdog.kro.kr">https://withdog.kro.kr</a></td>
+    </tr>
+    <tr>
+      <td align="center"><b>API 문서</b></td>
+      <td><a href="https://withdog.kro.kr/api/docs">https://withdog.kro.kr/api/docs</a> (Swagger UI)</td>
+    </tr>
+  </table>
 
   <br />
 
@@ -140,7 +172,7 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
     ├── MySQL DB 적재 (배치 1,000건 단위)
     └── ChromaDB 벡터화 적재 (ko-sroberta-multitask, 배치 50건 단위)
   ```
-    ▎ 최종 유효 장소: 21,130건 (2026-04-27 측정)
+    ▎ 최종 유효 장소: 22,042건 (한국문화정보원 + 한국관광공사 Tour API 통합)
 
 > #### 주요 전처리 시스템 및 스키마
 
@@ -185,8 +217,8 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 
   **최종 적재 현황**
 
-  - MySQL DB: 21,130건
-  - ChromaDB 벡터: 21,130건 (컬렉션명: dog_places)
+  - MySQL DB: 22,042건
+  - ChromaDB 벡터: 22,042건 (컬렉션명: dog_places)
 
   **카테고리별 적재 분포**
 
@@ -215,6 +247,16 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 
 </div>
 
+> #### RAG / LLM 모델 아키텍처
+
+<div align="center">
+
+  <img src="./assets/RAG_LLM_모델 아키텍처 설계.png" alt="RAG / LLM 모델 아키텍처 설계" width="100%" />
+
+</div>
+
+<br />
+
   | 기능 | 설명 | 핵심 기술 |
   | --- | --- | --- |
   | 1. 챗봇 의도분류 | 사용자 입력을 분석해 다이어리 작성, 장소추천, 시설정보, 기타 응답으로 라우팅합니다. | KoELECTRA Fine-tuning, FastAPI, Intent Routing |
@@ -234,7 +276,8 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 | 분류 클래스 | 다이어리 작성 / 장소추천 / 시설정보 / 기타 |
 | 학습 설정 | epochs=5, batch=16, lr=3e-5, max_length=128 |
 | 평가 지표 | Accuracy, Classification Report, per-class F1 |
-| 학습 결과 | **Accuracy 0.9848** (488 샘플, 5 epoch — 출처: `학습.txt`, gitignore 처리) |
+| 학습 데이터 | 1,117 샘플 (4 카테고리 — 다이어리 작성 / 장소추천 / 시설정보 / 기타) |
+| 학습 결과 | **Accuracy 0.9955** (2026-04-28 GPU 재학습, RTX 3050, 5 epoch, epoch 3 베스트 저장) |
 | 모델 저장 | `ai/intent/model/` |
 | 서비스 구조 | 메인 FastAPI 서버와 별도 포트에서 의도 분류 API 실행 |
 
@@ -384,13 +427,21 @@ KoELECTRA 의도분류
     ↓
 chat_response_service._handle_places()
     ↓
-성향 타입 분류
+QueryParser 조건 파싱
     ↓
-검색 쿼리 결정
+RDB 후보 필터링 / 위치 기반 반경 후보 생성
     ↓
-ChromaDB RAG 벡터 검색
+ChromaDB 의미 검색
+일반 질문: 자유 검색
+근처·GPS 질문: 반경 후보 안 재순위
+    ↓
+rule_score + rag_score 결합
+    ↓
+후보 최대 20개 확보
     ↓
 반려견/보호자 성향 기반 재순위
+    ↓
+상위 5개 선택
     ↓
 GPT-4.1-mini 추천 메시지 생성
     ↓
@@ -417,20 +468,26 @@ owner_tags
 
 태그가 없는 경우에는 타입 분류 없이 `None`으로 처리하고 추천을 진행합니다.
 
-> #### Step 2 — 검색 쿼리 결정
+> #### Step 2 — 쿼리 파싱 및 RDB 후보 필터링
 
 ```text
-user_query가 있으면  → 사용자 입력 그대로 사용
-user_query가 없으면  → owner_tags를 공백으로 join하여 사용
-둘 다 없으면       → "반려견 동반 가능한 장소" 기본값 사용
+사용자 입력
+  → QueryParser
+  → objective 조건 추출
+      - 지역 / 장소유형 / 실내외 / 주차 / 시간 / GPS / landmark
+  → subjective 조건 추출
+      - 조용한 / 넓은 / 분위기 좋은 / 산책하기 좋은 등
+  → RDB 후보 필터링
 ```
 
-> #### Step 3 — RAG 벡터 검색
+RDB 후보 필터링은 SQL 조건 기반으로 후보를 좁히는 단계입니다. 6차 평가 이후 기본 후보 상한을 500개로 확대했고, 장소 유형 텍스트 필터 결과가 5개 미만이면 원본 후보를 유지해 과도한 후보 손실을 방지합니다. `근처`, `주변`, `내 주변`처럼 위치가 핵심인 질문은 1km → 2km → 3km 순으로 반경을 넓혀 거리 후보를 먼저 만들고, 이후 검색도 이 후보 안에서 재정렬합니다.
 
-사용자 검색 쿼리를 임베딩한 뒤 ChromaDB에서 의미적으로 가까운 장소를 검색합니다.
+> #### Step 3 — ChromaDB 의미 검색
+
+사용자 검색 쿼리를 임베딩한 뒤 ChromaDB에서 의미적으로 가까운 장소를 검색합니다. `subjective` 조건이 있으면 이를 우선 사용하고, 비어 있으면 사용자 원문 전체를 사용합니다.
 
 ```text
-query
+subjective or raw_query
   → Embedder.embed()
   → query embedding
   → ChromaDB.query()
@@ -438,7 +495,7 @@ query
   → 코사인 유사도 기반 places[] 반환
 ```
 
-검색 시 필요한 경우 아래 필터를 함께 사용할 수 있습니다.
+검색 시 필요한 경우 아래 조건을 함께 사용할 수 있습니다.
 
 ```text
 category
@@ -446,11 +503,11 @@ city
 district
 ```
 
-`QueryParser` 가 사용자 자유 입력에서 객관 조건 11키(지역·카테고리·반경·시간·실내외 등)를 분리해 위 필터로 매핑하며, "강남역 근처 5km" 같은 landmark 표현은 좌표 + 반경 검색으로 변환합니다 (2026-04-26 회귀 라운드 보강).
+6차 평가 이후 일반 combined 모드에서는 ChromaDB 후보를 RDB 후보 안으로 제한하지 않습니다. 따라서 객관 조건 기반 RDB 검색과 의미 기반 ChromaDB 검색이 각각 후보 품질을 보완하고, 이후 점수 계산에서 결합됩니다. 다만 `경복궁 근처`, `서울역 주변`, `내 주변`처럼 위치 의도가 핵심인 질문은 반경 후보 안에서만 ChromaDB 재순위를 수행해 거리 조건을 우선 보존합니다.
 
 > #### Step 4 — 반려견/보호자 성향 기반 재순위
 
-하이브리드 검색으로 가져온 장소 후보에 대해 반려견 성향과 보호자 성향을 함께 반영해 재정렬합니다.
+하이브리드 검색으로 가져온 장소 후보에 대해 반려견 성향과 보호자 성향을 함께 반영해 재정렬합니다. 현재 실서비스는 최종 5개를 바로 고르지 않고, 검색 단계에서 최대 20개 후보를 확보한 뒤 프로필 점수를 더해 상위 5개를 반환합니다.
 
 ```text
 dog_score_vector = DogScorer.calculate_vector(dog_tags)
@@ -458,7 +515,8 @@ owner_score_vector = OwnerScorer.calculate_vector(owner_tags)
 
 활동성 a > 3 + category=공원/놀이터  → +0.10 bonus
 사회성 b > 3 + category=카페/관광지  → +0.05 bonus
-예민도 e > 3 + outdoor=Y            → -0.10 penalty
+예민도 e > 3 + outdoor=Y            → -0.15 penalty
+예민도 e > 3 + 반려견놀이터/레포츠  → -0.15 penalty
 
 자연 선호 a > 3 + outdoor=Y         → +0.08 bonus
 도시 탐험 b > 3 + category=카페/관광지 → +0.05 bonus
@@ -466,29 +524,22 @@ owner_score_vector = OwnerScorer.calculate_vector(owner_tags)
 ```
 
 ```python
-base_score = rag_score * 0.7 + rule_score * 0.3 + category_bias
+base_score = rag_score * 0.5 + rule_score * 0.5 + category_bias
 final_score = base_score + profile_bonus
 ```
 
 `dog_tags`와 `owner_tags`가 모두 없는 경우에는 이 재정렬 단계를 생략합니다.
 
-> #### Step 5 — GPT 추천 메시지 생성
+> #### Step 5 — 추천 이유 생성
 
-검색 및 재정렬된 장소 후보를 기반으로 GPT-4.1-mini가 사용자에게 보여줄 자연어 추천 메시지와 추천 이유를 생성합니다.
+검색 및 재정렬된 최종 장소 5개를 기반으로 `chat_response_service.generate_place_reasons()` 가 GPT-4.1-mini를 호출해 장소별 추천 이유만 생성합니다. 현재 실서비스 응답 조립은 `chat_response_service` 에서 수행하고, `PlacesChain` 은 성향 재정렬 규칙을 재사용하는 역할로 남아 있습니다.
 
 ```text
-PlacesPromptBuilder
-  → system_prompt
-  → user_prompt
-      - pet_name
-      - dog_type_name
-      - owner_type_name
-      - dog_tags
-      - owner_tags
-      - places_text
-      - user_query
+최종 places[5]
+  → generate_place_reasons()
+  → 사용자 질문 + 후보 장소 메타데이터 전달
   → GPT-4.1-mini
-  → JSON: { message, places[{ name, reason }] }
+  → JSON: { places[{ name, reason }] }
 ```
 
 > #### Step 6 — 결과 병합 및 반환
@@ -497,7 +548,6 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
 
 ```json
 {
-  "message": "GPT 자연어 추천 메시지",
   "places": [
     {
       "name": "장소명",
@@ -508,11 +558,7 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
       "conditions": "반려견 동반 가능 조건",
       "reason": "추천 이유"
     }
-  ],
-  "dog_type": "careful_pup",
-  "dog_type_name": "조심스러운 아이",
-  "owner_type": "nature_lover",
-  "owner_type_name": "자연 애호가"
+  ]
 }
 ```
 
@@ -521,7 +567,7 @@ GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합�
 현재 장소 추천은 하이브리드 검색 단계에서 `rag_score`, `rule_score`, `category_bias`를 합산해 기본 점수를 만들고, 그 위에 반려견/보호자 성향 기반 보너스와 패널티를 더해 재정렬합니다.
 
 ```python
-base_score = rag_score * 0.7 + rule_score * 0.3 + category_bias
+base_score = rag_score * 0.5 + rule_score * 0.5 + category_bias
 final_score = base_score + profile_bonus
 ```
 
@@ -557,10 +603,13 @@ final_score = (
   → 장소추천 intent
   → QueryParser (쿼리 → 객관 조건 분리) 
   → DogScorer / OwnerScorer 성향 타입 분류
-  → 검색 쿼리 결정
-  → ChromaDB RAG 코사인 유사도 검색
-  → 반려견 성향 기반 bonus/penalty 재정렬
-  → GPT-4.1-mini 추천 메시지 및 reason 생성
+  → RDB 후보 필터링
+  → ChromaDB 의미 검색
+  → rag_score / rule_score / category_bias 결합
+  → 후보 최대 20개 확보
+  → 반려견/보호자 성향 기반 bonus/penalty 재정렬
+  → 상위 5개 선택
+  → GPT-4.1-mini reason 생성
   → 장소 메타데이터 병합
   → 프론트 반환
 ```
@@ -810,6 +859,66 @@ Navbar
 
 <div align="center">
 
+  # 5. 빠른 시작
+
+</div>
+
+> #### 사전 준비
+
+```bash
+git clone https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN23-FINAL-3Team.git
+cd SKN23-FINAL-3Team
+```
+
+`.env` 파일을 저장소 root 에 배치합니다. 키 목록 권위는 §9.2 환경 설정 참조 (`.gitignore` 처리, 팀 내부 디스코드로 공유).
+
+> #### 백엔드 + 프론트엔드 (Docker Compose, 권장)
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up --build
+```
+
+- Nginx: `http://localhost` (80 → 443 리다이렉트), 운영 도메인 `https://withdog.kro.kr`
+- FastAPI: 내부 네트워크 (`withdog-net`), Nginx `/api/*` 프록시 경유
+- Swagger UI: `/api/docs`
+
+> #### 백엔드 (로컬)
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate         # Windows
+# source .venv/bin/activate    # macOS / Linux
+
+pip install -r requirements.txt
+uvicorn back.api.main:app --reload --port 8000
+```
+
+`.env` 의 `SERVER=local` 이면 sshtunnel + paramiko 로 EC2 → RDS MySQL 자동 터널링.
+
+> #### 프론트엔드 (로컬)
+
+```bash
+cd front
+pnpm install
+pnpm dev
+```
+
+Vite Dev Server 3000 → FastAPI 8000 자동 프록시 (`/api/*`).
+
+> #### 모바일 (Flutter Android)
+
+```bash
+cd mobile
+flutter pub get
+flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
+```
+
+운영 API (`https://withdog.kro.kr/api`) 를 그대로 재사용합니다. OAuth 분기: 구글 = 시스템 브라우저 (`flutter_appauth`) / 카카오·네이버 = WebView (`flutter_inappwebview`).
+
+---
+
+<div align="center">
+
   # 6. QA 검증 및 평가
 
 </div>
@@ -824,18 +933,18 @@ Navbar
 
 ## 6.2. AI 장소 추천
 
-장소 검색 RAG (`/api/places/search`) 의 품질을 정량 측정하는 자동화 평가 시스템 (`ai/evaluation/`) 을 구축하고, 첫 baseline 측정을 완료했습니다.
+장소추천 검색 품질을 정량 측정하기 위해 자동화 평가 시스템 (`ai/evaluation/`) 을 구축하고, `run_ablation.py` 로 Combined / RDB only / RAG only 성능을 비교했습니다.
 
 > #### 평가셋 구성
 
 | 항목 | 값 |
 | --- | --- |
-| 총 건수 | 150건 |
-| Retrieval (정답 매칭) | 118건 |
-| Refusal (서울 외 거절) | 32건 |
+| 평가 파일 | `data/eval/장소추천 평가셋 NEW.xlsx` |
+| 평가 건수 | 131건 |
+| 평가 모드 | Combined / RDB only / RAG only |
 | 카테고리 | 9종 |
 
-카테고리 9종 — 복합 조건 / 지역 × 장소유형 / 주관 형용사 / 위치 기반 근처 / 동반 조건 특수 / 실내·실외 / 시간 조건 / 편의시설(주차) / 오류·범위 밖.
+카테고리 9종 — GPS 사용자 현재 위치 / 실내·실외 / 동반 조건 특수 / 편의시설(주차) / 시간 조건 / 복합 조건 / 위치 기반 근처 / 지역 × 장소유형 / 주관 형용사.
 
 <br />
 
@@ -843,53 +952,43 @@ Navbar
 
 | 메트릭 | 정의 |
 | --- | --- |
-| **Hit@5** | Top-5 안에 정답이 하나라도 있는 비율 (이진 0 / 1) |
-| **Recall@5** | 정답이 여러 개일 때 Top-5 포함 비율 (0.0 ~ 1.0) |
-| **Refusal Rate** | 서울 외 지역 등 범위 밖 질문을 올바르게 거절한 비율 |
+| **Hit@k** | Top-k 안에 정답이 하나라도 있는 비율 (이진 0 / 1) |
+| **Recall@k** | 정답이 여러 개일 때 Top-k 안에 포함된 정답 비율 (0.0 ~ 1.0) |
 
 <br />
 
-> #### 베이스라인 결과 (RUN_20260426)
+> #### 5차 Baseline → 6차 Final 결과
 
-```text
-[전체 Retrieval] n=118
-  Hit@5    : 0.5254 (52.5%)
-  Recall@5 : 0.4102 (41.0%)
+5차 baseline에서는 Combined와 RDB only가 전 구간 동일하게 나타났습니다. 이는 오류가 아니라, `subjective` 가 비어 있을 때 ChromaDB 재순위를 생략하고 RDB fallback으로 조기 반환하던 로직 때문이었습니다. 6차 final에서는 후보 수 확대, Chroma 후보 제한 완화, `subjective` empty fallback 제거, 장소 유형 필터 완화를 반영했습니다.
 
-[전체 Refusal]   n=32
-  Refusal Rate : 0.5938 (59.4%)
-```
+| 지표 | 5차 Baseline | 6차 Final | 변화 |
+| --- | ---: | ---: | ---: |
+| Combined Hit@1 | 26.0% | 37.4% | +11.4%p |
+| Combined Hit@3 | 26.7% | 55.0% | +28.3%p |
+| Combined Hit@5 | 29.0% | 62.6% | +33.6%p |
+| Combined Hit@10 | 34.4% | 77.1% | +42.7%p |
+| Combined Hit@20 | 55.7% | 84.0% | +28.3%p |
+| Combined Recall@5 | 2.6% | 11.5% | +8.9%p |
+| Combined Recall@20 | 8.6% | 35.9% | +27.3%p |
 
-> #### 카테고리별 (취약 영역 강조):
+> #### 카테고리별 주요 변화 (Combined, Hit@5)
 
-<br />
+| 카테고리 | 5차 Baseline | 6차 Final | 변화 |
+| --- | ---: | ---: | ---: |
+| 주관 형용사 | 4.2% | 87.5% | +83.3%p |
+| 지역 × 장소유형 | 12.5% | 56.3% | +43.8%p |
+| 위치 기반 근처 | 20.0% | 53.3% | +33.3%p |
+| 시간 조건 | 27.3% | 63.6% | +36.3%p |
+| 복합 조건 | 20.7% | 41.4% | +20.7%p |
+| 편의시설 (주차) | 44.4% | 55.6% | +11.2%p |
+| GPS 사용자 현재 위치 | 75.0% | 75.0% | 유지 |
+| 실내·실외 | 70.0% | 70.0% | 유지 |
+| 동반 조건 특수 | 60.0% | 80.0% | +20.0%p |
 
-| 카테고리 | n | Hit@5 |
-| --- | ---: | ---: |
-| 복합 조건 | 29 | 0.483 |
-| 지역 × 장소유형 | 27 | — |
-| 주관 형용사 | 21 | — |
-| **위치 기반 근처** | **16** | **0.250** 🔴 |
-| 동반 조건 특수 | 11 | — |
-| 실내 / 실외 | 11 | — |
-| 시간 조건 | 11 | — |
-| 편의시설 (주차) | 9 | — |
-| 오류 / 범위 밖 | 32 | (Refusal 0.594) |
-
-→ 개선 우선순위: **위치 기반 근처 (25.0%)** 는 `QueryParser` landmark 좌표 매핑 보강으로, **Refusal Rate (59.4%)** 는 서울 외 city 검출 정확도 향상으로 끌어올릴 계획입니다.
-
-<br />
-
-> #### 개선 추적 흐름
-
-`run_id` 컬럼으로 baseline (RUN_20260426) 과 개선 후 결과를 비교합니다.
+핵심 개선 요인은 `subjective` 가 비어 있어도 원문 query로 ChromaDB 의미 검색을 수행하도록 바꾼 점입니다. 이를 통해 Combined가 RDB fallback에 머무르지 않고 RAG only 수준 이상의 성능을 보였으며, 후보 수 확대와 장소 유형 필터 완화는 보조적으로 성능을 안정화했습니다.
 
 ```bash
-# baseline 측정
-python ai/evaluation/run_evaluation.py --output evaluation/results/before.xlsx
-
-# 검색 로직 개선 후
-python ai/evaluation/run_evaluation.py --output evaluation/results/after.xlsx
+python ai/evaluation/run_ablation.py
 ```
 
 <br />
@@ -903,6 +1002,35 @@ python ai/evaluation/run_evaluation.py --output evaluation/results/after.xlsx
 | 보호자 취향 적합성 | 보호자의 자연 선호, 도시 선호, 먹거리 선호 등과 장소가 맞는지 확인 |
 | 장소 조건 적합성 | 반려견 동반 가능 여부, 실내외 정보, 카테고리 정보가 적절한지 확인 |
 | 추천 이유 품질 | 추천 사유가 사용자가 이해할 수 있게 설명되는지 확인 |
+
+<br />
+
+> #### 자동화 평가 흐름
+
+평가 시스템은 외부 의존 없이 자체 인프라 (`ai/evaluation/`) 로 구축되어, 검색 로직 변경 후 즉시 회귀 테스트가 가능합니다.
+
+```bash
+# 전체 평가셋 단건 평가
+python ai/evaluation/run_evaluation.py
+
+# Combined / RDB only / RAG only Ablation
+python ai/evaluation/run_ablation.py
+
+# 개선 전·후 비교 (run_id 컬럼으로 다회 실행 구분)
+python ai/evaluation/run_evaluation.py --output evaluation/results/before.xlsx
+# (검색 로직 개선 작업)
+python ai/evaluation/run_evaluation.py --output evaluation/results/after.xlsx
+```
+
+> #### 산출물
+
+| 산출물 | 경로 / 컬럼 |
+| --- | --- |
+| 결과 엑셀 | `evaluation/results/eval_results_YYYYMMDD_HHMMSS.xlsx` |
+| 실행 로그 | `evaluation/logs/run_YYYYMMDD_HHMMSS.log` (쿼리별 상세 기록) |
+| 주요 컬럼 | `run_id`, `query_id`, `카테고리`, `사용자질문`, `정답`, `top1~top5`, `hit_at_5`, `recall_at_5`, `refusal` |
+
+CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필터), `--verbose` (각 쿼리 top5 출력), `--input` (외부 평가셋 지정) 등을 지원합니다.
 
 <br />
 
@@ -946,16 +1074,6 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
   # 7. 서비스 아키텍처
 
   ![시스템아키텍처](./assets/시스템아키텍처.png)
-
-</div>
-
-<br />
-
-### 전체 구성도
-
-<div align="center">
-
-  ![전체구성도](./assets/전체구성도.png)
 
 </div>
 
@@ -1015,7 +1133,7 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
 
 </div>
 
-> #### 테이블 목록 (총 9개)
+> #### 테이블 목록 (총 10개)
 
 | 테이블 | 용도 | Soft Delete | 비고 |
 | --- | --- | --- | --- |
@@ -1027,7 +1145,8 @@ GPT API 비전 기반 자동 평가로 전환 중이며, 현재는 수동 QA를 
 | `chat_messages` | 대화 메시지 | ✗ (영구 보존) | role: user / assistant / system |
 | `diaries` | 그림일기 (6하원칙) | ✓ | image_id nullable (2-phase) |
 | `images` | S3 이미지 메타 | ✓ | file_url, file_name |
-| `places` | 반려견 동반 장소 (21,130건) | — | content_id UNIQUE |
+| `places` | 반려견 동반 장소 (22,042건) | — | content_id UNIQUE |
+| `favorite_places` | 사용자별 즐겨찾기 장소 | — | UNIQUE(user_id, place_id) |
 
 <br />
 
@@ -1042,6 +1161,7 @@ diaries.image_id  ── 1 images   (RESTRICT, nullable)
 pets.breed_id     ── 1 breeds   (RESTRICT)
 pets.type_id      ── 1 keywords (RESTRICT, PET 카테고리)
 users.type_id     ── 1 keywords (RESTRICT, USER 카테고리)
+users N ─── M places   via favorite_places (CASCADE)
 ```
 
 <br />
@@ -1076,9 +1196,9 @@ SKN23-FINAL-3Team/
 │   ├── main.py                 # 진입점 (back/api/main.py 로더)
 │   ├── api/                    # FastAPI 백엔드
 │   │   ├── main.py             # FastAPI 앱 (lifespan, 라우터 등록)
-│   │   ├── routers/            # 12종 (auth, users, pets, diaries, chat-rooms, chat-messages, images, places, breeds, keywords, intent, admin)
-│   │   ├── services/           # 16종 (chat_response, diary_response, chat_message, place, user, pet, diary, chat_room, image, breed, keyword, intent, auth, admin, common, scheduler)
-│   │   ├── models/             # 9개 SQLAlchemy 모델
+│   │   ├── routers/            # 15종 (auth, users, pets, diaries, chat-rooms, chat-messages, images, places, breeds, keywords, intent, admin, diary_photo, directions, eval)
+│   │   ├── services/           # 23종 (chat_response, diary_response, chat_message, place, user, pet, diary, chat_room, image, breed, keyword, intent, auth, admin, common, scheduler, favorite_place, pet_profile, photo_detector, photo_illustration, photo_validation, photo_vlm, place_image)
+│   │   ├── models/             # 11개 SQLAlchemy 모델
 │   │   ├── schemas/            # 10개 Pydantic 스키마
 │   │   └── core/               # config, database, deps, location, type
 │   ├── data/scripts/           # breeds / keywords / places 시드 (2026-04-27 back/db/seeds/ 에서 이동)
@@ -1096,6 +1216,15 @@ SKN23-FINAL-3Team/
 │   ├── core/                   # ChromaDB 클라이언트, 인터페이스
 │   └── utils/                  # 공통 유틸리티
 │
+├── mobile/                     # Flutter 모바일 (Android 풀 포팅, 5/20 시연 데모)
+│   ├── lib/
+│   │   ├── features/           # auth, calendar, chat, diary, home, inquiry,
+│   │   │                       #   intro, mypage, notification, onboarding, places
+│   │   ├── shared/             # 공통 위젯·모델·서비스
+│   │   └── core/               # theme, network, env helper
+│   ├── pubspec.yaml            # Flutter 3.41 / Riverpod / Dio / image_picker / InAppWebView
+│   └── android/                # Android 빌드 설정 (mipmap, Adaptive Icon)
+│
 ├── data/                       # 장소·견종 데이터 및 임베딩 스크립트
 ├── infra/docker/               # Dockerfile, docker-compose
 └── requirements.txt
@@ -1111,6 +1240,7 @@ SKN23-FINAL-3Team/
 | POST | `/api/auth/{provider}` | 소셜 로그인 (kakao / google / naver) |
 | GET | `/api/admin/token` | 개발용 무기한 JWT (`X-Admin-Key` 헤더) |
 | GET | `/api/users/me` | 내 정보 조회 |
+| POST | `/api/users/me/agreements` | 약관·개인정보처리방침 동의 저장 |
 | GET | `/api/users/{id}` | 사용자 조회 |
 | PATCH | `/api/users/{id}` | 유저 정보 수정 |
 | DELETE | `/api/users/{id}` | 유저 soft delete (10일 후 hard delete) |
@@ -1121,10 +1251,13 @@ SKN23-FINAL-3Team/
 | DELETE | `/api/pets/{id}` | 반려견 soft delete |
 | GET | `/api/diaries?pet_id={id}` | 일기 목록 조회 |
 | POST | `/api/diaries` | 일기 생성 (image_id 없이도 생성 가능) |
+| GET | `/api/diaries/calendar?year=&month=` | 즐겨찾기 일기 캘린더 조회 |
 | PATCH | `/api/diaries/{id}` | 일기 수정 (image_id 바인딩 포함) |
+| PATCH | `/api/diaries/{id}/favorite` | 일기 즐겨찾기 토글 |
 | DELETE | `/api/diaries/{id}` | 일기 soft delete |
 | POST | `/api/diary/generate` | AI 일기 텍스트 생성 (GPT-4.1-mini) |
 | POST | `/api/diary/generate-image` | AI 일기 이미지 생성 (gpt-image-1) |
+| POST | `/api/diary/photo-style` | 사진 업로드 기반 그림체 변환 |
 | POST | `/api/images` | 이미지 S3 업로드 |
 | DELETE | `/api/images/{id}` | 이미지 soft delete (FK RESTRICT 검증) |
 | POST | `/api/chat-rooms` | 채팅방 생성 (title NULL이면 첫 메시지로 자동) |
@@ -1135,7 +1268,11 @@ SKN23-FINAL-3Team/
 | POST | `/api/chat-rooms/{id}/messages` | 채팅 메시지 전송 (챗봇 한 턴 처리) |
 | GET | `/api/chat-rooms/{id}/messages` | 채팅 메시지 조회 |
 | GET | `/api/places/search?query=&category=&city=` | 장소 추천 검색 (RAG + LLM reason) |
+| GET | `/api/places/by-name?name=` | 장소명 기반 시설 상세 조회 |
+| GET | `/api/places/favorites` | 즐겨찾기 장소 목록 조회 |
 | GET | `/api/places/{content_id}` | 장소 상세 |
+| PATCH | `/api/places/{content_id}/favorite` | 장소 즐겨찾기 토글 |
+| POST | `/api/directions/route` | 카카오 Mobility 경로 조회 |
 | GET | `/api/breeds` | 견종 목록 조회 |
 | GET | `/api/keywords?category=PET` | 강아지 성향 태그 |
 | GET | `/api/keywords?category=USER` | 사용자 여행 성향 태그 |
@@ -1151,7 +1288,7 @@ SKN23-FINAL-3Team/
 
 > ### 환경변수 (.env)
 
-총 41개 키. 카테고리별로 정리된 템플릿입니다. 값은 환경별로 직접 채워 사용하세요 (`.env`는 `.gitignore` 처리됨).
+카테고리별로 정리한 주요 환경변수 템플릿입니다. 값은 환경별로 직접 채워 사용하세요 (`.env`는 `.gitignore` 처리됨).
 
 ```env
 # ── 서버 환경 ───────────────────────────────────────────────
@@ -1184,6 +1321,7 @@ KAKAO_REST_API_KEY=   # 카카오 REST API (랜드마크 좌표 조회)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+GOOGLE_ANDROID_CLIENT_ID=
 KAKAO_CLIENT_ID=
 KAKAO_CLIENT_SECRET=
 KAKAO_REDIRECT_URI=
@@ -1205,6 +1343,7 @@ AWS_S3_BUCKET_NAME=
 
 # ── 보안 ────────────────────────────────────────────────────
 SECRET_KEY=           # JWT 서명 + 관리자 토큰 발급 (이중 용도)
+ACCESS_TOKEN_EXPIRE_MINUTES=
 
 # ── LLM / 임베딩 모델 ───────────────────────────────────────
 GPT_MODEL=            # 기본 모델 ID (예: gpt-4.1-mini)
@@ -1214,6 +1353,13 @@ EMBED_MODEL_NAME=     # sentence-transformers 모델
 # ── Hugging Face / Transformers ────────────────────────────
 HF_HUB_OFFLINE=       # 0 | 1
 TRANSFORMERS_OFFLINE= # 0 | 1
+
+# ── 사진 분석 / 그림체 변환 ─────────────────────────────────
+USE_YOLO_PIPELINE=    # true: YOLO+VLM, false: GPT-4o Vision
+USE_YOLO_DETECTOR=
+USE_LOCAL_VLM=
+PHOTO_UPLOAD_MAX_MB=
+PHOTO_STYLE_MOCK_MODE=
 
 # ── 기타 ────────────────────────────────────────────────────
 ANONYMIZED_TELEMETRY= # ChromaDB 텔레메트리 무력화
@@ -1373,10 +1519,22 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
 | Build | ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) |
 | Styling | ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white) |
 | Router | ![React Router](https://img.shields.io/badge/React_Router_v7-CA4245?style=flat-square&logo=reactrouter&logoColor=white) |
-| Animation | ![Framer Motion](https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
-| UI | ![Radix UI](https://img.shields.io/badge/Radix_UI-161618?style=flat-square&logo=radixui&logoColor=white) ![Lucide React](https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white) |
+| Animation | ![Motion](https://img.shields.io/badge/Motion-0055FF?style=flat-square&logo=framer&logoColor=white) |
+| UI | ![Lucide React](https://img.shields.io/badge/Lucide_React-F56565?style=flat-square&logo=lucide&logoColor=white) |
 | Map | ![Kakao Maps SDK](https://img.shields.io/badge/Kakao_Maps_SDK-FFCD00?style=flat-square&logo=kakao&logoColor=black) |
 | Design | ![Figma](https://img.shields.io/badge/Figma-F24E1E?style=flat-square&logo=figma&logoColor=white) ![Adobe Photoshop](https://img.shields.io/badge/Photoshop-31A8FF?style=flat-square&logo=adobephotoshop&logoColor=white) ![Adobe Illustrator](https://img.shields.io/badge/Illustrator-FF9A00?style=flat-square&logo=adobeillustrator&logoColor=white) |
+
+> ### Mobile
+
+| 분류 | 기술 |
+|------|------|
+| Framework | ![Flutter](https://img.shields.io/badge/Flutter_3.41-02569B?style=flat-square&logo=flutter&logoColor=white) ![Dart](https://img.shields.io/badge/Dart-0175C2?style=flat-square&logo=dart&logoColor=white) |
+| State | ![Riverpod](https://img.shields.io/badge/Riverpod-0553B1?style=flat-square&logo=flutter&logoColor=white) |
+| Network | ![Dio](https://img.shields.io/badge/Dio-0175C2?style=flat-square&logo=dart&logoColor=white) |
+| Routing | ![go_router](https://img.shields.io/badge/go__router-02569B?style=flat-square&logo=flutter&logoColor=white) |
+| OAuth | ![flutter_appauth](https://img.shields.io/badge/flutter__appauth-02569B?style=flat-square) ![flutter_inappwebview](https://img.shields.io/badge/flutter__inappwebview-02569B?style=flat-square) |
+| Storage | ![flutter_secure_storage](https://img.shields.io/badge/flutter__secure__storage-02569B?style=flat-square) |
+| Platform | ![Android](https://img.shields.io/badge/Android-3DDC84?style=flat-square&logo=android&logoColor=white) |
 
 > ### Infra
 
@@ -1399,23 +1557,3 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
 | 소셜 로그인 | ![Kakao OAuth](https://img.shields.io/badge/Kakao_OAuth-FFCD00?style=flat-square&logo=kakao&logoColor=black) ![Google OAuth](https://img.shields.io/badge/Google_OAuth-4285F4?style=flat-square&logo=google&logoColor=white) ![Naver OAuth](https://img.shields.io/badge/Naver_OAuth-03C75A?style=flat-square&logo=naver&logoColor=white) |
 
 <br />
-
-<!-- 최종 발표떄 추가
----
-
-<div align="center">
-
-  # 회고
-
-</div>
-
-> 정유선 <br>
-> ...
-
-> 이승연 <br>
-> ...
-
-> 송민채 <br>
-> ... 
-
--->

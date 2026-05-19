@@ -1,16 +1,22 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star } from 'lucide-react';
+import { PenSquare, FolderOpen, CalendarDays, MapPinned, SquarePen, UserRound, NotebookPen, Map, Star, Loader2 } from 'lucide-react';
+import OnboardingTour, { isOnboardingPending } from '../components/OnboardingTour';
 import type { Pet, DiaryEntry, User } from '../types';
 import DiaryView from '../components/DiaryView';
 import MapView from '../components/MapView';
 import ChatBot from '../components/ChatBot';
 import ChatHistory from '../components/ChatHistory';
+import PlaceDetailCard from '../components/PlaceDetailCard';
+import DiaryNoteCard from '../components/DiaryNoteCard';
+import DiaryDetailView, { type DiaryViewModel } from '../components/DiaryDetailView';
+import ConfirmModal from '../components/ConfirmModal';
+import { useFavoriteToggle } from '../hooks/useFavoriteToggle';
 import type { GeneratedDiary } from '../services/diaryService';
 import type { PlaceResult } from '../services/placeService';
-import { createDiary, updateDiary, deleteDiary } from '../services/dbDiaryService';
+import { createDiary, updateDiary, deleteDiary, toggleFavorite as toggleFavoriteApi } from '../services/dbDiaryService';
 import { uploadImage } from '../services/imageService';
-import { getMe } from '../services/userService';
+import { getMe, updateUser } from '../services/userService';
 import { getPets } from '../services/petService';
 import { getBreed } from '../services/breedService';
 import { getDiariesByUser } from '../services/dbDiaryService';
@@ -39,7 +45,7 @@ function HomeIntro({
   onGoMypage: () => void;
 }) {
   return (
-    <div className="h-full w-full overflow-hidden bg-gradient-to-b from-[#F1F1F3] to-[#ECEDEA]">
+    <div className="h-full w-full overflow-hidden bg-linear-to-b from-[#F1F1F3] to-[#ECEDEA]">
       <div className="relative h-full overflow-hidden">
         {/* 오른쪽 영상 */}
         <div className="absolute inset-y-0 right-0 w-[58%] overflow-hidden">
@@ -143,7 +149,7 @@ function HomeIntro({
 
 function MapIntro({ onStartMap }: { onStartMap: () => void }) {
   return (
-    <div className="h-full w-full overflow-hidden bg-gradient-to-b from-[#EEF3F1] to-[#E8EFED]">
+    <div className="h-full w-full overflow-hidden bg-linear-to-b from-[#EEF3F1] to-[#E8EFED]">
       <div className="relative h-full overflow-hidden">
         {/* 오른쪽 영상 */}
         <div className="absolute inset-y-0 right-0 w-[58%] overflow-hidden">
@@ -216,151 +222,101 @@ function MapIntro({ onStartMap }: { onStartMap: () => void }) {
 
 function DiaryAlbum({
   diaries,
+  loading = false,
   onBack,
   onDelete,
   onUpdate,
+  initialFavoriteIds,
 }: {
   diaries: DiaryEntry[];
+  loading?: boolean;
   onBack: () => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
   onUpdate?: (id: string, title: string, body: string) => Promise<void>;
+  initialFavoriteIds?: Set<string>;
 }) {
   const [selected, setSelected] = useState<DiaryEntry | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editBody, setEditBody] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('diary_favorites');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
 
-  const toggleFavorite = (e: React.MouseEvent, id: string) => {
+  useEffect(() => {
+    if (initialFavoriteIds) setFavorites(new Set(initialFavoriteIds));
+  }, [initialFavoriteIds]);
+
+  const handleToggleFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setFavorites(prev => {
+    const isFavoriting = !favorites.has(id);
+
+    // 같은 날 다른 일기가 즐겨찾기 중이면 자동 해제 안내
+    if (isFavoriting) {
+      const thisDiary = diaries.find((d) => d.id === id);
+      const sameDateFavorited = diaries.find(
+        (d) => d.id !== id && d.date === thisDiary?.date && favorites.has(d.id),
+      );
+      if (sameDateFavorited) {
+        setToast('다른 일기의 즐겨찾기가 해제되었습니다');
+        setTimeout(() => setToast(null), 3000);
+        setFavorites((prev) => { const next = new Set(prev); next.delete(sameDateFavorited.id); return next; });
+      }
+    }
+
+    // 낙관적 업데이트
+    setFavorites((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem('diary_favorites', JSON.stringify([...next]));
       return next;
     });
-  };
 
-  const handleSaveAlbumEdit = async () => {
-    if (!selected || !onUpdate) return;
-    setEditSaving(true);
     try {
-      await onUpdate(selected.id, editTitle, editBody);
-      setSelected({ ...selected, title: editTitle, body: editBody });
-      setIsEditing(false);
+      await toggleFavoriteApi(Number(id));
     } catch {
-      alert('수정에 실패했어요. 다시 시도해주세요.');
-    } finally {
-      setEditSaving(false);
+      // 실패 시 되돌리기
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (isFavoriting) next.delete(id); else next.add(id);
+        return next;
+      });
     }
   };
 
   if (selected) {
+    const diaryVm: DiaryViewModel = {
+      title: selected.title,
+      body: selected.body || '',
+      summary: selected.summary,
+      imageUrl: selected.imageUrl,
+      placeName: selected.place || undefined,
+    };
     return (
       <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
         <div className="mx-auto w-full max-w-[720px]">
-          <div className="mb-4 flex items-center gap-3">
-            <button
-              onClick={() => { setSelected(null); setIsEditing(false); }}
-              className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              ← 목록으로
-            </button>
-            <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
-            <div className="ml-auto flex items-center gap-2">
-              {!isEditing && onUpdate && (
-                <button
-                  onClick={() => { setEditTitle(selected.title); setEditBody(selected.body || ''); setIsEditing(true); }}
-                  className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-                >
-                  ✏️ 수정
-                </button>
-              )}
-              {isEditing && (
-                <>
-                  <button
-                    onClick={() => setIsEditing(false)}
-                    className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-400 transition hover:bg-gray-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleSaveAlbumEdit}
-                    disabled={editSaving}
-                    className="rounded-full bg-[#F4845F] px-3 py-1.5 text-xs text-white transition hover:bg-[#e0724e] disabled:opacity-50"
-                  >
-                    {editSaving ? '저장 중...' : '저장'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
-            {/* 마스킹 테이프 */}
-            <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-            <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-
-            {/* 제목/요약 */}
-            <div className="mb-6 text-center">
-              <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-              {isEditing ? (
-                <input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
-                />
-              ) : (
-                <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">{selected.title}</h3>
-              )}
-              {selected.summary && (
-                <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
-                  ✨ {selected.summary}
-                </div>
-              )}
-              {selected.place && (
-                <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#F0F7FF] px-3 py-1 text-xs font-medium text-[#5B8DB8]">
-                  📍 {selected.place}
-                </div>
-              )}
-            </div>
-
-            {/* 이미지 */}
-            <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
-              {selected.imageUrl ? (
-                <img src={selected.imageUrl} alt={selected.title} className="w-full h-auto rounded-[16px] object-contain" />
-              ) : (
-                <div className="flex h-48 items-center justify-center text-5xl">🐾</div>
-              )}
-            </div>
-
-            {/* 일기 본문 - 줄 있는 노트 */}
-            {isEditing ? (
-              <textarea
-                value={editBody}
-                onChange={(e) => setEditBody(e.target.value)}
-                rows={10}
-                className="w-full rounded-[20px] border border-[#F4845F] bg-[#FFFCF8] px-5 py-5 text-[15px] leading-[31px] text-[#3D2B1F] outline-none resize-none"
-                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-              />
-            ) : (
-              <div
-                className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-              >
-                <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
-                  {selected.body || '내용이 없어요.'}
-                </p>
-              </div>
-            )}
-          </div>
+          <DiaryDetailView
+            diary={diaryVm}
+            backLabel="← 목록으로"
+            onBack={() => setSelected(null)}
+            onUpdate={onUpdate
+              ? async (title, body) => {
+                await onUpdate(selected.id, title, body);
+                setSelected({ ...selected, title, body });
+              }
+              : undefined}
+            onDelete={async () => {
+              // 부모 DiaryAlbum 의 onDelete prop 활용 — 백엔드 deleteDiary + 앨범 list filter
+              await onDelete(selected.id);
+              setSelected(null);
+            }}
+          />
         </div>
+      </div>
+    );
+  }
+
+  // 로딩 중에는 빈 배열 분기 ("저장된 그림일기 없음") 가 깜박 보이지 않도록 스피너 우선 표시.
+  if (loading) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#F6F1EA] p-8">
+        <Loader2 className="h-10 w-10 animate-spin text-[#F4845F]" />
+        <span className="text-sm text-[#8B6355]">불러오는 중...</span>
       </div>
     );
   }
@@ -402,6 +358,11 @@ function DiaryAlbum({
 
   return (
     <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+      {toast && (
+        <div className="fixed top-4 left-1/2 z-50 -translate-x-1/2 rounded-full bg-[#3D2B1F] px-4 py-2 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      )}
       <div className="mx-auto w-full max-w-[720px]">
         <div className="mb-5 flex items-center gap-3">
           <button
@@ -434,13 +395,13 @@ function DiaryAlbum({
                   >
                     {/* 즐겨찾기 버튼 (좌상단) */}
                     <button
-                      onClick={(e) => toggleFavorite(e, entry.id)}
+                      onClick={(e) => handleToggleFavorite(e, entry.id)}
                       className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 transition hover:bg-black/50"
                     >
                       <Star
                         className="h-4 w-4"
-                        fill={favorites.has(entry.id) ? '#F4845F' : 'none'}
-                        stroke={favorites.has(entry.id) ? '#F4845F' : 'white'}
+                        fill={favorites.has(entry.id) ? 'white' : 'none'}
+                        stroke="white"
                       />
                     </button>
                     {/* 삭제 버튼 (우상단, hover 시 표시) */}
@@ -613,18 +574,115 @@ export default function HomePage({
   const [diaryTrigger, setDiaryTrigger] = useState(0);
   const [showAlbum, setShowAlbum] = useState(false);
   const [albumDiaries, setAlbumDiaries] = useState<DiaryEntry[]>([]);
+  // 앨범 진입 시 getDiariesByUser + getImage 로드 — 응답 전 "저장된 그림일기 없음" 빈 분기가
+  // 깜박이는 깜빡임 방지용. fetch 성공·실패와 무관하게 finally 에서 복원.
+  const [albumLoading, setAlbumLoading] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [fetchedPetId, setFetchedPetId] = useState<number | null>(null);
   const [fetchedPet, setFetchedPet] = useState<Pet | null>(null);
+  const [showPetPicker, setShowPetPicker] = useState(false);
+  const [allPetsForPicker, setAllPetsForPicker] = useState<{ id: number; name: string; breed: string }[]>([]);
+  const [pickerUserId, setPickerUserId] = useState<number | null>(null);
+  const [settingPetId, setSettingPetId] = useState<number | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const petPickerBtnRef = useRef<HTMLButtonElement>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [albumFavoriteIds, setAlbumFavoriteIds] = useState<Set<string>>(new Set());
   const [chatKey, setChatKey] = useState(0);
   const [savedDiaryId, setSavedDiaryId] = useState<number | null>(null);
   const [isEditingDiary, setIsEditingDiary] = useState(false);
+  // (a) 다이어리 결과 화면 삭제 — 자동저장 완료 후만 활성, 삭제 시 앨범으로 복귀
+  const [resultDeleteOpen, setResultDeleteOpen] = useState(false);
+  const [resultDeleting, setResultDeleting] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [showPlacePanel, setShowPlacePanel] = useState(false);
   const [historySelectedId, setHistorySelectedId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  // 온보딩 투어
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourManual, setTourManual] = useState(false);
+  const [tourUserId, setTourUserId] = useState<number | undefined>(undefined);
+  // 다이어리 결과 화면 modal 안의 즐겨찾기 별 — useFavoriteToggle 훅 사용.
+  const autoPlaceFavorite = useFavoriteToggle();
+
+  // 홈 진입 시 GPS 자동 요청 + watchPosition으로 지속 추적
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    let watchId: number;
+
+    const startWatch = () => {
+      // 빠른 위치 먼저 표시 (IP 기반, 즉시 응답)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => { },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+      );
+
+      // 이후 정밀 위치로 지속 업데이트
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          localStorage.setItem('gps_permission', 'granted');
+        },
+        () => {
+          localStorage.removeItem('gps_permission');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+      );
+    };
+
+    // 이전에 허용한 적 있으면 바로 시작, 없으면 권한 요청 후 시작
+    if (localStorage.getItem('gps_permission') === 'granted') {
+      startWatch();
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          localStorage.setItem('gps_permission', 'granted');
+          startWatch();
+        },
+        () => {
+          localStorage.removeItem('gps_permission');
+        },
+        { enableHighAccuracy: false, timeout: 5000 },
+      );
+    }
+
+    return () => {
+      if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
+
+  // 온보딩 투어 — 로그인 상태 + 계정별 미완료 시 자동 표시
+  useEffect(() => {
+    if (!localStorage.getItem('access_token')) return;
+    getMe().then((me) => {
+      setTourUserId(me.id);
+      if (isOnboardingPending(me.id)) {
+        setTourManual(false);
+        setTourOpen(true);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Navbar "튜토리얼 다시 보기" 이벤트 수신
+  useEffect(() => {
+    const handler = () => {
+      setTourManual(true);
+      setTourOpen(true);
+    };
+    window.addEventListener('show-onboarding-tour', handler);
+    return () => window.removeEventListener('show-onboarding-tour', handler);
+  }, []);
+
+  const handleTourComplete = useCallback(() => setTourOpen(false), []);
 
   // 선택된 반려견 정보(이름 + 견종명)를 백엔드에서 가져옴 — pet-select-change 시 재실행
   useEffect(() => {
@@ -635,14 +693,22 @@ export default function HomePage({
         const me = await getMe();
         const allPets = await getPets(me.id);
         if (allPets.length === 0) return;
+        setPickerUserId(me.id);
+
+        // 전체 반려견 picker용 저장 (breed 이름은 간략히)
+        const pickerList = await Promise.all(
+          allPets.map(async (ap) => {
+            let breed = '강아지';
+            try { breed = (await getBreed(ap.breed_id)).name_ko; } catch { /* ignore */ }
+            return { id: ap.id, name: ap.name, breed };
+          })
+        );
+        setAllPetsForPicker(pickerList);
+
         const savedId = Number(localStorage.getItem('selected_pet_id')) || null;
         const p = (savedId ? allPets.find((pet) => pet.id === savedId) : null) ?? allPets[0];
         setFetchedPetId(p.id);
-        let breedName = '강아지';
-        try {
-          const breed = await getBreed(p.breed_id);
-          breedName = breed.name_ko;
-        } catch { /* breed 조회 실패 시 기본값 유지 */ }
+        let breedName = pickerList.find((pl) => pl.id === p.id)?.breed ?? '강아지';
         setFetchedPet({
           id: p.id,
           name: p.name,
@@ -685,6 +751,23 @@ export default function HomePage({
     setAutoPlace(null);
   }, [location.key]);
 
+  // 외부 페이지 (PlaceFavoritesPage 등) 에서 router state 로 autoPlace 를 전달한 경우 챗봇 자동 트리거.
+  // 진입 1회만 처리하고 history.replace 로 state 정리 (뒤로가기·새로고침 시 중복 트리거 방지).
+  useEffect(() => {
+    const incoming = (location.state as { autoPlace?: PlaceResult } | null)?.autoPlace;
+    if (!incoming) return;
+    setAutoPlace(incoming);
+    setTab('diary');
+    setShowDiaryEditor(false);
+    setShowAlbum(false);
+    setDiaryResult(null);
+    setShowChatHistory(false);
+    setChatKey((k) => k + 1);
+    setDiaryTrigger((prev) => prev + 1);
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   const safePets = useMemo(() => {
     if (Array.isArray(pets) && pets.length > 0) return pets;
     if (pet) return [pet];
@@ -694,6 +777,26 @@ export default function HomePage({
   const safeUser = user;
   const safeDiaries = diaries ?? [];
   const currentPet = selectedPet ?? fetchedPet ?? safePets[0] ?? pet;
+
+  useEffect(() => {
+    if (!showPetPicker) return;
+    const close = () => setShowPetPicker(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [showPetPicker]);
+
+  const handlePickPet = async (petId: number) => {
+    if (!pickerUserId || settingPetId !== null) return;
+    setSettingPetId(petId);
+    try {
+      await updateUser(pickerUserId, { primary_pet_id: petId });
+      localStorage.setItem('selected_pet_id', String(petId));
+      window.dispatchEvent(new Event('pet-select-change'));
+    } catch { /* 실패 시 무시 */ } finally {
+      setSettingPetId(null);
+      setShowPetPicker(false);
+    }
+  };
 
   const handleOpenDiaryTab = () => {
     setTab('diary');
@@ -736,6 +839,7 @@ export default function HomePage({
     if (!showAlbum) return;
     const token = localStorage.getItem('access_token');
     if (!token) return;
+    setAlbumLoading(true);
     getMe()
       .then((me) => getDiariesByUser(me.id))
       .then(async (records) => {
@@ -756,9 +860,11 @@ export default function HomePage({
             };
           })
         );
+        setAlbumFavoriteIds(new Set(records.filter((d) => d.is_favorite).map((d) => String(d.id))));
         setAlbumDiaries(entries.reverse());
       })
-      .catch(() => {});
+      .catch(() => { })
+      .finally(() => setAlbumLoading(false));
   }, [showAlbum]);
 
   const handleSaveDiary = (entry: DiaryEntry) => {
@@ -816,7 +922,7 @@ export default function HomePage({
         setAutoSaveState('error');
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diaryResult]);
 
   const handleSaveEdit = async () => {
@@ -838,346 +944,367 @@ export default function HomePage({
     }
   };
 
+  const handleConfirmDeleteResult = async () => {
+    if (!savedDiaryId || resultDeleting) return;
+    setResultDeleting(true);
+    try {
+      await deleteDiary(savedDiaryId);
+      setAlbumDiaries((prev) => prev.filter((d) => d.id !== String(savedDiaryId)));
+      setResultDeleteOpen(false);
+      setDiaryResult(null);
+      setShowAlbum(true);  // 결과 화면에서 삭제 → 앨범 목록으로 복귀
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '삭제에 실패했어요.');
+    } finally {
+      setResultDeleting(false);
+    }
+  };
+
   return (
-    <div className="h-screen bg-[#f8f8f6] pt-16">
-      <div className="flex h-full overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
-          {/* 왼쪽 메인 영역 */}
-          <div className="flex min-w-0 flex-[2] flex-col border-r border-gray-200 bg-white">
-            <div className="flex border-b border-gray-100 bg-white">
-              <button
-                className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${
-                  tab === 'diary'
+    <>
+      <div className="h-screen bg-[#f8f8f6] pt-16">
+        <div className="flex h-full overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
+            {/* 왼쪽 메인 영역 */}
+            <div className="flex min-w-0 flex-[2] flex-col border-r border-gray-200 bg-white">
+              <div className="flex border-b border-gray-100 bg-white">
+                <button
+                  data-tour="diary-tab"
+                  className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${tab === 'diary'
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
-                }`}
-                onClick={handleOpenDiaryTab}
-              >
-                <NotebookPen className="h-4 w-4" />
-                강아지 일기장
-              </button>
+                    }`}
+                  onClick={handleOpenDiaryTab}
+                >
+                  <NotebookPen className="h-4 w-4" />
+                  강아지 일기장
+                </button>
 
-              <button
-                className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${
-                  tab === 'map'
+                <button
+                  data-tour="map-tab"
+                  className={`group flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-all ${tab === 'map'
                     ? 'border-b-2 border-[#F4845F] text-[#F4845F]'
                     : 'border-b-2 border-transparent text-gray-400 hover:text-[#F4845F]'
-                }`}
-                onClick={() => { setTab('map'); setShowMapSearch(false); setShowDiaryEditor(false); setShowAlbum(false); setDiaryResult(null); }}
-              >
-                <Map className="h-4 w-4" />
-                지도
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-
-              {tab === null && (
-                <HomeIntro
-                  onOpenMap={handleOpenMapTab}
-                  onOpenDiary={handleOpenDiaryTab}
-                  onGoMypage={handleGoMypage}
-                />
-              )}
-
-              {tab === 'diary' && !showDiaryEditor && !diaryResult && !showAlbum && (
-                <DiaryIntro
-                  onStartDiary={() => {
-                    setDiaryTrigger((prev) => prev + 1);
-                  }}
-                  onOpenAlbum={() => setShowAlbum(true)}
-                  onGoCalendar={() => navigate('/calendar')}
-                />
-              )}
-
-              {tab === 'diary' && showAlbum && !diaryResult && (
-                <DiaryAlbum
-                  diaries={albumDiaries}
-                  onBack={() => setShowAlbum(false)}
-                  onDelete={async (id) => {
-                    try {
-                      await deleteDiary(Number(id));
-                      setAlbumDiaries((prev) => prev.filter((d) => d.id !== id));
-                    } catch {
-                      alert('삭제에 실패했어요.');
-                    }
-                  }}
-                  onUpdate={async (id, title, body) => {
-                    await updateDiary(Number(id), { title, content: body });
-                    setAlbumDiaries((prev) =>
-                      prev.map((d) => d.id === id ? { ...d, title, body } : d)
-                    );
-                  }}
-                />
-              )}
-
-              {tab === 'diary' && showDiaryEditor && !diaryResult && currentPet && (
-                <DiaryView
-                  pet={currentPet}
-                  user={safeUser!}
-                  diaries={safeDiaries}
-                  autoPlace={autoPlace?.name ?? ''}
-                  onClearAutoPlace={() => setAutoPlace(null)}
-                  onSave={handleSaveDiary}
-                />
-              )}
-
-{tab === 'diary' && diaryResult && (
-  <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
-    <div className={`mx-auto w-full flex gap-4 ${showPlacePanel ? 'max-w-[1100px]' : 'max-w-[720px]'}`}>
-    <div className="flex-1 min-w-0">
-      {/* 상단 헤더 */}
-      <div className="mb-4 flex items-center gap-3">
-        <button
-          onClick={() => {
-            setDiaryResult(null);
-            setShowDiaryEditor(false);
-            setShowAlbum(true);
-            setIsEditingDiary(false);
-          }}
-          className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-        >
-          ← 뒤로
-        </button>
-        <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
-        <div className="ml-auto flex items-center gap-2 text-xs font-medium">
-          {autoSaveState === 'saving' && <span className="text-[#B08B7A]">저장 중...</span>}
-          {autoSaveState === 'done' && !isEditingDiary && <span className="text-green-500">✓ 저장 완료</span>}
-          {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
-          {savedDiaryId && !isEditingDiary && autoSaveState === 'done' && (
-            <button
-              onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
-              className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              ✏️ 수정
-            </button>
-          )}
-          {isEditingDiary && (
-            <>
-              <button
-                onClick={() => setIsEditingDiary(false)}
-                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-gray-400 transition hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={editSaving}
-                className="rounded-full bg-[#F4845F] px-3 py-1.5 text-white transition hover:bg-[#e0724e] disabled:opacity-50"
-              >
-                {editSaving ? '저장 중...' : '저장'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 스케치북/일기장 본문 */}
-      <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
-        {/* 마스킹 테이프 느낌 */}
-        <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-        <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-
-        {/* 제목/요약 */}
-        <div className="mb-6 text-center">
-          <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-          {isEditingDiary ? (
-            <input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-[#F4845F] bg-[#FFF8F3] px-3 py-2 text-center text-xl font-bold text-[#F4845F] outline-none"
-            />
-          ) : (
-            <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
-              {diaryResult.diary.title}
-            </h3>
-          )}
-          {diaryResult.diary.summary && (
-            <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
-              ✨ {diaryResult.diary.summary}
-            </div>
-          )}
-          {autoPlace && (
-            <button
-              onClick={() => setShowPlacePanel((prev) => !prev)}
-              className={`mt-2 rounded-2xl px-3 py-1.5 text-left transition ${showPlacePanel ? 'bg-[#5B8DB8] text-white' : 'bg-[#F0F7FF] text-[#5B8DB8] hover:bg-[#ddeeff]'}`}
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold">📍 {autoPlace.name}</span>
-                <span className="text-[11px] opacity-80">{autoPlace.address}</span>
-              </div>
-            </button>
-          )}
-        </div>
-
-        {/* 이미지 */}
-        <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
-          <img
-            src={diaryResult.imageUrl}
-            alt="그림일기"
-            className="w-full h-auto rounded-[16px] object-contain"
-          />
-        </div>
-
-        {/* 일기 본문 - 줄 있는 노트 느낌 */}
-        {isEditingDiary ? (
-          <textarea
-            value={editBody}
-            onChange={(e) => setEditBody(e.target.value)}
-            rows={10}
-            className="w-full rounded-[20px] border border-[#F4845F] bg-[#FFFCF8] px-5 py-5 text-[15px] leading-[31px] text-[#3D2B1F] outline-none resize-none"
-            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-          />
-        ) : (
-          <div
-            className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-          >
-            <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
-              {diaryResult.diary.content}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-
-    {/* 장소 정보 사이드 패널 */}
-    {showPlacePanel && autoPlace && (
-      <div className="w-72 shrink-0 rounded-[24px] border border-[#E9D9C9] bg-[#FFFDF8] p-5 shadow-[0_4px_16px_rgba(61,43,31,0.08)] self-start mt-14">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-bold text-[#3D2B1F]">📍 장소 정보</span>
-          <button onClick={() => setShowPlacePanel(false)} className="text-[#B08B7A] hover:text-[#3D2B1F] text-xs">✕</button>
-        </div>
-        <p className="text-sm font-bold text-[#3D2B1F] mb-1">{autoPlace.name}</p>
-        <p className="text-xs text-[#8B6355] mb-3">{autoPlace.address}</p>
-        <div className="flex flex-wrap gap-1 mb-3">
-          {autoPlace.category && <span className="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] text-[#F4845F]">{autoPlace.category}</span>}
-          {autoPlace.sub_category && <span className="rounded-full bg-[#FFF0E6] px-2 py-0.5 text-[11px] text-[#F4845F]">{autoPlace.sub_category}</span>}
-          {autoPlace.indoor === 'Y' && <span className="rounded-full bg-[#E8F4FD] px-2 py-0.5 text-[11px] text-[#5B8DB8]">실내 가능</span>}
-          {autoPlace.outdoor === 'Y' && <span className="rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[11px] text-[#4CAF50]">야외 가능</span>}
-          {autoPlace.has_parking === 'Y' && <span className="rounded-full bg-[#F3E5F5] px-2 py-0.5 text-[11px] text-[#9C27B0]">주차 가능</span>}
-        </div>
-        {autoPlace.operation && (
-          <div className="mb-2">
-            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">운영시간</p>
-            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.operation}</p>
-          </div>
-        )}
-        {autoPlace.tel && (
-          <div className="mb-2">
-            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">연락처</p>
-            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.tel}</p>
-          </div>
-        )}
-        {autoPlace.conditions && (
-          <div>
-            <p className="text-[11px] font-semibold text-[#8B6355] mb-0.5">이용조건</p>
-            <p className="text-[11px] text-[#3D2B1F]">{autoPlace.conditions}</p>
-          </div>
-        )}
-      </div>
-    )}
-  </div>
-  </div>
-)}
-
-              {tab === 'map' && !showMapSearch && (
-                <MapIntro onStartMap={() => setShowMapSearch(true)} />
-              )}
-
-              {tab === 'map' && showMapSearch && (
-                <MapView
-                  places={mapPlaces}
-                  onUsePlace={handleUsePlace}
-                  initialSelectedId={historySelectedId ?? undefined}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* 오른쪽 챗봇 영역 */}
-          <div className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
-            <div
-              className="flex h-full flex-col overflow-hidden rounded-[28px] border shadow-[0_0_40px_rgba(0,0,0,0.08)]"
-              style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
-            >
-              <div
-                className="border-b px-4 py-3"
-                style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-full"
-                    style={{ background: '#FFE8D6' }}
-                  >
-                    <span className="text-2xl">🐾</span>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold" style={{ color: '#3D2B1F' }}>
-                      AI 멍봇
-                    </p>
-                    <p className="text-xs" style={{ color: '#8B6355' }}>
-                      {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {!showChatHistory && (
-                      <button
-                        onClick={() => {
-                          setShowChatHistory(false);
-                          setChatKey((k) => k + 1);
-                        }}
-                        className="rounded-full border border-[#F4845F] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] transition hover:bg-[#FFF0E6]"
-                      >
-                        + 새 채팅
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setShowChatHistory((prev) => !prev)}
-                      className="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
-                      style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
-                    >
-                      {showChatHistory ? '← 챗봇' : '최근 채팅 기록'}
-                    </button>
-                  </div>
-                </div>
+                    }`}
+                  onClick={() => { setTab('map'); setShowMapSearch(false); setShowDiaryEditor(false); setShowAlbum(false); setDiaryResult(null); }}
+                >
+                  <Map className="h-4 w-4" />
+                  지도
+                </button>
               </div>
 
-              <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
-                {showChatHistory ? (
-                  <ChatHistory
-                    onBack={() => setShowChatHistory(false)}
-                    onShowPlaces={(places, selected) => {
-                      setMapPlaces(places)
-                      setHistorySelectedId(selected.content_id ?? selected.name)
-                      setTab('map')
-                      setShowMapSearch(true)
-                      // 채팅 기록은 닫지 않음 — 일기쓰기 버튼 클릭 시 handleUsePlace에서 닫힘
+              <div className="flex-1 overflow-y-auto">
+
+                {tab === null && (
+                  <HomeIntro
+                    onOpenMap={handleOpenMapTab}
+                    onOpenDiary={handleOpenDiaryTab}
+                    onGoMypage={handleGoMypage}
+                  />
+                )}
+
+                {tab === 'diary' && !showDiaryEditor && !diaryResult && !showAlbum && (
+                  <DiaryIntro
+                    onStartDiary={() => {
+                      setDiaryTrigger((prev) => prev + 1);
+                    }}
+                    onOpenAlbum={() => setShowAlbum(true)}
+                    onGoCalendar={() => navigate('/calendar')}
+                  />
+                )}
+
+                {tab === 'diary' && showAlbum && !diaryResult && (
+                  <DiaryAlbum
+                    // nav 앨범 재클릭 시 같은 URL 이라도 location.key 가 새로 생성되므로 강제 재mount.
+                    // DiaryAlbum 내부 selected / isEditing state 가 자동 reset → 목록으로 복귀.
+                    key={location.key}
+                    diaries={albumDiaries}
+                    loading={albumLoading}
+                    initialFavoriteIds={albumFavoriteIds}
+                    onBack={() => setShowAlbum(false)}
+                    onDelete={async (id) => {
+                      // throw 흐름 = DiaryDetailView 의 ConfirmModal 이 catch + alert 처리.
+                      // 단, 앨범 목록의 ✕ 버튼은 confirm() 분기라 여기서 alert 도 같이 호출.
+                      try {
+                        await deleteDiary(Number(id));
+                        setAlbumDiaries((prev) => prev.filter((d) => d.id !== id));
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : '삭제에 실패했어요.');
+                        throw err;
+                      }
+                    }}
+                    onUpdate={async (id, title, body) => {
+                      await updateDiary(Number(id), { title, content: body });
+                      setAlbumDiaries((prev) =>
+                        prev.map((d) => d.id === id ? { ...d, title, body } : d)
+                      );
                     }}
                   />
-                ) : (
-                  <div className="h-full p-3">
-                    <ChatBot
-                      key={chatKey}
-                      pet={currentPet}
-                      onSelectPlace={handleUsePlace}
-                      onPlacesFound={handlePlacesFound}
-                      onNavigateToDiary={handleOpenDiaryTab}
-                      onNavigateToMap={handleOpenMapTab}
-                      onDiaryReady={handleDiaryReady}
-                      diaryTrigger={diaryTrigger}
-                      diaryPlace={autoPlace?.name}
-                      initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
-                    />
+                )}
+
+                {tab === 'diary' && showDiaryEditor && !diaryResult && currentPet && (
+                  <DiaryView
+                    pet={currentPet}
+                    user={safeUser!}
+                    diaries={safeDiaries}
+                    autoPlace={autoPlace?.name ?? ''}
+                    onClearAutoPlace={() => setAutoPlace(null)}
+                    onSave={handleSaveDiary}
+                  />
+                )}
+
+                {tab === 'diary' && diaryResult && (
+                  <div className="h-full overflow-y-auto bg-[#F6F1EA] p-6">
+                    <div className="mx-auto w-full max-w-[720px]">
+                      <div className="flex-1 min-w-0">
+                        {/* 상단 헤더 */}
+                        <div className="mb-4 flex items-center gap-3">
+                          <button
+                            onClick={() => {
+                              setDiaryResult(null);
+                              setShowDiaryEditor(false);
+                              setShowAlbum(true);
+                              setIsEditingDiary(false);
+                            }}
+                            className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                          >
+                            ← 뒤로
+                          </button>
+                          <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+                          <div className="ml-auto flex items-center gap-2 text-xs font-medium">
+                            {autoSaveState === 'saving' && <span className="text-[#B08B7A]">저장 중...</span>}
+                            {autoSaveState === 'done' && !isEditingDiary && <span className="text-green-500">✓ 저장 완료</span>}
+                            {autoSaveState === 'error' && <span className="text-red-400">저장 실패</span>}
+                            {savedDiaryId && !isEditingDiary && autoSaveState === 'done' && (
+                              <>
+                                <button
+                                  onClick={() => { setEditTitle(diaryResult.diary.title); setEditBody(diaryResult.diary.content); setIsEditingDiary(true); }}
+                                  className="rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                                >
+                                  ✏️ 수정
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setResultDeleteOpen(true)}
+                                  aria-label="다이어리 삭제"
+                                  className="grid h-7 w-7 place-items-center rounded-full border border-[#F5D6C8] bg-white text-[#8B6355] transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                                >
+                                  🗑
+                                </button>
+                              </>
+                            )}
+                            {isEditingDiary && (
+                              <>
+                                <button
+                                  onClick={() => setIsEditingDiary(false)}
+                                  className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-gray-400 transition hover:bg-gray-50"
+                                >
+                                  취소
+                                </button>
+                                <button
+                                  onClick={handleSaveEdit}
+                                  disabled={editSaving}
+                                  className="rounded-full bg-[#F4845F] px-3 py-1.5 text-white transition hover:bg-[#e0724e] disabled:opacity-50"
+                                >
+                                  {editSaving ? '저장 중...' : '저장'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <DiaryNoteCard
+                          title={diaryResult.diary.title}
+                          body={diaryResult.diary.content}
+                          summary={diaryResult.diary.summary}
+                          imageUrl={diaryResult.imageUrl}
+                          placeName={autoPlace?.name}
+                          onPlaceClick={autoPlace ? () => setShowPlacePanel((prev) => !prev) : undefined}
+                          placePinActive={showPlacePanel}
+                          isEditing={isEditingDiary}
+                          editTitle={editTitle}
+                          editBody={editBody}
+                          onTitleChange={setEditTitle}
+                          onBodyChange={setEditBody}
+                        />
+                      </div>
+
+                    </div>
                   </div>
+                )}
+
+                {tab === 'map' && !showMapSearch && (
+                  <MapIntro onStartMap={() => setShowMapSearch(true)} />
+                )}
+
+                {tab === 'map' && showMapSearch && (
+                  <MapView
+                    places={mapPlaces}
+                    onUsePlace={handleUsePlace}
+                    initialSelectedId={historySelectedId ?? undefined}
+                    userLocation={userLocation ?? undefined}
+                  />
                 )}
               </div>
             </div>
+
+            {/* 오른쪽 챗봇 영역 */}
+            <div data-tour="chatbot" className="w-[450px] shrink-0 bg-[#FFF8F3] p-4">
+              <div
+                className="flex h-full flex-col overflow-hidden rounded-[28px] border shadow-[0_0_40px_rgba(0,0,0,0.08)]"
+                style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
+              >
+                <div
+                  className="border-b px-4 py-3"
+                  style={{ borderColor: '#F5D6C8', background: '#FFFFFF' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center">
+                      <img src="/chatbot_logo.svg" alt="AI 멍봇" className="h-11 w-11 object-contain" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold" style={{ color: '#3D2B1F' }}>
+                        AI 멍봇
+                      </p>
+                      <button
+                        data-tour="pet-picker"
+                        ref={petPickerBtnRef}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = petPickerBtnRef.current?.getBoundingClientRect();
+                          if (rect) setPickerPos({ top: rect.bottom + 4, left: rect.left });
+                          setShowPetPicker((v) => !v);
+                        }}
+                        className="text-xs underline-offset-2 hover:underline transition-colors"
+                        style={{ color: '#8B6355' }}
+                      >
+                        {currentPet ? `${currentPet.name} · ${currentPet.breed}` : '반려견 AI 도우미'} ▾
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5" data-tour="new-chat">
+                      {!showChatHistory && (
+                        <button
+                          onClick={() => {
+                            // 우측 챗봇 영역 reset — diaryTrigger 가 monotonic counter 라
+                            // 0 이상이면 ChatBot 재마운트 직후 useEffect[diaryTrigger] 가 발화해서
+                            // forceStartDiary 가 다시 호출됨 → step='type_select' 유지, input 폼
+                            // 미렌더. 0 으로 리셋해서 `if (!diaryTrigger) return` 분기로 차단.
+                            setDiaryTrigger(0);
+                            setAutoPlace(null);
+                            // 좌측 본문 다이어리 영역 reset — 결과 카드 / Editor 분기 닫기.
+                            // 미reset 시 우측만 welcome 복귀하고 좌측 카드는 남아 어색.
+                            setDiaryResult(null);
+                            setShowDiaryEditor(false);
+                            // 사이드바 닫기 + ChatBot 강제 재마운트
+                            setShowChatHistory(false);
+                            setChatKey((k) => k + 1);
+                          }}
+                          className="rounded-full border border-[#F4845F] bg-white px-3 py-1.5 text-xs font-semibold text-[#F4845F] transition hover:bg-[#FFF0E6]"
+                        >
+                          + 새 채팅
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setShowChatHistory((prev) => !prev)}
+                        className="rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-80"
+                        style={{ background: showChatHistory ? '#3D2B1F' : '#F4845F', color: '#FFFFFF' }}
+                      >
+                        {showChatHistory ? '← 챗봇' : '최근 채팅 기록'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1" style={{ background: '#FFF8F3' }}>
+                  {showChatHistory ? (
+                    <ChatHistory
+                      onBack={() => setShowChatHistory(false)}
+                      onShowPlaces={(places, selected) => {
+                        setMapPlaces(places)
+                        setHistorySelectedId(selected.content_id ?? selected.name)
+                        setTab('map')
+                        setShowMapSearch(true)
+                        // 채팅 기록은 닫지 않음 — 일기쓰기 버튼 클릭 시 handleUsePlace에서 닫힘
+                      }}
+                    />
+                  ) : (
+                    <div className="h-full p-3">
+                      <ChatBot
+                        key={chatKey}
+                        pet={currentPet}
+                        onSelectPlace={handleUsePlace}
+                        onPlacesFound={handlePlacesFound}
+                        onNavigateToDiary={handleOpenDiaryTab}
+                        onNavigateToMap={handleOpenMapTab}
+                        onDiaryReady={handleDiaryReady}
+                        diaryTrigger={diaryTrigger}
+                        diaryPlace={autoPlace?.name}
+                        initialMessage={chatKey > 0 ? '새로운 이야기를 시작해볼까요? 🐾' : undefined}
+                        userLocation={userLocation ?? undefined}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <ConfirmModal
+        isOpen={resultDeleteOpen}
+        onClose={() => setResultDeleteOpen(false)}
+        onConfirm={handleConfirmDeleteResult}
+        title="다이어리를 삭제하시겠습니까?"
+        description="삭제된 다이어리는 복구할 수 없습니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        variant="danger"
+        loading={resultDeleting}
+      />
+
+      {showPlacePanel && autoPlace && (
+        <PlaceDetailCard
+          place={autoPlace}
+          variant="modal"
+          showImage
+          showPetInfo
+          showDescription
+          showLocationSection
+          onClose={() => setShowPlacePanel(false)}
+          isFavorite={autoPlaceFavorite.isFavorite(autoPlace.content_id)}
+          onToggleFavorite={() => autoPlaceFavorite.toggle(autoPlace.content_id)}
+          favoriteToggling={autoPlaceFavorite.isToggling(autoPlace.content_id)}
+        />
+      )}
+
+      {showPetPicker && pickerPos && allPetsForPicker.length > 0 && (
+        <div
+          className="fixed z-[9999] min-w-[180px] overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-[#F5D6C8]"
+          style={{ top: pickerPos.top, left: pickerPos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {allPetsForPicker.map((ap) => {
+            const isActive = ap.id === (currentPet?.id ?? fetchedPetId);
+            const isSetting = settingPetId === ap.id;
+            return (
+              <button
+                key={ap.id}
+                onClick={() => handlePickPet(ap.id)}
+                disabled={isActive || isSetting}
+                className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition hover:bg-[#FFF0E6] disabled:cursor-default ${isActive ? 'font-bold text-[#F4845F]' : 'text-[#3D2B1F]'}`}
+              >
+                {isActive && <span className="text-[#F4845F]">✓</span>}
+                <span>{isSetting ? '설정 중...' : `${ap.name} · ${ap.breed}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <OnboardingTour open={tourOpen} onComplete={handleTourComplete} manual={tourManual} userId={tourUserId} />
+    </>
   );
 }

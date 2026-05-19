@@ -178,4 +178,32 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  /**
+  * Pointer cursor for interactive elements.
+  * Tailwind/CSS reset removes the native pointer on <button>, so we restore
+  * it here for clickable controls. Text inputs keep the default I-beam.
+  * Tailwind utility classes (cursor-pointer, cursor-default, etc.) override
+  * these because the utilities layer wins over @layer base.
+  */
+  button:not(:disabled),
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='submit']:not(:disabled),
+  input[type='button']:not(:disabled),
+  input[type='reset']:not(:disabled),
+  input[type='file']:not(:disabled),
+  a[href],
+  label[for],
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }

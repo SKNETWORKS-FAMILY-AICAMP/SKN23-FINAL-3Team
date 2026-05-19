@@ -64,7 +64,30 @@ class User(Base):
         comment="대표 성향 키워드 ID",
     )
 
+    # FK → pets (대표 반려견, 1:1 포인터). 본인 소유 pet 여야 함은 service 단 검증.
+    # ON DELETE SET NULL: 대표 pet 이 hard delete 되면 자동 NULL.
+    # soft delete 케이스는 pet_service.delete_pet 가 자동 승격으로 처리.
+    primary_pet_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("pets.id", onupdate="CASCADE", ondelete="SET NULL"),
+        nullable=True,
+        comment="대표 반려견 ID (마이페이지 카드·기본 컨텍스트용)",
+    )
+
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 여행 성향 태그 목록")
+
+    # 약관·개인정보처리방침 동의 시점 (NULL = 미동의 → /step 재진입).
+    # 회원가입 시 /step 첫 단계에서 두 동의 모두 받고 동시에 timestamp 박힘.
+    # 정책상 둘은 함께 갱신되지만 약관별 변경 시점 추적 가능성 위해 컬럼 분리.
+    # 컬럼 정의 순서는 운영 RDS 물리 컬럼 순서 정합 (BEFORE created_at).
+    terms_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None,
+        comment="서비스 이용약관 동의 시점 (KST). NULL = 미동의."
+    )
+    privacy_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None,
+        comment="개인정보처리방침 동의 시점 (KST). NULL = 미동의."
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
@@ -79,11 +102,42 @@ class User(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="탈퇴 일시")
 
     # ── Relationships ──────────────────────────────────────────────────────
-    profile: Mapped[Image] = relationship("Image", foreign_keys=[profile_id], lazy="select")
-    keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
-    pets: Mapped[list[Pet]] = relationship("Pet", back_populates="user", cascade="all, delete-orphan")
+    profile: Mapped[Image | None] = relationship("Image", foreign_keys=[profile_id], lazy="selectin")
+    # selectin: UserResponse.type_name property 가 동기 access 안전하도록 prefetch.
+    type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")
+    # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 SQLAlchemy 추론 모호 → foreign_keys 명시.
+    pets: Mapped[list[Pet]] = relationship(
+        "Pet",
+        back_populates="user",
+        foreign_keys="[Pet.user_id]",
+        cascade="all, delete-orphan",
+    )
+    # 대표 반려견 nested 응답용. async 환경이라 lazy="selectin" — UserResponse.model_validate 시 자동 로드.
+    primary_pet: Mapped[Pet | None] = relationship(
+        "Pet",
+        foreign_keys=[primary_pet_id],
+        lazy="selectin",
+    )
     chat_rooms: Mapped[list[ChatRoom]] = relationship("ChatRoom", back_populates="user", cascade="all, delete-orphan")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def profile_image_url(self) -> str | None:
+        """UserResponse 의 from_attributes 매핑용 — relationship 에서 url 동적 추출.
+
+        relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        Pet.profile_image_url property 와 동일 패턴.
+        """
+        return self.profile.file_url if self.profile else None
+
+    @property
+    def type_name(self) -> str | None:
+        """UserResponse 의 from_attributes 매핑용 — keywords.name 동적 추출.
+
+        User.type relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        type_id 가 NULL 이면 None 반환 — 마이페이지에서 "성향 미설정" 표시 분기.
+        """
+        return self.type.name if self.type else None
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} provider={self.provider!r}>"

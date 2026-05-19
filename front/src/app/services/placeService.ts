@@ -28,17 +28,44 @@ interface SearchPlacesResponse {
   places: PlaceResult[]
 }
 
+export interface FavoritePlace {
+  content_id: string
+  name: string
+  sub_category: string
+  favorited_at: string
+}
+
+export interface ToggleFavoriteResponse {
+  content_id: string
+  is_favorite: boolean
+  favorited_at: string
+}
+
+/** PATCH /places/{content_id}/favorite — 즐겨찾기 토글 */
+export function togglePlaceFavorite(contentId: string): Promise<ToggleFavoriteResponse> {
+  return api.patch(`/places/${contentId}/favorite`, {})
+}
+
+/** GET /places/favorites — 즐겨찾기 목록 */
+export function getPlaceFavorites(): Promise<FavoritePlace[]> {
+  return api.get<{ items: FavoritePlace[] }>('/places/favorites').then((r) => r.items)
+}
+
 /** GET /places/search?query={q}&category={c}&city={c} */
 export function searchPlaces(params: {
   query: string
   category?: string
   city?: string
   pet_id?: number | null
+  user_lat?: number
+  user_lng?: number
 }): Promise<PlaceResult[]> {
   const qs = new URLSearchParams({ query: params.query })
   if (params.category) qs.set('category', params.category)
   if (params.city) qs.set('city', params.city)
   if (params.pet_id != null) qs.set('pet_id', String(params.pet_id))
+  if (params.user_lat != null) qs.set('user_lat', String(params.user_lat))
+  if (params.user_lng != null) qs.set('user_lng', String(params.user_lng))
   return api
     .get<SearchPlacesResponse>(`/places/search?${qs}`)
     .then((response) => response.places)

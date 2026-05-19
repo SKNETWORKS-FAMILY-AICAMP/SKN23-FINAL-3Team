@@ -179,7 +179,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -292,6 +292,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# Flutter mobile env helper — Python virtualenv 패턴 (env/ / ENV/) 와 충돌
+# (Windows case-insensitive 파일시스템 매칭). 명시 예외로 트래킹 복원.
+!mobile/lib/core/env/
+!mobile/lib/core/env/**
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -315,6 +320,9 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# VS Code 디버거 전용 스크립트
+back/debug_server.py
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
@@ -361,6 +369,7 @@ pyvenv.cfg
 pip-selfcheck.json
 
 ### VisualStudioCode ###
+.vscode/
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -563,4 +572,5 @@ ai/eval_data/
 
 # 평가셋 엑셀 (용량 초과)
 data/eval/*.xlsx
-
+
+# ========== 개인 ==============

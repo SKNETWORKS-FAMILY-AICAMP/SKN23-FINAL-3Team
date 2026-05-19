@@ -14,12 +14,13 @@ import {
   LogOut,
   BookOpen,
   Images,
-  LogIn,
+  Star,
+  HelpCircle,
 } from "lucide-react";
 import { getMe } from "../services/userService";
 import { getPets } from "../services/petService";
-import { getImage } from "../services/imageService";
 import { SubscriptionModal } from "./SubscriptionModal";
+import LoginPromptModal from "./LoginPromptModal";
 
 interface SubItem {
   label: string;
@@ -70,25 +71,21 @@ export function Navbar() {
     setIsLoggedIn(!!localStorage.getItem('access_token'));
   }, [location.pathname]);
 
-  // 선택된 반려견 사진 로드 (MyPage와 연동)
+  // 사용자 프로필 사진 + 활성 반려견 ID 동기화
+  // - 우측 아바타 = users.profile_image_url 단일 출처 (가을쥐 결정 2026-05-07)
+  // - selected_pet_id 동기화는 별개 책임 (챗봇·일기 활성 pet 컨텍스트)
   const loadProfilePhoto = async () => {
     if (!isLoggedIn) return;
     try {
       const me = await getMe();
+      setProfilePhoto(me.profile_image_url);
+
       const pets = await getPets(me.id);
       const pet = pets[0] ?? null;
       const selectedPetId = localStorage.getItem('selected_pet_id');
       const targetPet = (selectedPetId ? pets.find((p) => String(p.id) === selectedPetId) : null) ?? pet;
       if (targetPet) {
         localStorage.setItem('selected_pet_id', String(targetPet.id));
-        const cached = localStorage.getItem(`pet_photo_${targetPet.id}`);
-        if (cached) { setProfilePhoto(cached); return; }
-      }
-      // localStorage에 없으면 profile_id로 백엔드에서 가져와서 저장
-      if (me.profile_id) {
-        const img = await getImage(me.profile_id);
-        setProfilePhoto(img.url);
-        if (targetPet) localStorage.setItem(`pet_photo_${targetPet.id}`, img.url);
       }
     } catch { /* 무시 */ }
   };
@@ -98,11 +95,16 @@ export function Navbar() {
     loadProfilePhoto();
   }, [isLoggedIn]);
 
-  // MyPage에서 반려견 선택 변경 시 즉시 반영
+  // MyPage에서 반려견 선택 변경 시 + Step2Page 에서 보호자 프로필(이미지·닉네임 등) 변경 시 즉시 반영.
+  // 두 이벤트 모두 동일하게 getMe() 재조회 → 우측 아바타 갱신.
   useEffect(() => {
-    const onPetChange = () => loadProfilePhoto();
-    window.addEventListener('pet-select-change', onPetChange);
-    return () => window.removeEventListener('pet-select-change', onPetChange);
+    const refresh = () => loadProfilePhoto();
+    window.addEventListener('pet-select-change', refresh);
+    window.addEventListener('user-profile-change', refresh);
+    return () => {
+      window.removeEventListener('pet-select-change', refresh);
+      window.removeEventListener('user-profile-change', refresh);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -126,6 +128,7 @@ export function Navbar() {
       subItems: [
         { label: "앨범", path: "/home?tab=diary&album=true", icon: Images, requiresAuth: true },
         { label: "캘린더", path: "/calendar", icon: Calendar, requiresAuth: true },
+        { label: "장소 즐겨찾기", path: "/place-favorites", icon: Star, requiresAuth: true },
       ],
     },
     { icon: User, label: "마이페이지", path: "/mypage", requiresAuth: true },
@@ -169,7 +172,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* 왼쪽: 로고 */}
           <Link to="/home" className="flex items-center select-none cursor-pointer hover:opacity-75 transition-opacity">
-            <img src="/logo.svg" alt="withDOG" className="h-16 w-auto" />
+            <img src="/logo2.svg" alt="withDOG" className="h-12 w-auto" />
           </Link>
 
           {/* 오른쪽: 메뉴 + 프로필/로그인 */}
@@ -186,6 +189,7 @@ export function Navbar() {
                     className="relative"
                     onMouseEnter={() => item.subItems && setHoveredMenu(item.label)}
                     onMouseLeave={() => setHoveredMenu(null)}
+                    {...(item.label === '다이어리' ? { 'data-tour': 'diary-menu' } : {})}
                   >
                     <button
                       onClick={() => handleNavClick(item)}
@@ -283,6 +287,13 @@ export function Navbar() {
                         >
                           <span className="text-base leading-none">🐾</span>
                           구독 패스
+                        </button>
+                        <button
+                          onClick={() => { setProfileOpen(false); window.dispatchEvent(new Event('show-onboarding-tour')); }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                        >
+                          <HelpCircle className="w-4 h-4" />
+                          튜토리얼 다시 보기
                         </button>
                         <button
                           onClick={() => { setProfileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
@@ -416,6 +427,13 @@ export function Navbar() {
                   구독 패스
                 </button>
                 <button
+                  onClick={() => { setMobileOpen(false); window.dispatchEvent(new Event('show-onboarding-tour')); }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  튜토리얼 다시 보기
+                </button>
+                <button
                   onClick={() => { setMobileOpen(false); alert('알림 설정은 준비 중이에요!'); }}
                   className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-colors"
                 >
@@ -443,76 +461,16 @@ export function Navbar() {
       </AnimatePresence>
     </motion.header>
 
-      {/* 비로그인 접근 차단 모달 */}
-      <AnimatePresence>
-        {loginModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center px-4"
-            style={{ background: 'rgba(61,43,31,0.45)', backdropFilter: 'blur(6px)' }}
-            onClick={() => setLoginModalOpen(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.97 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              className="w-full max-w-[360px] overflow-hidden rounded-[28px] bg-white shadow-[0_24px_64px_rgba(61,43,31,0.18)]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* 상단 일러스트 영역 */}
-              <div className="relative flex flex-col items-center px-8 pb-6 pt-10"
-                style={{ background: 'linear-gradient(145deg, #FFF3EA 0%, #FFE8D6 100%)' }}>
-                <button
-                  onClick={() => setLoginModalOpen(false)}
-                  className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full bg-white/60 text-[#8B6355] transition hover:bg-white"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-[0_4px_16px_rgba(244,132,95,0.2)]">
-                  <span className="text-4xl">🐾</span>
-                </div>
-                <h2 className="mt-4 text-[22px] font-black tracking-tight text-[#3D2B1F]">로그인이 필요해요</h2>
-                <p className="mt-1.5 text-center text-sm text-[#8B6355]">
-                  withDOG의 더 많은 기능을<br />로그인 후 이용해보세요
-                </p>
-              </div>
-
-              {/* 기능 안내 */}
-              <div className="px-7 py-5">
-                <div className="flex flex-col gap-2.5">
-                  {[
-                    { emoji: '📸', text: '반려견 앨범 모아보기' },
-                    { emoji: '📅', text: '멍캘린더 일정 관리' },
-                    { emoji: '📔', text: 'AI 그림일기 생성' },
-                    { emoji: '🗺️', text: 'AI 맞춤 여행지 추천' },
-                  ].map(({ emoji, text }) => (
-                    <div key={text} className="flex items-center gap-3 rounded-2xl bg-[#FFF8F3] px-4 py-2.5">
-                      <span className="text-base">{emoji}</span>
-                      <span className="text-sm font-medium text-[#5C3D2B]">{text}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => { setLoginModalOpen(false); navigate("/login"); }}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[15px] font-bold text-white transition active:scale-95"
-                  style={{ background: 'linear-gradient(135deg, #F4845F 0%, #F06030 100%)' }}
-                >
-                  <LogIn className="h-4 w-4" />
-                  로그인 하러 가기
-                </button>
-                <p className="mt-3 text-center text-xs text-[#B08B7A]">
-                  카카오 · 구글 · 네이버로 간편 가입
-                </p>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <LoginPromptModal
+        open={loginModalOpen}
+        onClose={() => setLoginModalOpen(false)}
+        features={[
+          { emoji: '📸', text: '반려견 앨범 모아보기' },
+          { emoji: '📅', text: '멍캘린더 일정 관리' },
+          { emoji: '📔', text: 'AI 그림일기 생성' },
+          { emoji: '🗺️', text: 'AI 맞춤 여행지 추천' },
+        ]}
+      />
 
       <SubscriptionModal open={subscriptionOpen} onClose={() => setSubscriptionOpen(false)} />
     </>

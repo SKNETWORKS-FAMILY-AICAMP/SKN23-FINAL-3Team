@@ -3,7 +3,7 @@ import type { Pet } from '../types'
 import { DIARY_TYPES, type DiaryTypeId } from '../constants/diaryTypes'
 import { EMOTIONS } from '../constants/emotions'
 import { generateDiary, type GeneratedDiary } from '../services/diaryService'
-import { createChatRoom, saveMessage, type FacilityCard } from '../services/chatService'
+import { createChatRoom, saveMessageDirect, type FacilityCard } from '../services/chatService'
 import type { PlaceResult } from '../services/placeService'
 
 // ── 메시지 타입 ──────────────────────────────────────
@@ -13,6 +13,7 @@ export interface Message {
   content: string
   action?: 'start_diary'
   variant?: 'place' | 'facility'
+  imageUrl?: string
   places?: Array<{
     name: string
     address: string
@@ -54,6 +55,7 @@ export interface ChatbotState {
   selectedEmotionLabel: string | null
   generatedDiary: GeneratedDiary | null
   isGenerating: boolean
+  photoStyleImageUrl: string | null
 }
 
 // ── 액션 ─────────────────────────────────────────────
@@ -72,6 +74,8 @@ export type ChatbotAction =
   | { type: 'RESET' }
   | { type: 'SUBMIT_WELCOME_CHAT'; text: string }
   | { type: 'TRIGGER_DIARY_FLOW' }
+  | { type: 'START_PHOTO_DIARY'; photoStyleImageUrl: string }
+  | { type: 'ADD_PHOTO_BOT_MSG'; content: string; imageUrl?: string }
   | {
     type: 'RECEIVE_BOT_MESSAGE'
     text: string
@@ -120,6 +124,7 @@ function makeInitialState(pet: Pet, welcomeOverride?: string): ChatbotState {
     selectedEmotionLabel: null,
     generatedDiary: null,
     isGenerating: false,
+    photoStyleImageUrl: null,
   }
 }
 
@@ -136,6 +141,29 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
           ...state.messages,
           userMsg('그림일기 쓸게요 📝'),
           botMsg(`좋아요! ${petName}의 오늘 하루를 어떤 유형으로 기록할까요?`),
+        ],
+      }
+    }
+
+    case 'START_PHOTO_DIARY': {
+      return {
+        ...state,
+        step: 'type_select',
+        photoStyleImageUrl: action.photoStyleImageUrl,
+        selectedDiaryType: null,
+        currentQuestionIndex: 0,
+        mainAnswers: [],
+        additionalPerspectiveAccepted: null,
+        additionalAnswers: [],
+        additionalQuestionIndex: 0,
+        selectedEmotionEmoji: null,
+        selectedEmotionLabel: null,
+        generatedDiary: null,
+        isGenerating: false,
+        messages: [
+          ...state.messages,
+          userMsg('그림일기 만들기 📝'),
+          botMsg(`좋아요! 이 그림을 바탕으로 ${petName}의 일기를 써볼까요?\n어떤 유형으로 기록할까요?`),
         ],
       }
     }
@@ -294,6 +322,17 @@ function reducer(state: ChatbotState, action: ChatbotAction): ChatbotState {
       }
     }
 
+    case 'ADD_PHOTO_BOT_MSG': {
+      const msg: Message = { id: nextId(), role: 'bot', content: action.content }
+      if (action.imageUrl) msg.imageUrl = action.imageUrl
+      return {
+        ...state,
+        isGenerating: false,
+        messages: [...state.messages, msg],
+        photoStyleImageUrl: action.imageUrl ?? state.photoStyleImageUrl,
+      }
+    }
+
     case 'TRIGGER_DIARY_FLOW': {
       return {
         ...state,
@@ -409,11 +448,9 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
           chatRoomIdRef.current = room.id
         }
         const roomId = chatRoomIdRef.current!
-        // 백엔드가 role='user'만 허용하므로 유저 메시지만 저장
         for (const msg of state.messages.slice(lastSavedCountRef.current)) {
-          if (msg.role === 'user') {
-            await saveMessage(roomId, 'user', msg.content)
-          }
+          const role = msg.role === 'user' ? 'user' : 'assistant'
+          await saveMessageDirect(roomId, role, msg.content)
           lastSavedCountRef.current++
         }
       } catch (e) {
@@ -467,6 +504,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
 
   const actions = {
     startDiary: useCallback(() => dispatch({ type: 'START_DIARY' }), []),
+    startPhotoDiary: useCallback((photoStyleImageUrl: string) => dispatch({ type: 'START_PHOTO_DIARY', photoStyleImageUrl }), []),
     forceStartDiary: useCallback((placeName?: string) => dispatch({ type: 'FORCE_START_DIARY', placeName }), []),
     triggerDiaryFlow: useCallback(() => dispatch({ type: 'TRIGGER_DIARY_FLOW' }), []),
     selectDiaryType: useCallback((id: DiaryTypeId) => dispatch({ type: 'SELECT_DIARY_TYPE', id }), []),
@@ -478,6 +516,7 @@ export function useChatbot(pet: Pet, welcomeOverride?: string) {
     regenerate: useCallback(() => dispatch({ type: 'REGENERATE' }), []),
     reset: useCallback(() => dispatch({ type: 'RESET' }), []),
     submitWelcomeChat: useCallback((text: string) => dispatch({ type: 'SUBMIT_WELCOME_CHAT', text }), []),
+    addPhotoBotMsg: useCallback((content: string, imageUrl?: string) => dispatch({ type: 'ADD_PHOTO_BOT_MSG', content, imageUrl }), []),
     receiveBotMessage: useCallback(
       (
         text: string,

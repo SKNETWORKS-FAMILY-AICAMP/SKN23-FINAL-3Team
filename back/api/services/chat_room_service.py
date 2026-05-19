@@ -29,6 +29,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.chat_room import ChatRoomCreate, ChatRoomUpdateTitle
 
+from utils.profanity_filter import contains_profanity
+
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
@@ -61,7 +63,17 @@ async def create_room(
 
         Returns:
                 생성된 ChatRoom ORM 객체
+
+        Raises:
+                HTTPException 400: 욕설 검출 (정책 #71)
     """
+    # 욕설 필터 (제목 — 정책 #71)
+    if data.title and contains_profanity(data.title):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
+        )
+
     room = ChatRoom(user_id=current_user_id, title=data.title)
     db.add(room)
     await db.flush()
@@ -134,6 +146,13 @@ async def update_room_title(
     """
     room = await get_room(room_id, db)
     _assert_owner(room, current_user_id)
+
+    # 욕설 필터 (제목 — 정책 #71)
+    if contains_profanity(data.title):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="부적절한 단어가 포함되어 있습니다",
+        )
 
     room.title = data.title
     await db.flush()

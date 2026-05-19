@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getDiariesByUser, getDiary, type DiaryRecord } from '../services/dbDiaryService';
+import { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { getDiary, getDiaryCalendar, updateDiary, deleteDiary, type DiaryRecord } from '../services/dbDiaryService';
 import { getImage } from '../services/imageService';
-import { getMe } from '../services/userService';
+import DiaryDetailView, { type DiaryViewModel } from '../components/DiaryDetailView';
 
 interface DayEmotion {
   date: string;   // 'YYYY-MM-DD'
@@ -32,6 +32,11 @@ export default function CalendarPage() {
   const [selectedDiary, setSelectedDiary] = useState<DiaryRecord | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [diaryLoading, setDiaryLoading] = useState(false);
+  // 월 변경 시 캘린더 이모지가 잠시 사라졌다 다시 표시되는 깜빡임을 가리는 오버레이용.
+  // getDiaryCalendar 호출 시 setCalendarLoading(true) → finally 에서 false.
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  // 활성 월 카드 ref — 좌측 사이드바에서 현재 선택된 월이 화면에 보이도록 자동 스크롤.
+  const activeMonthRef = useRef<HTMLDivElement | null>(null);
 
   const handleDayClick = (day: number) => {
     const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -53,27 +58,34 @@ export default function CalendarPage() {
       .finally(() => setDiaryLoading(false));
   };
 
-  // 로그인한 유저의 일기 목록을 불러와 날짜별 감정 이모지를 세팅
+  // 월이 바뀔 때마다 캘린더 API 재조회
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
-    getMe()
-      .then((me) => getDiariesByUser(me.id))
-      .then((diaries) => {
-        const mapped: DayEmotion[] = diaries
-          .filter((d) => d.emotion)
-          .map((d) => ({
-            date: d.created_at.substring(0, 10),  // 'YYYY-MM-DD'
-            emotion: d.emotion!,
-            diaryId: d.id,
-          }));
+    const y = currentDate.getFullYear();
+    const m = currentDate.getMonth() + 1; // API는 1-indexed
+    setCalendarLoading(true);
+    getDiaryCalendar(y, m)
+      .then((res) => {
+        const mapped: DayEmotion[] = res.items.map((item) => ({
+          date: item.date,
+          emotion: item.emotion,
+          diaryId: item.diary_id,
+        }));
         setEmotions(mapped);
       })
-      .catch(() => {/* 로그인 안 된 경우 등 무시 */});
-  }, []);
+      .catch(() => {})
+      .finally(() => setCalendarLoading(false));
+  }, [currentDate]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+
+  // 활성 월(month) 변경 시 좌측 사이드바에서 해당 카드를 화면 중앙으로 스크롤.
+  // mount 시 자동 적용 + 우측 ◀ ▶ 로 월 이동 시에도 좌측 동기화.
+  useEffect(() => {
+    activeMonthRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [month]);
 
   const firstDayOfMonth = new Date(year, month, 1);
   const lastDayOfMonth = new Date(year, month + 1, 0);
@@ -138,68 +150,47 @@ export default function CalendarPage() {
     return (
       <div className="min-h-screen bg-[#F6F1EA] pt-20 px-4 pb-8">
         <div className="mx-auto w-full max-w-[720px]">
-          {/* 헤더 */}
-          <div className="mb-4 flex items-center gap-3">
-            <button
-              onClick={() => { setSelectedDiary(null); setSelectedImageUrl(null); }}
-              className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
-            >
-              ← 캘린더로 돌아가기
-            </button>
-            <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
-          </div>
-
           {diaryLoading ? (
-            <div className="flex h-60 items-center justify-center rounded-[28px] bg-[#FFFDF8] border border-[#E9D9C9] shadow-[0_8px_24px_rgba(61,43,31,0.08)]">
-              <span className="text-sm text-[#B08B7A]">불러오는 중...</span>
-            </div>
+            <>
+              <div className="mb-4 flex items-center gap-3">
+                <button
+                  onClick={() => { setSelectedDiary(null); setSelectedImageUrl(null); }}
+                  className="flex items-center gap-1.5 rounded-full border border-[#F5D6C8] bg-white px-3 py-1.5 text-xs font-medium text-[#8B6355] transition hover:bg-[#FFF0E6]"
+                >
+                  ← 캘린더로 돌아가기
+                </button>
+                <h2 className="text-lg font-bold text-[#3D2B1F]">🐾 그림일기</h2>
+              </div>
+              <div className="flex h-60 items-center justify-center rounded-[28px] bg-[#FFFDF8] border border-[#E9D9C9] shadow-[0_8px_24px_rgba(61,43,31,0.08)]">
+                <span className="inline-flex items-center gap-2 text-sm text-[#B08B7A]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  불러오는 중...
+                </span>
+              </div>
+            </>
           ) : selectedDiary && (
-            <div className="relative rounded-[28px] border border-[#E9D9C9] bg-[#FFFDF8] p-6 shadow-[0_8px_24px_rgba(61,43,31,0.08)] md:p-8">
-              {/* 마스킹 테이프 */}
-              <div className="absolute -top-3 left-10 h-6 w-20 rotate-[-8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-              <div className="absolute -top-3 right-10 h-6 w-20 rotate-[8deg] rounded-sm bg-[#F7D9A6]/80 shadow-sm" />
-
-              {/* 제목/요약 */}
-              <div className="mb-6 text-center">
-                <p className="text-xs tracking-[0.2em] text-[#B08B7A]">오늘의 그림일기</p>
-                <h3 className="mt-2 text-2xl font-bold text-[#F4845F]">
-                  {selectedDiary.title ?? '오늘의 일기'}
-                </h3>
-                {selectedDiary.summary && (
-                  <div className="mt-3 inline-flex rounded-full bg-[#FFF0E6] px-3 py-1 text-xs font-medium text-[#F4845F]">
-                    ✨ {selectedDiary.summary}
-                  </div>
-                )}
-                {selectedDiary.where_text && (
-                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#F0F7FF] px-3 py-1 text-xs font-medium text-[#5B8DB8]">
-                    📍 {selectedDiary.where_text}
-                  </div>
-                )}
-              </div>
-
-              {/* 이미지 */}
-              <div className="mx-auto mb-6 w-full max-w-[520px] rounded-[22px] border border-[#E8D9CC] bg-white p-3 shadow-[0_6px_18px_rgba(61,43,31,0.06)]">
-                {selectedImageUrl ? (
-                  <img
-                    src={selectedImageUrl}
-                    alt={selectedDiary.title ?? '그림일기'}
-                    className="w-full h-auto rounded-[16px] object-contain"
-                  />
-                ) : (
-                  <div className="flex h-48 items-center justify-center text-5xl">🐾</div>
-                )}
-              </div>
-
-              {/* 일기 본문 — 줄 있는 노트 */}
-              <div
-                className="rounded-[20px] border border-[#F1E4D8] bg-[#FFFCF8] px-5 py-5"
-                style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0px, transparent 30px, #F3E7DA 31px)' }}
-              >
-                <p className="whitespace-pre-wrap text-[15px] leading-[31px] text-[#3D2B1F]">
-                  {selectedDiary.content ?? '내용이 없어요.'}
-                </p>
-              </div>
-            </div>
+            <DiaryDetailView
+              diary={{
+                title: selectedDiary.title ?? '오늘의 일기',
+                body: selectedDiary.content ?? '',
+                summary: selectedDiary.summary ?? undefined,
+                imageUrl: selectedImageUrl ?? undefined,
+                placeName: selectedDiary.where_text ?? undefined,
+              } satisfies DiaryViewModel}
+              backLabel="← 캘린더로 돌아가기"
+              onBack={() => { setSelectedDiary(null); setSelectedImageUrl(null); }}
+              onUpdate={async (title, body) => {
+                await updateDiary(selectedDiary.id, { title, content: body });
+                setSelectedDiary({ ...selectedDiary, title, content: body });
+              }}
+              onDelete={async () => {
+                await deleteDiary(selectedDiary.id);
+                // 캘린더 셀의 감정 이모지 제거 + 상세 화면 닫기
+                setEmotions((prev) => prev.filter((e) => e.diaryId !== selectedDiary.id));
+                setSelectedDiary(null);
+                setSelectedImageUrl(null);
+              }}
+            />
           )}
         </div>
       </div>
@@ -207,7 +198,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
+    <div className="min-h-screen bg-linear-to-br from-orange-50 via-white to-pink-50 pt-20 px-4 pb-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex gap-6">
           {/* Left Sidebar - Month List */}
@@ -238,6 +229,7 @@ export default function CalendarPage() {
                 return (
                   <div
                     key={m.num}
+                    ref={isSelected ? activeMonthRef : null}
                     className={`rounded-xl p-3 cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-orange-500 text-white shadow-md'
@@ -273,7 +265,15 @@ export default function CalendarPage() {
           </div>
 
           {/* Right Content - Calendar */}
-          <div className="flex-1 bg-white rounded-[32px] shadow-lg border border-orange-100 p-8">
+          <div className="relative flex-1 bg-white rounded-[32px] shadow-lg border border-orange-100 p-8">
+            {/* 월 변경 시 캘린더 위 오버레이 — 이모지 깜빡임 회피용. 반투명 배경으로
+                기존 셀이 살짝 비치고 중앙 스피너로 갱신 중임을 시각화. */}
+            {calendarLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[32px] bg-white/60">
+                <Loader2 className="h-7 w-7 animate-spin text-[#F4845F]" />
+              </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
               <button

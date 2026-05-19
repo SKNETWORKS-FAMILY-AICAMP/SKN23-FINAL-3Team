@@ -131,18 +131,53 @@ async def _fetch_kakao_user(access_token: str) -> dict[str, str]:
     }
 
 
-async def _exchange_google_token(code: str, redirect_uri: str) -> str:
-    """구글 authorization_code → access_token 교환."""
+async def _exchange_google_token(
+    code: str,
+    redirect_uri: str,
+    code_verifier: str | None = None,
+) -> str:
+    """구글 authorization_code → access_token 교환.
+
+    Web client 와 Android InstalledApp client 분기:
+    - redirect_uri 가 `com.googleusercontent.apps.` 로 시작 = Android InstalledApp.
+      PKCE 기반 (client_secret 없음, code_verifier 필수). 모바일 앱이 `flutter_appauth` 로
+      발급한 code 를 백엔드가 token 교환할 때 사용.
+    - 그 외 = Web client (운영 React). 기존 client_secret 흐름 유지.
+    """
+    is_android = redirect_uri.startswith("com.googleusercontent.apps.")
+
+    if is_android:
+        if not settings.GOOGLE_ANDROID_CLIENT_ID:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="GOOGLE_ANDROID_CLIENT_ID 환경변수가 설정되지 않았습니다.",
+            )
+        if not code_verifier:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Android OAuth 는 code_verifier (PKCE) 가 필수입니다.",
+            )
+        data = {
+            "code": code,
+            "client_id": settings.GOOGLE_ANDROID_CLIENT_ID,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+            "code_verifier": code_verifier,
+            # client_secret 없음 — InstalledApp client 는 PKCE 로 대체
+        }
+    else:
+        data = {
+            "code": code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://oauth2.googleapis.com/token",
-            data={
-                "code": code,
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
-            },
+            data=data,
         )
     resp.raise_for_status()
     return resp.json()["access_token"]
@@ -219,6 +254,7 @@ async def social_login(
     db: AsyncSession,
     redirect_uri: str = "",
     state: str = "",
+    code_verifier: str | None = None,
 ) -> dict[str, str]:
     """
         소셜 로그인을 처리하고 자체 JWT를 반환합니다.
@@ -230,11 +266,12 @@ async def social_login(
         4. 자체 JWT 발급 후 반환
 
         Args:
-                provider    : "kakao" | "google" | "naver"
-                code        : OAuth authorization_code
-                db          : AsyncSession (Depends(get_db)로 주입)
-                redirect_uri: OAuth 리디렉션 URI (kakao/google 필수)
-                state       : CSRF 검증용 state 파라미터 (naver 필수)
+                provider     : "kakao" | "google" | "naver"
+                code         : OAuth authorization_code
+                db           : AsyncSession (Depends(get_db)로 주입)
+                redirect_uri : OAuth 리디렉션 URI (kakao/google 필수)
+                state        : CSRF 검증용 state 파라미터 (naver 필수)
+                code_verifier: PKCE code_verifier (Google Android InstalledApp 만 사용)
 
         Returns:
                 {"access_token": str, "token_type": "bearer", "is_new_user": bool}
@@ -252,7 +289,7 @@ async def social_login(
             token = await _exchange_kakao_token(code, redirect_uri)
             user_info = await _fetch_kakao_user(token)
         elif provider == "google":
-            token = await _exchange_google_token(code, redirect_uri)
+            token = await _exchange_google_token(code, redirect_uri, code_verifier)
             user_info = await _fetch_google_user(token)
         elif provider == "naver":
             token = await _exchange_naver_token(code, state)

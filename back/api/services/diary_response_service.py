@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 import base64
 import logging
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -154,6 +155,47 @@ _DIARY_START_FLOW_EXACT: frozenset[str] = frozenset({
 
 # 프론트엔드로 보내는 특수 트리거 마커
 _DIARY_FLOW_TRIGGER = "%%TRIGGER:START_DIARY%%"
+
+# ── 인젝션 / 탈옥 사전 차단 ────────────────────────────────────────────────
+# 한국어: "이전 지시" 단독이면 "이전 지시한 산책 코스" 같은 정상 문장도 차단되므로
+# "이전 지시 무시", "이전 지시를 무시" 등 공격 의도가 명확한 구문만 등록.
+# "역할을 바꿔" → "역할을 바꿔줘" / "역할을 바꿔서"는 정상이므로 "바꿔줘"로 한정.
+_INJECTION_KEYWORDS_KO: tuple[str, ...] = (
+    "이전 지시를 무시", "이전 지시 무시", "이전 지시는 무시",
+    "프롬프트 무시", "프롬프트를 무시",
+    "시스템 프롬프트",
+    "지금부터 너는",
+    "역할을 바꿔줘", "역할 변경해줘", "역할을 변경해",
+    "다른 캐릭터로", "다른 캐릭터야",
+    "탈옥",
+    "롤플레이 시작",
+)
+# 영어: "bypass", "disregard" 단독은 정상 문맥에서도 등장 가능하므로 구문 단위로 한정.
+_INJECTION_KEYWORDS_EN: tuple[str, ...] = (
+    "ignore previous", "ignore all instructions", "ignore above",
+    "system prompt", "you are now",
+    "developer mode", "jailbreak",
+    "override instructions",
+    "disregard all", "disregard previous",
+)
+_INJECTION_RESPONSE = (
+    "일기 작성과 관련 없는 요청이에요. "
+    "오늘 반려견과 있었던 일을 알려주시면 일기를 써드릴게요! 🐾"
+)
+
+
+def _contains_injection(text: str) -> bool:
+    """인젝션/탈옥 키워드가 포함되어 있는지 검사."""
+    normalized = text.lower().replace(" ", "")
+    for kw in _INJECTION_KEYWORDS_KO:
+        if kw.replace(" ", "") in normalized:
+            return True
+    lower_en = text.lower()
+    for kw in _INJECTION_KEYWORDS_EN:
+        if kw in lower_en:
+            return True
+    return False
+
 
 _DIARY_EVENT_KEYWORDS: tuple[str, ...] = (
     "산책", "목욕", "병원", "입양", "처음", "만남", "여행", "외출", "공원",
@@ -370,7 +412,7 @@ def _extract_draft_text(bot_content: str) -> str:
     return draft.strip()
 
 
-def _collect_diary_context(recent_messages: list) -> str:
+def _collect_diary_context(recent_messages: list, owner_label: str = "보호자") -> str:
     lines = []
     for m in recent_messages:
         raw = (m.content or "").strip()
@@ -389,15 +431,22 @@ def _collect_diary_context(recent_messages: list) -> str:
                 and not _is_diary_reassert_request(content)
                 and len(content) >= 5
             ):
-                lines.append(f"보호자: {content}")
+                lines.append(f"{owner_label}: {content}")
     return "\n".join(lines).strip()
 
 
 def _is_context_sufficient(context: str) -> bool:
-    user_lines = [
-        line[len("보호자: "):] for line in context.splitlines()
-        if line.startswith("보호자: ")
-    ]
+    # 봇: 으로 시작하지 않는 라인에서 레이블 제거 후 user 텍스트 추출
+    user_lines = []
+    for line in context.splitlines():
+        if line.startswith("봇: "):
+            continue
+        # "닉네임: 내용" 또는 "보호자: 내용" 형태에서 내용만 추출
+        colon_idx = line.find(": ")
+        if colon_idx != -1 and colon_idx < 20:
+            user_lines.append(line[colon_idx + 2:])
+        else:
+            user_lines.append(line)
     user_text = " ".join(user_lines)
     if len(user_text) >= 20:
         return True
@@ -451,40 +500,74 @@ def _infer_diary_type(text: str) -> str:
     return _DEFAULT_DIARY_TYPE
 
 
-async def _load_pet_context(ctx: Any) -> dict:
-    if getattr(ctx, "user_id", None) is None or getattr(ctx, "db", None) is None:
-        return dict(_DEFAULT_DIARY_PET)
+# ── pet 컨텍스트 결정 결과 ────────────────────────────────────────────────────
+# state 분기:
+#   "ok"              → pet 결정 완료, 일기 생성 진행
+#   "no_pets"         → 보유 활성 pet 0 마리, 등록 유도 응답 후 일기 생성 중단
+#   "needs_selection" → primary_pet_id 와 ctx.pet_id 둘 다 없고 보유 pet 1+ 마리,
+#                       선택 유도 응답 후 일기 생성 중단
 
-    try:
-        result = await ctx.db.execute(
-            select(Pet)
-            .where(Pet.user_id == ctx.user_id)
-            .options(selectinload(Pet.breed))
-            .order_by(Pet.id.desc())
-            .limit(1)
-        )
-        pet = result.scalar_one_or_none()
-    except Exception as e:
-        logger.warning(f"[Diary] 반려견 조회 실패: {e}")
-        return dict(_DEFAULT_DIARY_PET)
+PetContextState = Literal["ok", "no_pets", "needs_selection"]
 
-    if pet is None:
-        return dict(_DEFAULT_DIARY_PET)
 
+@dataclass
+class PetContextResult:
+    """`_load_pet_context()` 결과 — 호출처가 state 로 분기."""
+
+    state: PetContextState
+    pet: dict
+    available_pets: list[dict] = field(default_factory=list)
+
+
+# 안내 문구 (placeholder — 톤 일관성은 PM 검토 후 정정)
+_NO_PETS_MESSAGE = (
+    "반려견을 먼저 등록해주세요. "
+    "마이페이지에서 추가하신 후 다시 시도해주세요."
+)
+
+
+def _build_needs_selection_message(available_pets: list[dict]) -> str:
+    """선택 유도 안내 메시지 — 보유 pet 목록(이름·견종) 포함."""
+    if not available_pets:
+        return "어떤 반려견의 일기를 쓸지 선택해주세요."
+
+    bullets = "\n".join(
+        f"- {p.get('name') or '이름 미등록'}"
+        + (f" ({p['breed']})" if p.get("breed") else "")
+        for p in available_pets
+    )
+    return (
+        "어떤 반려견의 일기를 쓸지 선택해주세요.\n\n"
+        f"보유한 반려견:\n{bullets}\n\n"
+        "마이페이지에서 대표 반려견을 설정하거나, 화면에서 반려견을 먼저 선택해주세요."
+    )
+
+
+def _pet_summary(pet: Pet) -> dict:
+    """선택 유도 응답에 노출할 pet 요약 (id/name/breed)."""
+    breed_ko = getattr(pet.breed, "name_ko", None) if pet.breed else None
+    return {
+        "id": pet.id,
+        "name": pet.name or "",
+        "breed": breed_ko or "",
+    }
+
+
+def _build_pet_ctx(pet: Pet, owner_name: str) -> dict:
+    """Pet ORM → LLM 프롬프트용 컨텍스트 dict (`_DEFAULT_DIARY_PET` 키 정합)."""
     breed_ko = getattr(pet.breed, "name_ko", None) if pet.breed else None
     breed_en = getattr(pet.breed, "name_en", None) if pet.breed else None
     birth_str: str | None = None
     if isinstance(pet.birth_date, date):
         birth_str = pet.birth_date.strftime("%Y-%m-%d")
 
-    owner_name = ""
-    try:
-        user_result = await ctx.db.execute(select(User).where(User.id == ctx.user_id))
-        user = user_result.scalar_one_or_none()
-        if user:
-            owner_name = user.nickname or ""
-    except Exception as e:
-        logger.warning(f"[Diary] 사용자 닉네임 조회 실패: {e}")
+    # AI 프로필 분석 결과에서 english_prompt / must_include_keywords 추출
+    english_prompt = None
+    must_include_keywords: list[str] = []
+    if hasattr(pet, "profile") and pet.profile and pet.profile.profile_json:
+        cs = pet.profile.profile_json.get("character_sheet", {})
+        english_prompt = cs.get("english_prompt")
+        must_include_keywords = cs.get("must_include_keywords", [])
 
     return {
         "pet_name": pet.name or _DEFAULT_DIARY_PET["pet_name"],
@@ -494,17 +577,114 @@ async def _load_pet_context(ctx: Any) -> dict:
         "personalities": list(pet.selected_tags or []),
         "owner_name": owner_name,
         "pet_id": pet.id,
+        "english_prompt": english_prompt,
+        "must_include_keywords": must_include_keywords,
     }
 
 
+async def _load_pet_context(ctx: Any) -> PetContextResult:
+    """다이어리 응답용 pet 컨텍스트 결정 — 외부팀 QA ID 16 fix (2026-05-14).
+
+    우선순위:
+        1. `users.primary_pet_id` 가 활성 pet
+        2. `ctx.pet_id` 가 본인 소유 활성 pet (사용자 명시 선택 override)
+        3-A. 보유 활성 pet 0 마리 → state="no_pets"
+        3-B. primary NULL + ctx.pet_id 없음 + 보유 pet 1+ 마리 → state="needs_selection"
+
+    ctx 무효(`user_id`/`db` None) 케이스는 기존 동작 호환 — `state="ok"` + 기본 pet.
+    """
+    if getattr(ctx, "user_id", None) is None or getattr(ctx, "db", None) is None:
+        return PetContextResult(state="ok", pet=dict(_DEFAULT_DIARY_PET))
+
+    # 본인 소유 활성 pet 목록 조회 (created_at ASC = 가장 오래된 순)
+    try:
+        result = await ctx.db.execute(
+            select(Pet)
+            .where(Pet.user_id == ctx.user_id, Pet.deleted_at.is_(None))
+            .options(selectinload(Pet.breed))
+            .order_by(Pet.created_at.asc())
+        )
+        pets = list(result.scalars().all())
+    except Exception as e:
+        logger.warning(f"[Diary] 반려견 목록 조회 실패: {e}")
+        return PetContextResult(state="ok", pet=dict(_DEFAULT_DIARY_PET))
+
+    # 3-A: 보유 활성 pet 0 마리 → 등록 유도
+    if not pets:
+        return PetContextResult(state="no_pets", pet=dict(_DEFAULT_DIARY_PET))
+
+    # owner_name + primary_pet_id 조회
+    owner_name = ""
+    primary_pet_id: int | None = None
+    try:
+        user_result = await ctx.db.execute(select(User).where(User.id == ctx.user_id))
+        user = user_result.scalar_one_or_none()
+        if user:
+            owner_name = user.nickname or ""
+            primary_pet_id = getattr(user, "primary_pet_id", None)
+    except Exception as e:
+        logger.warning(f"[Diary] 사용자 조회 실패: {e}")
+
+    chosen_pet: Pet | None = None
+
+    # 우선순위 2: ctx.pet_id override (본인 소유 활성 검증 — pets 안에 있어야 함)
+    requested_pet_id = getattr(ctx, "pet_id", None)
+    if requested_pet_id is not None:
+        try:
+            requested_pet_id_int = int(requested_pet_id)
+            for pet in pets:
+                if pet.id == requested_pet_id_int:
+                    chosen_pet = pet
+                    break
+            if chosen_pet is None:
+                logger.info(
+                    f"[Diary] ctx.pet_id={requested_pet_id} 본인 소유 활성 pet 아님 "
+                    f"→ primary 폴백 (silent)"
+                )
+        except (ValueError, TypeError):
+            logger.info(f"[Diary] ctx.pet_id={requested_pet_id!r} 정수 변환 실패 → 무시")
+
+    # 우선순위 1: primary_pet_id (override 못 잡았을 때만)
+    if chosen_pet is None and primary_pet_id is not None:
+        for pet in pets:
+            if pet.id == primary_pet_id:
+                chosen_pet = pet
+                break
+        if chosen_pet is None:
+            logger.info(
+                f"[Diary] users.primary_pet_id={primary_pet_id} 활성 pet 미일치 "
+                f"(탈퇴/삭제 추정) → 선택 유도"
+            )
+
+    # 3-B: primary NULL + ctx.pet_id 없음 (또는 무효) + 보유 pet 1+ 마리 → 선택 유도
+    if chosen_pet is None:
+        return PetContextResult(
+            state="needs_selection",
+            pet=dict(_DEFAULT_DIARY_PET),
+            available_pets=[_pet_summary(p) for p in pets],
+        )
+
+    # 우선순위 1 또는 2 → ok
+    return PetContextResult(state="ok", pet=_build_pet_ctx(chosen_pet, owner_name))
+
+
 async def _generate_diary_json(pet_ctx: dict, query: str) -> dict | None:
+    if _contains_injection(query):
+        logger.warning(f"[Diary] 인젝션 시도 차단: {query[:80]}")
+        return None
+
     emotion = _infer_emotion(query)
     diary_type = _infer_diary_type(query)
 
-    if "보호자:" in query or "봇:" in query:
+    owner_label = pet_ctx.get("owner_name") or "보호자"
+
+    if f"{owner_label}:" in query or "보호자:" in query or "봇:" in query:
         conversation_summary = query.strip()
+        # 보호자 → 실제 닉네임 치환
+        if owner_label != "보호자":
+            conversation_summary = conversation_summary.replace("보호자:", f"{owner_label}:")
     else:
-        conversation_summary = f"보호자: {query.strip()}"
+        conversation_summary = f"{owner_label}: {query.strip()}"
 
     prompt = _diary_prompt_builder.build_diary_prompt(
         pet_name=pet_ctx["pet_name"],
@@ -554,6 +734,7 @@ async def _generate_and_store_image(
         personalities=pet_ctx["personalities"],
         all_answers=[diary_data.get("_conversation", "")],
         emotion=diary_data.get("_emotion", _DEFAULT_DIARY_EMOTION),
+        english_prompt=pet_ctx.get("english_prompt"),
     )
 
     try:
@@ -637,7 +818,13 @@ async def _save_diary_record(
 
 
 async def _handle_diary(query: str, ctx: Any) -> str:
-    pet_ctx = await _load_pet_context(ctx)
+    pc_result = await _load_pet_context(ctx)
+    if pc_result.state == "no_pets":
+        return _NO_PETS_MESSAGE
+    if pc_result.state == "needs_selection":
+        return _build_needs_selection_message(pc_result.available_pets)
+
+    pet_ctx = pc_result.pet
     diary_data = await _generate_diary_json(pet_ctx, query)
 
     if diary_data is None:
@@ -670,7 +857,13 @@ async def _handle_diary(query: str, ctx: Any) -> str:
 
 
 async def _generate_diary_text_only(query: str, ctx: Any) -> str:
-    pet_ctx = await _load_pet_context(ctx)
+    pc_result = await _load_pet_context(ctx)
+    if pc_result.state == "no_pets":
+        return _NO_PETS_MESSAGE
+    if pc_result.state == "needs_selection":
+        return _build_needs_selection_message(pc_result.available_pets)
+
+    pet_ctx = pc_result.pet
     diary_data = await _generate_diary_json(pet_ctx, query)
 
     if diary_data is None:
@@ -706,7 +899,13 @@ async def _finalize_diary_and_save(query: str, ctx: Any) -> str:
     meaningful = _extract_meaningful_user_content(recent)
     effective = meaningful or query
 
-    pet_ctx = await _load_pet_context(ctx)
+    pc_result = await _load_pet_context(ctx)
+    if pc_result.state == "no_pets":
+        return _NO_PETS_MESSAGE
+    if pc_result.state == "needs_selection":
+        return _build_needs_selection_message(pc_result.available_pets)
+
+    pet_ctx = pc_result.pet
     diary_data = await _generate_diary_json(pet_ctx, effective)
     if diary_data is None:
         return "그림일기 생성에 실패했어요. 잠시 후 다시 시도해주세요."
@@ -729,7 +928,13 @@ async def _finalize_diary_and_save(query: str, ctx: Any) -> str:
 
 
 async def _ask_diary_followup(turn: int, ctx: Any) -> str:
-    pet_ctx = await _load_pet_context(ctx)
+    pc_result = await _load_pet_context(ctx)
+    if pc_result.state == "no_pets":
+        return _NO_PETS_MESSAGE
+    if pc_result.state == "needs_selection":
+        return _build_needs_selection_message(pc_result.available_pets)
+
+    pet_ctx = pc_result.pet
     pet_name = pet_ctx.get("pet_name", "우리 아이")
     questions = [
         f"{pet_name}와 오늘 어떤 일이 있었나요? 조금 더 이야기해주세요 😊",
@@ -740,6 +945,11 @@ async def _ask_diary_followup(turn: int, ctx: Any) -> str:
 
 
 async def _handle_diary_mini_flow(query: str, ctx: Any) -> str:
+    # ── 인젝션/탈옥 사전 차단 (LLM 호출 전) ──────────────────────────────
+    if _contains_injection(query):
+        logger.warning(f"[DiaryMiniFlow] 인젝션 시도 차단: {query[:80]}")
+        return _INJECTION_RESPONSE
+
     is_explicit = _is_explicit_diary_request(query)
     is_direct = _is_direct_diary_request(query)
     is_followup = _is_followup_diary_request(query)

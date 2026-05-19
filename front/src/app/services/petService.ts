@@ -9,7 +9,9 @@ export interface Pet {
   gender: 'MALE' | 'FEMALE' | null
   is_neutered: boolean | null
   type_id: number | null
+  type_name: string | null
   selected_tags: string[]
+  image_url: string | null
   created_at: string
   updated_at: string
   age?: number
@@ -21,8 +23,8 @@ export interface PetCreateInput {
   birth_date?: string
   gender?: 'MALE' | 'FEMALE'
   is_neutered?: boolean
-  type_id?: number
   selected_tags?: string[]
+  image_id?: number
 }
 
 export interface PetUpdateInput extends Partial<PetCreateInput> {}

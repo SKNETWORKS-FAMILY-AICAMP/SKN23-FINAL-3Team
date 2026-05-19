@@ -38,7 +38,7 @@ const TIERS = [
     iconColor: "text-orange-500",
     badgeColor: "bg-orange-100 text-orange-600",
     btnClass:
-      "bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white shadow-md hover:shadow-lg active:scale-95",
+      "bg-linear-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white shadow-md hover:shadow-lg active:scale-95",
     btnLabel: "구독 시작하기",
     features: [
       "그림일기 하루 10회",
@@ -61,7 +61,7 @@ const TIERS = [
     iconColor: "text-yellow-500",
     badgeColor: "bg-yellow-100 text-yellow-700",
     btnClass:
-      "bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-white shadow-md hover:shadow-lg active:scale-95",
+      "bg-linear-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-white shadow-md hover:shadow-lg active:scale-95",
     btnLabel: "프리미엄 시작하기",
     features: [
       "그림일기 무제한",
@@ -130,7 +130,7 @@ export function SubscriptionModal({ open, onClose }: Props) {
                 return (
                   <div
                     key={tier.key}
-                    className={`flex flex-col rounded-2xl bg-gradient-to-b ${tier.color} p-4`}
+                    className={`flex flex-col rounded-2xl bg-linear-to-b ${tier.color} p-4`}
                   >
                     {/* 티어 헤더 */}
                     <div className="flex items-center gap-2 mb-3">

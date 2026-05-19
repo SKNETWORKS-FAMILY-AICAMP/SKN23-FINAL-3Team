@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # ── 소셜 로그인 (OAuth2) ────────────────────────────────────────────────
     GOOGLE_CLIENT_ID: str = Field(default="")
     GOOGLE_CLIENT_SECRET: str = Field(default="")
+    # Android InstalledApp client (PKCE 기반, client_secret 없음).
+    # 모바일 앱이 `flutter_appauth` 로 발급한 code 를 백엔드가 token 교환할 때 사용.
+    GOOGLE_ANDROID_CLIENT_ID: str = Field(default="")
     KAKAO_CLIENT_ID: str = Field(default="")
     KAKAO_CLIENT_SECRET: str = Field(default="")
     NAVER_CLIENT_ID: str = Field(default="")
@@ -81,6 +84,14 @@ class Settings(BaseSettings):
 
     # ── 개발 모드 플래그 ─────────────────────────────────────────────────────
     USE_DUMMY_PLACES: bool = Field(default=False)
+
+    # ── 사진 그림체 변환 ─────────────────────────────────────────────────────
+    USE_YOLO_PIPELINE: bool = Field(default=False, description="true: YOLO+VLM 파이프라인, false: GPT-4o Vision")
+    USE_YOLO_DETECTOR: bool = Field(default=True)
+    USE_LOCAL_VLM: bool = Field(default=False)
+    VLM_MODEL_NAME: str = Field(default="Qwen/Qwen2.5-VL-3B-Instruct")
+    PHOTO_UPLOAD_MAX_MB: int = Field(default=10)
+    PHOTO_STYLE_MOCK_MODE: bool = Field(default=True)
 
     # ── 계산된 필드 ─────────────────────────────────────────────────────────
     @computed_field  # type: ignore[misc]

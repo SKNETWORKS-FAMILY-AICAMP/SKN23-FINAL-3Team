@@ -1,16 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
+  ArrowLeft,
   Camera,
   ChevronRight,
-  MoreHorizontal,
   Search,
+  User,
   X,
 } from "lucide-react";
 import { getMe, updateUser } from "../services/userService";
 import { createPet, updatePet } from "../services/petService";
 import { getAllBreeds, getTop10Breeds, type Breed } from "../services/breedService";
 import { uploadImage } from "../services/imageService";
+import { getPetKeywords, getUserKeywords } from "../services/keywordService";
+import {
+  validateNickname,
+  validatePetName,
+  validateUserBirth,
+  validatePetBirth,
+} from "../utils/validation";
+import KeywordChipsField from "../components/KeywordChipsField";
+import AvatarUploadField from "../components/AvatarUploadField";
+import { KeywordChip as Chip } from "../components/KeywordPickerModal";
+import AgreementsStep from "../components/AgreementsStep";
 
 type GuardianGender = "male" | "female" | "other" | undefined;
 type PetGender = "male" | "female" | undefined;
@@ -20,6 +32,7 @@ type ProfileSetupData = {
   guardianName: string;
   guardianBirth: string;
   guardianGender: GuardianGender;
+  guardianImage?: string;        // 보호자 프로필 사진 (data: 또는 기존 url)
   ownerPersonality: string[];   // 보호자 라이프스타일 태그
   petName: string;
   birthDate: string;
@@ -27,62 +40,13 @@ type ProfileSetupData = {
   petGender: PetGender;
   neutered: Neutered;
   personality: string[];         // 반려견 성격 태그
-  image?: string;
+  image?: string;                // 반려견 프로필 사진
 };
 
-// scoring.py DOG_TAG_SCORES 기준 (24개)
-const personalityOptions = [
-  "에너자이저",
-  "느긋한 편",
-  "애교쟁이",
-  "제 갈 길 가는 타입",
-  "낯을 가려요",
-  "낯선 사람도 좋아요",
-  "사람이라면 다 좋아",
-  "사람은 좀 무서워요",
-  "겁쟁이",
-  "겁 없는 탐험가",
-  "호기심 폭발",
-  "고집 있는 편",
-  "예민한 편",
-  "먹는 게 최고",
-  "낯선 것엔 짖어요",
-  "산책이 제일 좋아",
-  "밖이 좋아요",
-  "집이 편해요",
-  "장난감 수집가",
-  "공이라면 뭐든지",
-  "강아지 친구 환영",
-  "혼자도 잘 놀아요",
-  "안기는 거 좋아요",
-  "시키는 건 다 해요",
-];
-
-// scoring.py OWNER_TAG_SCORES 기준 (19개)
-const ownerPersonalityOptions = [
-  "신나게 뛰어놀기",
-  "느긋하게 쉬어가기",
-  "자연 속으로",
-  "도시 구경",
-  "일상 충전",
-  "새로운 곳 구경",
-  "감성 충만",
-  "동네 골목 탐방",
-  "계획 없이 떠나기",
-  "바다",
-  "산",
-  "숲",
-  "계곡",
-  "공원 산책",
-  "카페 투어",
-  "핫플 인증",
-  "사진 건지러",
-  "맛있는 거 먹으러",
-  "전시 관람",
-];
-
-const previewPersonalityOptions = personalityOptions.slice(0, 10);
-const previewOwnerPersonalityOptions = ownerPersonalityOptions.slice(0, 9);
+// 키워드 목록(반려견 성격 / 보호자 라이프스타일) 은 GET /keywords?category={PET|USER}
+// API 로 동적 로드 — 백엔드 keywords 테이블 단일 출처. 메인 = 처음 10개 / 더보기 모달 = 전체.
+// 가을쥐 결정 2026-05-07. 기존 하드코딩 24+19개 제거.
+const PREVIEW_KEYWORD_COUNT = 10;
 
 async function base64ToFile(base64: string, filename: string): Promise<File> {
   const res = await fetch(base64);
@@ -94,6 +58,7 @@ const defaultData: ProfileSetupData = {
   guardianName: "",
   guardianBirth: "",
   guardianGender: undefined,
+  guardianImage: undefined,
   ownerPersonality: [],
   petName: "",
   birthDate: "",
@@ -118,35 +83,10 @@ function SegButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-12 w-full items-center justify-center rounded-2xl border text-base font-semibold transition ${
-        active
-          ? "border-[#E86A2C] bg-[#FFF2EA] text-[#D45E23]"
-          : "border-[#E6E1DB] bg-white text-[#9B948B] hover:border-[#F1B18C]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Chip({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-        active
-          ? "border-[#E86A2C] bg-[#FFF2EA] text-[#D45E23]"
-          : "border-[#E6E1DB] bg-white text-[#7B746B] hover:border-[#F1B18C] hover:text-[#D45E23]"
-      }`}
+      className={`flex h-12 w-full items-center justify-center rounded-2xl border text-base font-semibold transition ${active
+        ? "border-[#E86A2C] bg-[#FFF2EA] text-[#D45E23]"
+        : "border-[#E6E1DB] bg-white text-[#9B948B] hover:border-[#F1B18C]"
+        }`}
     >
       {children}
     </button>
@@ -232,11 +172,10 @@ function BreedModal({
                       onSelect(breed);
                       onClose();
                     }}
-                    className={`rounded-[16px] px-4 py-4 text-left text-[18px] font-medium transition ${
-                      active
-                        ? "bg-[#F7E8E1] text-[#C65B27]"
-                        : "text-[#5F5A55] hover:bg-[#F7F4F1]"
-                    }`}
+                    className={`rounded-[16px] px-4 py-4 text-left text-[18px] font-medium transition ${active
+                      ? "bg-[#F7E8E1] text-[#C65B27]"
+                      : "text-[#5F5A55] hover:bg-[#F7F4F1]"
+                      }`}
                   >
                     {breed.name_ko}
                   </button>
@@ -250,133 +189,16 @@ function BreedModal({
   );
 }
 
-function PersonalityModal({
-  isOpen,
-  onClose,
-  selectedItems,
-  onToggle,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  selectedItems: string[];
-  onToggle: (item: string) => void;
-}) {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/25 px-4 py-10" onClick={onClose}>
-      <div
-        className="mx-auto flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6 md:px-8">
-          <div>
-            <h2 className="text-[28px] font-bold tracking-tight text-[#3F3A35]">성격 더보기</h2>
-            <p className="mt-2 text-sm text-[#8D867E]">
-              원하는 성격을 자유롭게 선택해 주세요 (최대 5개)
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-12 w-12 place-items-center rounded-full bg-[#F4F1EE] text-[#8A837B]"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto px-6 pb-8 md:px-8">
-          <div className="flex flex-wrap gap-3">
-            {personalityOptions.map((item) => (
-              <Chip
-                key={item}
-                active={selectedItems.includes(item)}
-                onClick={() => onToggle(item)}
-              >
-                {item}
-              </Chip>
-            ))}
-          </div>
-        </div>
-
-        <div className="border-t border-[#F0ECE7] px-6 py-4 md:px-8">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-[16px] bg-[#DB5F2E] px-6 py-4 text-base font-bold text-white transition hover:bg-[#D05523]"
-          >
-            선택 완료
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OwnerPersonalityModal({
-  isOpen,
-  onClose,
-  selectedItems,
-  onToggle,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  selectedItems: string[];
-  onToggle: (item: string) => void;
-}) {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 bg-black/25 px-4 py-10" onClick={onClose}>
-      <div
-        className="mx-auto flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6 md:px-8">
-          <div>
-            <h2 className="text-[28px] font-bold tracking-tight text-[#3F3A35]">라이프스타일 더보기</h2>
-            <p className="mt-2 text-sm text-[#8D867E]">보호자님의 여행 스타일을 골라주세요 (최대 5개)</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-12 w-12 place-items-center rounded-full bg-[#F4F1EE] text-[#8A837B]"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="overflow-y-auto px-6 pb-8 md:px-8">
-          <div className="flex flex-wrap gap-3">
-            {ownerPersonalityOptions.map((item) => (
-              <Chip key={item} active={selectedItems.includes(item)} onClick={() => onToggle(item)}>
-                {item}
-              </Chip>
-            ))}
-          </div>
-        </div>
-        <div className="border-t border-[#F0ECE7] px-6 py-4 md:px-8">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-[16px] bg-[#DB5F2E] px-6 py-4 text-base font-bold text-white transition hover:bg-[#D05523]"
-          >
-            선택 완료
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ProfileSetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const editState = location.state as {
     editMode?: boolean;
     petOnlyMode?: boolean;
+    userOnlyMode?: boolean;
     userId?: number;
     petId?: number;
-    userData?: { nickname: string; gender: string | null; birth_date: string; selected_tags?: string[] };
+    userData?: { nickname: string; gender: string | null; birth_date: string; selected_tags?: string[]; profile_image_url?: string | null };
     petData?: {
       name: string;
       breed_id: number | null;
@@ -385,10 +207,12 @@ export default function ProfileSetupPage() {
       gender: "MALE" | "FEMALE" | null;
       is_neutered: boolean | null;
       selected_tags: string[];
+      image_url?: string | null;
     };
   } | null;
   const isEditMode = editState?.editMode === true;
   const isPetOnlyMode = editState?.petOnlyMode === true;
+  const isUserOnlyMode = editState?.userOnlyMode === true;
 
   const [form, setForm] = useState<ProfileSetupData>({
     ...defaultData,
@@ -406,21 +230,107 @@ export default function ProfileSetupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isBreedModalOpen, setIsBreedModalOpen] = useState(false);
-  const [isPersonalityModalOpen, setIsPersonalityModalOpen] = useState(false);
-  const [isOwnerPersonalityModalOpen, setIsOwnerPersonalityModalOpen] = useState(false);
   const [personalityError, setPersonalityError] = useState("");
   const [ownerPersonalityError, setOwnerPersonalityError] = useState("");
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  // 키워드 목록 (백엔드 keywords 테이블 단일 출처, id 오름차순)
+  const [petKeywordNames, setPetKeywordNames] = useState<string[]>([]);
+  const [userKeywordNames, setUserKeywordNames] = useState<string[]>([]);
+
+  // 약관·개인정보처리방침 동의 단계 게이트 (외부팀 QA #76).
+  // null = 로딩 중 / "needed" = 동의 필요 / "ok" = 완료 또는 skip (수정 모드 포함)
+  // 수정 모드 (편집·반려견 추가·보호자 수정) 진입 시 동의 단계는 이미 통과한 것으로 간주 — skip.
+  const [agreementsGate, setAgreementsGate] = useState<
+    null | "needed" | "ok"
+  >(null);
+
+  // /step 진입 시점 me 스냅샷 — 약관 동의 후 펫·닉네임 보유 사용자를 /home 으로
+  // 우회시키기 위한 판정 source. (직전 라운드 보고서 §6 후속 가드)
+  // 신규 사용자 (펫 미등록) 의 경우 hasPet=false → 우회 미발동 → 기존 폼 진입.
+  const [meHasProfile, setMeHasProfile] = useState(false);
+  const [meHasPet, setMeHasPet] = useState(false);
 
   useEffect(() => {
-    getAllBreeds().then(setBreeds).catch(() => {/* 로드 실패 시 하드코딩 목록으로 fallback */});
+    let active = true;
+    // 수정 모드 = 신규 가입 흐름 아님 → 동의 단계 skip + 우회 가드 미발동.
+    if (isEditMode || isPetOnlyMode || isUserOnlyMode) {
+      setAgreementsGate("ok");
+      return;
+    }
+    getMe()
+      .then((me) => {
+        if (!active) return;
+        setMeHasProfile(Boolean(me.nickname && me.nickname.trim().length > 0));
+        setMeHasPet(me.primary_pet_id != null);
+        const needsAgreement = !me.terms_agreed_at || !me.privacy_agreed_at;
+        setAgreementsGate(needsAgreement ? "needed" : "ok");
+      })
+      .catch(() => {
+        // getMe 실패 시 = 인증 없음 추정. 동의 게이트 막아도 의미 없으므로 통과 처리.
+        // 후속 createPet/updateUser 호출 시 401 로 자연 redirect.
+        if (active) setAgreementsGate("ok");
+      });
+    return () => {
+      active = false;
+    };
+  }, [isEditMode, isPetOnlyMode, isUserOnlyMode]);
+
+  // 약관 동의 완료 + 닉네임·펫 보유 + 신규 모드 → /home 우회.
+  // 마이그레이션 직후 기존 사용자가 약관 동의 후 빈 회원가입 폼으로 진입하는 케이스
+  // (직전 라운드 보고서 §6 잠재 이슈) 해소. AgreementsStep.onComplete 콜백 후에도
+  // agreementsGate state 변경으로 본 effect 재실행되어 자동 navigate.
+  useEffect(() => {
+    if (agreementsGate !== "ok") return;
+    if (isEditMode || isPetOnlyMode || isUserOnlyMode) return;
+    if (meHasProfile && meHasPet) {
+      navigate("/home", { replace: true });
+    }
+  }, [
+    agreementsGate,
+    meHasProfile,
+    meHasPet,
+    isEditMode,
+    isPetOnlyMode,
+    isUserOnlyMode,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getPetKeywords(), getUserKeywords()])
+      .then(([pet, user]) => {
+        if (!active) return;
+        setPetKeywordNames(pet.map((k) => k.name));
+        setUserKeywordNames(user.map((k) => k.name));
+      })
+      .catch((err) => {
+        console.error("키워드 목록 로드 실패", err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    getAllBreeds().then(setBreeds).catch(() => {/* 로드 실패 시 하드코딩 목록으로 fallback */ });
     getTop10Breeds().then(setTopBreeds).catch(() => setTopBreeds([]));
   }, []);
 
-  // 수정 모드: 기존 데이터로 폼 초기화
+  // isEditMode 의 보호자 prefill 스냅샷 — 반려견 수정 진입(MyPage 의 ✏️) 시 보호자 section UI 가
+  // 화면에 안 노출되므로 사용자가 보호자 정보 변경할 수 없음. handleStart 가 무조건 updateUser
+  // 호출하면 prefill 된 보호자 birth_date 가 PATCH body 에 동봉돼 14세 미만 케이스에서 422 발생.
+  // → isEditMode 분기에서 보호자 5 필드의 dirty 비교 후 변경 시만 updateUser 호출.
+  const initialGuardianRef = useRef<{
+    name: string;
+    birth: string;
+    gender: GuardianGender;
+    tags: string[];
+    image: string | undefined;
+  } | null>(null);
+
+  // 보호자 전용 수정 모드: 기존 데이터로 폼 초기화
   useEffect(() => {
-    if (!isEditMode || !editState) return;
-    const { userData, petData } = editState;
+    if (!isUserOnlyMode || !editState) return;
+    const { userData } = editState;
     setForm((prev) => ({
       ...prev,
       guardianName: userData?.nickname ?? "",
@@ -428,6 +338,25 @@ export default function ProfileSetupPage() {
       guardianGender:
         userData?.gender === "MALE" ? "male" : userData?.gender === "FEMALE" ? "female" : "male",
       ownerPersonality: userData?.selected_tags ?? [],
+      guardianImage: userData?.profile_image_url ?? undefined,
+    }));
+  }, [isUserOnlyMode]);
+
+  // 수정 모드: 기존 데이터로 폼 초기화
+  useEffect(() => {
+    if (!isEditMode || !editState) return;
+    const { userData, petData } = editState;
+    const guardianGender: GuardianGender =
+      userData?.gender === "MALE" ? "male" : userData?.gender === "FEMALE" ? "female" : "male";
+    const guardianTags = userData?.selected_tags ?? [];
+    const guardianImage = userData?.profile_image_url ?? undefined;
+    setForm((prev) => ({
+      ...prev,
+      guardianName: userData?.nickname ?? "",
+      guardianBirth: userData?.birth_date ?? "",
+      guardianGender,
+      ownerPersonality: guardianTags,
+      guardianImage,
       petName: petData?.name ?? "",
       birthDate: petData?.birth_date ?? "",
       breed: petData?.breed_name ?? "",
@@ -436,11 +365,18 @@ export default function ProfileSetupPage() {
       neutered:
         petData?.is_neutered === true ? "yes" : petData?.is_neutered === false ? "no" : undefined,
       personality: petData?.selected_tags ?? [],
-      // 저장된 프로필 사진 불러오기
-      image: editState.petId
-        ? (localStorage.getItem(`pet_photo_${editState.petId}`) ?? undefined)
-        : undefined,
+      // 저장된 프로필 사진 — 백엔드 응답 (pets.image_url) 사용. localStorage 폐기 (#67).
+      image: petData?.image_url ?? undefined,
     }));
+    // dirty check 기준점 — handleStart 의 isEditMode 분기가 이 snapshot 과 비교해서
+    // 변경된 보호자 필드가 있을 때만 updateUser PATCH 호출.
+    initialGuardianRef.current = {
+      name: userData?.nickname ?? "",
+      birth: userData?.birth_date ?? "",
+      gender: guardianGender,
+      tags: guardianTags,
+      image: guardianImage,
+    };
     if (petData?.breed_id) setSelectedBreedId(petData.breed_id);
   }, [isEditMode]);
 
@@ -495,29 +431,62 @@ export default function ProfileSetupPage() {
     });
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") {
-        const result = reader.result;
-        setForm((prev) => ({ ...prev, image: result }));
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
   const handleTopBreedSelect = (breed: Breed) => {
     setForm((prev) => ({ ...prev, breed: breed.name_ko }));
     setSelectedBreedId(breed.id);
   };
 
   const handleStart = async () => {
-    if (!form.petName) {
-      alert("반려견 이름을 입력해주세요.");
+    if (isUserOnlyMode) {
+      // 정책 #62 — 보호자 입력 검증 (닉네임 1~20, 생년월일 1900 ~ 오늘-14년).
+      // 빈 입력도 거부 (사용자 결정 2026-05-07 — 닉네임 필수).
+      const nicknameError = validateNickname(form.guardianName);
+      if (nicknameError) { alert(nicknameError); return; }
+      const userBirthError = validateUserBirth(form.guardianBirth);
+      if (userBirthError) { alert(userBirthError); return; }
+
+      setIsSubmitting(true);
+      try {
+        const userId = editState?.userId;
+        if (!userId) throw new Error("수정 대상 정보가 없습니다.");
+
+        // 보호자 사진 업로드 (data: 신규만, 기존 url 은 미변경)
+        let userProfileId: number | undefined;
+        if (form.guardianImage && form.guardianImage.startsWith('data:')) {
+          const file = await base64ToFile(form.guardianImage, 'user-profile.jpg');
+          const uploaded = await uploadImage(file);
+          userProfileId = uploaded.id;
+        }
+
+        await updateUser(userId, {
+          nickname: form.guardianName || undefined,
+          gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
+          birth_date: form.guardianBirth || undefined,
+          selected_tags: form.ownerPersonality ?? [],
+          profile_id: userProfileId,
+        });
+        // Navbar 우측 아바타 + getMe 캐시 의존 컴포넌트 즉시 갱신
+        window.dispatchEvent(new Event('user-profile-change'));
+        navigate("/mypage", { replace: true });
+      } catch (err) {
+        console.error("보호자 정보 저장 실패", err);
+        // 백엔드 detail (욕설 검출 #71 — "부적절한 단어가 포함되어 있습니다" 등) 그대로 표시
+        const message = err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.";
+        alert(message);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+    // 정책 #63 — 반려견 입력 검증 (이름 1~20, 생년월일 오늘-30년 ~ 오늘)
+    const petNameError = validatePetName(form.petName);
+    if (petNameError) {
+      alert(petNameError);
+      return;
+    }
+    const petBirthError = validatePetBirth(form.birthDate);
+    if (petBirthError) {
+      alert(petBirthError);
       return;
     }
     if (selectedBreedId === null) {
@@ -535,117 +504,192 @@ export default function ProfileSetupPage() {
       const isNeuteredApi = form.neutered === "yes" ? true : form.neutered === "no" ? false : undefined;
 
       if (isEditMode && editState) {
-        // 수정 모드: updateUser + updatePet
+        // 수정 모드: 보호자 정보가 dirty 일 때만 updateUser, 반려견은 항상 updatePet.
+        // isEditMode 진입 = MyPage 의 ✏️ (반려견 수정) — UI 가 보호자 section 숨김 → 사용자가
+        // 보호자 정보 변경할 수 없음 → dirty=false → updateUser PATCH 자체를 안 부름.
+        // (보호자 birth_date 가 14세 미만 데이터로 박혀있어도 PATCH body 미포함이라 422 회피)
         const userId = editState.userId;
         const petId = editState.petId;
         if (!userId || !petId) throw new Error("수정 대상 정보가 없습니다.");
 
-        let profileId: number | undefined;
-        let imageUrl: string | undefined;
+        // 반려견 사진 업로드 (변경 시만 신규, data: 만 신규로 인식)
+        let petProfileId: number | undefined;
         if (form.image && form.image.startsWith('data:')) {
-          const file = await base64ToFile(form.image, 'profile.jpg');
+          const file = await base64ToFile(form.image, 'pet-profile.jpg');
           const uploaded = await uploadImage(file);
-          profileId = uploaded.id;
-          imageUrl = uploaded.url;
+          petProfileId = uploaded.id;
         }
 
-        await updateUser(userId, {
-          nickname: form.guardianName || undefined,
-          gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
-          birth_date: form.guardianBirth || undefined,
-          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
-          profile_id: profileId,
-        });
-        const updatedPet = await updatePet(petId, {
+        // 보호자 dirty 비교 — 5 필드 (이름·생년월일·성별·태그·이미지) 중 하나라도 변경 시 PATCH.
+        const init = initialGuardianRef.current;
+        const guardianImageDirty = !!form.guardianImage && form.guardianImage.startsWith('data:');
+        const guardianDirty = !init
+          || init.name !== form.guardianName
+          || init.birth !== form.guardianBirth
+          || init.gender !== form.guardianGender
+          || init.tags.join(',') !== form.ownerPersonality.join(',')
+          || guardianImageDirty;
+
+        if (guardianDirty) {
+          let userProfileId: number | undefined;
+          if (guardianImageDirty && form.guardianImage) {
+            const file = await base64ToFile(form.guardianImage, 'user-profile.jpg');
+            const uploaded = await uploadImage(file);
+            userProfileId = uploaded.id;
+          }
+          await updateUser(userId, {
+            nickname: form.guardianName || undefined,
+            gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
+            birth_date: form.guardianBirth || undefined,
+            selected_tags: form.ownerPersonality ?? [],
+            profile_id: userProfileId,
+          });
+        }
+        await updatePet(petId, {
           breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
+          image_id: petProfileId,
         });
-        if (imageUrl) {
-          localStorage.setItem(`pet_photo_${updatedPet.id}`, imageUrl);
-        } else if (form.image) {
-          localStorage.setItem(`pet_photo_${updatedPet.id}`, form.image);
-        }
+        window.dispatchEvent(new Event('user-profile-change'));
         navigate("/mypage", { replace: true });
       } else if (isPetOnlyMode) {
-        // 반려견 추가 모드: createPet만
-        const newPet = await createPet({
+        // 반려견 추가 모드: 이미지 업로드 → createPet (profile_id 연결)
+        let petProfileId: number | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'pet-profile.jpg');
+          const uploaded = await uploadImage(file);
+          petProfileId = uploaded.id;
+        }
+
+        await createPet({
           breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
+          image_id: petProfileId,
         });
-        if (form.image) localStorage.setItem(`pet_photo_${newPet.id}`, form.image);
         navigate("/mypage", { replace: true });
       } else {
-        // 최초 등록 모드: getMe + updateUser + createPet
+        // 최초 등록 모드: getMe + updateUser + createPet. 사진 = 보호자 + 반려견 분리 (#67 fix 후속).
         const me = await getMe();
 
-        let profileId: number | undefined;
-        let imageUrl: string | undefined;
-        if (form.image && form.image.startsWith('data:')) {
-          const file = await base64ToFile(form.image, 'profile.jpg');
+        let userProfileId: number | undefined;
+        if (form.guardianImage && form.guardianImage.startsWith('data:')) {
+          const file = await base64ToFile(form.guardianImage, 'user-profile.jpg');
           const uploaded = await uploadImage(file);
-          profileId = uploaded.id;
-          imageUrl = uploaded.url;
+          userProfileId = uploaded.id;
+        }
+        let petProfileId: number | undefined;
+        if (form.image && form.image.startsWith('data:')) {
+          const file = await base64ToFile(form.image, 'pet-profile.jpg');
+          const uploaded = await uploadImage(file);
+          petProfileId = uploaded.id;
         }
 
         await updateUser(me.id, {
           nickname: form.guardianName || undefined,
           gender: form.guardianGender === "male" ? "MALE" : form.guardianGender === "female" ? "FEMALE" : undefined,
           birth_date: form.guardianBirth || undefined,
-          selected_tags: form.ownerPersonality.length ? form.ownerPersonality : undefined,
-          profile_id: profileId,
+          selected_tags: form.ownerPersonality ?? [],
+          profile_id: userProfileId,
         });
-        const newPet = await createPet({
+        await createPet({
           breed_id: breedId,
           name: form.petName,
           birth_date: form.birthDate || undefined,
           gender: petGenderApi,
           is_neutered: isNeuteredApi,
           selected_tags: form.personality,
+          image_id: petProfileId,
         });
-        if (imageUrl) {
-          localStorage.setItem(`pet_photo_${newPet.id}`, imageUrl);
-        } else if (form.image) {
-          localStorage.setItem(`pet_photo_${newPet.id}`, form.image);
-        }
+        window.dispatchEvent(new Event('user-profile-change'));
         navigate("/home");
       }
     } catch (err) {
       console.error("프로필 저장 실패", err);
-      alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+      // 백엔드 detail (욕설 검출 #71 / 매직바이트 #72-A 등) 그대로 표시
+      const message = err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.";
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // 약관 동의 게이트 — 로딩 중 / 동의 필요 분기 우선 처리.
+  if (agreementsGate === null) {
+    return (
+      <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (agreementsGate === "needed") {
+    return <AgreementsStep onComplete={() => setAgreementsGate("ok")} />;
+  }
+
+  // /home 우회 가드 — 신규 모드 + 닉네임·펫 보유 시 useEffect 가 navigate 발동.
+  // navigate 직전 회원가입 폼 한 프레임 깜빡임 방지용 spinner.
+  const willRedirectHome =
+    !isEditMode && !isPetOnlyMode && !isUserOnlyMode && meHasProfile && meHasPet;
+  if (willRedirectHome) {
+    return (
+      <div className="min-h-screen bg-[#FFF8F0] flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F6F1EC]">
-      <header className="border-b-[3px] border-[#3DA0FF] bg-[#F6F1EC] px-4 py-4 text-center">
+      <header className="relative border-b-[3px] border-[#3DA0FF] bg-[#F6F1EC] px-4 py-4 text-center">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="뒤로가기"
+          className="absolute left-3 top-1/2 -translate-y-1/2 grid h-9 w-9 place-items-center rounded-full text-[#8A837B] transition hover:bg-[#EFE8E0]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
         <h1 className="text-sm font-bold tracking-tight text-[#2F2B27]">
-          {isEditMode ? "정보 수정" : isPetOnlyMode ? "반려견 추가" : "프로필 설정"}
+          {isUserOnlyMode ? "보호자 정보 수정" : isEditMode ? "정보 수정" : isPetOnlyMode ? "반려견 추가" : "프로필 설정"}
         </h1>
       </header>
 
       <main className="mx-auto max-w-[780px] px-4 py-10">
         <div className="mx-auto max-w-[520px] space-y-6">
-          {!isPetOnlyMode && !isEditMode && <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          {(!isPetOnlyMode && !isEditMode) || isUserOnlyMode ? <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <h2 className="text-[16px] font-bold text-[#37322D]">보호자 정보</h2>
+
+            <div className="mt-6">
+              <AvatarUploadField
+                value={form.guardianImage}
+                onChange={(dataUrl) => setForm((prev) => ({ ...prev, guardianImage: dataUrl }))}
+                placeholderIcon={User}
+                tone="slate"
+                alt="보호자"
+              />
+            </div>
 
             <div className="mt-4">
               <label className="mb-2 block text-xs font-medium text-[#8D867E]">닉네임</label>
-              <input
-                value={form.guardianName}
-                onChange={(e) => setForm((prev) => ({ ...prev, guardianName: e.target.value }))}
-                placeholder="보호자님"
-                className="h-12 w-full rounded-[10px] border border-[#E3DDD7] px-4 text-sm outline-none placeholder:text-[#BBB3AB] focus:border-[#F0A777]"
-              />
+              <div className="relative">
+                <input
+                  value={form.guardianName}
+                  onChange={(e) => setForm((prev) => ({ ...prev, guardianName: e.target.value }))}
+                  placeholder="보호자님"
+                  maxLength={20}
+                  className="h-12 w-full rounded-[10px] border border-[#E3DDD7] pl-4 pr-14 text-sm outline-none placeholder:text-[#BBB3AB] focus:border-[#F0A777]"
+                />
+                <span className="pointer-events-none absolute bottom-1.5 right-3 text-[11px] text-[#B5ADA4]">
+                  {form.guardianName.trim().length}/20
+                </span>
+              </div>
             </div>
 
             <div className="mt-4">
@@ -669,109 +713,49 @@ export default function ProfileSetupPage() {
             <div className="mt-4">
               <label className="mb-2 block text-xs font-medium text-[#8D867E]">성별</label>
               <div className="flex justify-center gap-3">
-                <div className="w-44">
-                  <SegButton
-                    active={form.guardianGender === "male"}
-                    onClick={() => setForm((prev) => ({ ...prev, guardianGender: "male" }))}
-                  >
-                    남성
-                  </SegButton>
-                </div>
-                <div className="w-44">
-                  <SegButton
-                    active={form.guardianGender === "female"}
-                    onClick={() => setForm((prev) => ({ ...prev, guardianGender: "female" }))}
-                  >
-                    여성
-                  </SegButton>
-                </div>
+                <SegButton
+                  active={form.guardianGender === "male"}
+                  onClick={() => setForm((prev) => ({ ...prev, guardianGender: "male" }))}
+                >
+                  남성
+                </SegButton>
+                <SegButton
+                  active={form.guardianGender === "female"}
+                  onClick={() => setForm((prev) => ({ ...prev, guardianGender: "female" }))}
+                >
+                  여성
+                </SegButton>
               </div>
             </div>
 
             {/* 보호자 라이프스타일 태그 */}
             <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <label className="block text-xs font-medium text-[#8D867E]">
-                  라이프스타일 (중복 선택 가능)
-                </label>
-                <span className="text-xs font-semibold text-[#D45E23]">
-                  {form.ownerPersonality.length}/5
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {previewOwnerPersonalityOptions.map((item) => (
-                  <Chip
-                    key={item}
-                    active={form.ownerPersonality.includes(item)}
-                    onClick={() => toggleOwnerPersonality(item)}
-                  >
-                    {item}
-                  </Chip>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setIsOwnerPersonalityModalOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#E6E1DB] bg-white px-4 py-2 text-sm font-medium text-[#7B746B] transition hover:border-[#F1B18C] hover:text-[#D45E23]"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                  더보기
-                </button>
-              </div>
-              {form.ownerPersonality.length > 0 && (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-[#A29A91]">선택된 라이프스타일</span>
-                    <button
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, ownerPersonality: [] }))}
-                      className="text-xs text-[#B0A89F] hover:text-red-400 transition-colors"
-                    >
-                      전체 지우기
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {form.ownerPersonality.map((item) => (
-                      <span
-                        key={item}
-                        className="rounded-full bg-[#FFF2EA] px-3 py-1 text-xs font-semibold text-[#D45E23] ring-1 ring-[#F3D3BF]"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {ownerPersonalityError && (
-                <p className="mt-2 text-xs text-red-500">{ownerPersonalityError}</p>
-              )}
+              <KeywordChipsField
+                label="라이프스타일 (중복 선택 가능)"
+                modalTitle="라이프스타일 더보기"
+                modalDescription="보호자님의 여행 스타일을 골라주세요 (최대 5개)"
+                selectedNoun="라이프스타일"
+                options={userKeywordNames}
+                value={form.ownerPersonality}
+                onToggle={toggleOwnerPersonality}
+                onClear={() => setForm((prev) => ({ ...prev, ownerPersonality: [] }))}
+                previewLimit={PREVIEW_KEYWORD_COUNT}
+                error={ownerPersonalityError}
+              />
             </div>
-          </section>}
+          </section> : null}
 
-          <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          {!isUserOnlyMode && <section className="rounded-[18px] border border-[#DDD6CF] bg-white px-6 py-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <h2 className="text-[16px] font-bold text-[#37322D]">반려견 정보</h2>
 
-            <div className="mt-6 flex justify-center">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageChange}
+            <div className="mt-6">
+              <AvatarUploadField
+                value={form.image}
+                onChange={(dataUrl) => setForm((prev) => ({ ...prev, image: dataUrl }))}
+                placeholderIcon={Camera}
+                tone="orange"
+                alt="반려견"
               />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="flex flex-col items-center"
-              >
-                <div className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full bg-[#F6E5D4] text-[#C27A37] shadow-sm">
-                  {form.image ? (
-                    <img src={form.image} alt="반려견" className="h-full w-full object-cover" />
-                  ) : (
-                    <Camera className="h-6 w-6" />
-                  )}
-                </div>
-                <span className="mt-3 text-[11px] text-[#A19A92]">클릭하여 사진 추가</span>
-              </button>
             </div>
 
             <div className="mt-6 space-y-5">
@@ -866,78 +850,42 @@ export default function ProfileSetupPage() {
                 </div>
               </div>
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="block text-xs font-medium text-[#8D867E]">
-                    성격 (중복 선택 가능)
-                  </label>
-                  <span className="text-xs font-semibold text-[#D45E23]">
-                    {form.personality.length}/5
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {previewPersonalityOptions.map((item) => (
-                    <Chip
-                      key={item}
-                      active={form.personality.includes(item)}
-                      onClick={() => togglePersonality(item)}
-                    >
-                      {item}
-                    </Chip>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setIsPersonalityModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#E6E1DB] bg-white px-4 py-2 text-sm font-medium text-[#7B746B] transition hover:border-[#F1B18C] hover:text-[#D45E23]"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                    성격 더보기
-                  </button>
-                </div>
-
-                {form.personality.length > 0 && (
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-[#A29A91]">선택된 성격</span>
-                      <button
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, personality: [] }))}
-                        className="text-xs text-[#B0A89F] hover:text-red-400 transition-colors"
-                      >
-                        전체 지우기
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {form.personality.map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full bg-[#FFF2EA] px-3 py-1 text-xs font-semibold text-[#D45E23] ring-1 ring-[#F3D3BF]"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {personalityError && (
-                  <p className="mt-2 text-xs text-red-500">{personalityError}</p>
-                )}
-              </div>
+              <KeywordChipsField
+                label="성격 (중복 선택 가능)"
+                modalTitle="성격 더보기"
+                modalDescription="원하는 성격을 자유롭게 선택해 주세요 (최대 5개)"
+                selectedNoun="성격"
+                options={petKeywordNames}
+                value={form.personality}
+                onToggle={togglePersonality}
+                onClear={() => setForm((prev) => ({ ...prev, personality: [] }))}
+                previewLimit={PREVIEW_KEYWORD_COUNT}
+                error={personalityError}
+              />
 
             </div>
-          </section>
+          </section>}
 
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={isSubmitting}
-            className="w-full rounded-[16px] bg-[#DB5F2E] px-6 py-5 text-lg font-bold text-white shadow-sm transition hover:bg-[#D05523] disabled:opacity-60"
-          >
-            {isSubmitting ? "저장 중..." : isEditMode ? "수정 완료" : isPetOnlyMode ? "추가하기 🐾" : "시작하기! 🐾"}
-          </button>
+          <div className="flex gap-3">
+            {(isUserOnlyMode || isEditMode || isPetOnlyMode) && (
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                disabled={isSubmitting}
+                className="rounded-[16px] border border-[#E3DDD7] bg-white px-6 py-5 text-lg font-semibold text-[#7B746B] transition hover:bg-[#F4F1EE] disabled:opacity-60"
+              >
+                취소
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={isSubmitting}
+              className="flex-1 rounded-[16px] bg-[#DB5F2E] px-6 py-5 text-lg font-bold text-white shadow-sm transition hover:bg-[#D05523] disabled:opacity-60"
+            >
+              {isSubmitting ? "저장 중..." : isUserOnlyMode ? "수정 완료" : isEditMode ? "수정 완료" : isPetOnlyMode ? "추가하기 🐾" : "시작하기! 🐾"}
+            </button>
+          </div>
         </div>
       </main>
 
@@ -952,19 +900,6 @@ export default function ProfileSetupPage() {
         breeds={breeds}
       />
 
-      <PersonalityModal
-        isOpen={isPersonalityModalOpen}
-        onClose={() => setIsPersonalityModalOpen(false)}
-        selectedItems={form.personality}
-        onToggle={togglePersonality}
-      />
-
-      <OwnerPersonalityModal
-        isOpen={isOwnerPersonalityModalOpen}
-        onClose={() => setIsOwnerPersonalityModalOpen(false)}
-        selectedItems={form.ownerPersonality}
-        onToggle={toggleOwnerPersonality}
-      />
     </div>
   );
 }

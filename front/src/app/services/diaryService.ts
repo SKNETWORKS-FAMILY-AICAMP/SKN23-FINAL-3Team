@@ -24,51 +24,50 @@ export interface GeneratedDiary {
   session_id?: string
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+function authHeaders(): HeadersInit {
+  const token = localStorage.getItem('access_token')
+  return token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : { 'Content-Type': 'application/json' }
+}
 
 export async function generateDiary(input: DiaryGenerationInput): Promise<GeneratedDiary> {
-  try {
-    const res = await fetch(`${API_BASE}/diary/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pet_name: input.petName,
-        breed: input.breed ?? '강아지',
-        birth_date: input.birthDate ?? null,
-        personalities: input.personalities ?? [],
-        owner_name: input.ownerName ?? '',
-        owner_gender: input.ownerGender ?? '',
-        main_answers: input.mainAnswers,
-        additional_answers: input.additionalAnswers,
-        diary_type: input.diaryType,
-        emotion_emoji: input.emotionEmoji,
-      }),
-    })
+  const res = await fetch(`/api/diary/generate`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      pet_name: input.petName,
+      breed: input.breed ?? '강아지',
+      birth_date: input.birthDate ?? null,
+      personalities: input.personalities ?? [],
+      owner_name: input.ownerName ?? '',
+      owner_gender: input.ownerGender ?? '',
+      main_answers: input.mainAnswers,
+      additional_answers: input.additionalAnswers,
+      diary_type: input.diaryType,
+      emotion_emoji: input.emotionEmoji,
+    }),
+  })
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { detail?: string }
-      throw new Error(err.detail ?? `API 오류 ${res.status}`)
-    }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string }
+    throw new Error(err.detail ?? `일기 API 오류 ${res.status}`)
+  }
 
-    const data = await res.json()
-    return {
-      title: data.title,
-      content: data.content,
-      summary: data.summary,
-      image_prompt: data.image_prompt,
-      session_id: data.session_id,
-    }
-  } catch (e) {
-    console.warn('[diaryService] API 호출 실패, mock으로 대체합니다.', e)
-    await new Promise((r) => setTimeout(r, 1500))
-    return mockGenerateDiary(input)
+  const data = await res.json()
+  return {
+    title: data.title,
+    content: data.content,
+    summary: data.summary,
+    image_prompt: data.image_prompt,
+    session_id: data.session_id,
   }
 }
 
 export async function generateDiaryImage(imagePrompt: string, sessionId?: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/diary/generate-image`, {
+  const res = await fetch(`/api/diary/generate-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ image_prompt: imagePrompt, session_id: sessionId ?? '' }),
   })
   if (!res.ok) {
@@ -77,6 +76,42 @@ export async function generateDiaryImage(imagePrompt: string, sessionId?: string
   }
   const data = await res.json() as { image_base64: string }
   return `data:image/png;base64,${data.image_base64}`
+}
+
+export type PhotoStyleResult =
+  | { type: 'image_diary'; content: string; imageUrl: string }
+  | { type: 'bot_text';    content: string }
+
+export async function photoStyle(
+  file: File,
+  chatRoomId?: number,
+  dogId?: number,
+): Promise<PhotoStyleResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (chatRoomId != null) formData.append('chat_room_id', String(chatRoomId))
+  if (dogId != null)      formData.append('dog_id',       String(dogId))
+
+  const token = localStorage.getItem('access_token')
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+
+  const res = await fetch('/api/diary/photo-style', {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { detail?: string }
+    throw new Error(err.detail ?? `사진 변환 API 오류 ${res.status}`)
+  }
+
+  const data = await res.json() as { type: string; content: string; image_url?: string }
+
+  if (data.type === 'image_diary' && data.image_url) {
+    return { type: 'image_diary', content: data.content, imageUrl: data.image_url }
+  }
+  return { type: 'bot_text', content: data.content }
 }
 
 // ── Mock ─────────────────────────────────────────────

@@ -208,7 +208,9 @@ class PlacesChain(BaseChain):
             base_score = place.get("final_score", place.get("similarity", 0))
 
             if de > 3 and outdoor == "Y":
-                bonus -= 0.10
+                bonus -= 0.15
+            if de > 3 and category_tokens & {"반려견놀이터", "레포츠"}:
+                bonus -= 0.15
             if da > 3 and category_tokens & {"공원", "놀이터", "반려견놀이터"}:
                 bonus += 0.10
             if db > 3 and category_tokens & {"카페", "관광지", "여행지"}:

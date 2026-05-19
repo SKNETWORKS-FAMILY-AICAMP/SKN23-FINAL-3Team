@@ -13,7 +13,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from utils.validation import strip_place_info_marker
 
 
 class MessageCreate(BaseModel):
@@ -29,6 +31,8 @@ class MessageCreate(BaseModel):
     )
     content: str = Field(..., min_length=1, description="메시지 본문")
     pet_id: int | None = Field(default=None, description="현재 선택한 반려견 ID")
+    user_lat: float | None = Field(default=None, description="사용자 위도 (GPS)")
+    user_lng: float | None = Field(default=None, description="사용자 경도 (GPS)")
 
 
 class MessageResponse(BaseModel):
@@ -71,12 +75,50 @@ class FacilityCard(BaseModel):
     outdoor: str = Field("", description="실외 가능 (Y/N)")
     conditions: str = Field("", description="반려견 동반 시 제한사항 원문")
     description: str = Field("", description="장소 설명 텍스트")
+    firstimage: str = Field("", description="대표 이미지 URL")
+    image: str = Field("", description="보강된 이미지 URL")
     entrance_fee_amount: int | None = Field(None, description="입장료 (원). 미상이면 null")
     entrance_fee_type: str = Field("unknown", description="free/fixed/variable/conditional/unknown")
     extra_fee_amount: int | None = Field(None, description="강아지 추가요금 (원). 미상이면 null")
     extra_fee_type: str = Field("unknown", description="free/fixed/variable/conditional/unknown")
     match_source: str = Field("vector", description="매칭 경로 (name_exact | vector)")
     match_confidence: float = Field(0.0, description="매칭 신뢰도 (0.0~1.0)")
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_place_info(cls, v: str | None) -> str:
+        return strip_place_info_marker(v)
+
+
+class PlaceCard(BaseModel):
+    """장소추천 의도 응답에 첨부되는 장소 카드 페이로드."""
+
+    name: str = Field(..., description="장소명")
+    address: str = Field("", description="도로명 주소")
+    category: str = Field("", description="대분류")
+    sub_category: str = Field("", description="세부 분류")
+    content_id: str = Field("", description="한국관광공사 콘텐츠 ID")
+    lat: float = Field(0.0, description="위도")
+    lng: float = Field(0.0, description="경도")
+    tel: str = Field("", description="대표 전화")
+    conditions: str = Field("", description="반려견 동반 제한사항")
+    pet_zone: str = Field("", description="반려견 이용 가능 구역")
+    pet_size: str = Field("", description="반려견 크기 제한")
+    has_parking: str = Field("", description="주차 가능 여부")
+    operation: str = Field("", description="운영시간/휴무일")
+    indoor: str = Field("", description="실내 가능 여부")
+    outdoor: str = Field("", description="실외 가능 여부")
+    description: str = Field("", description="장소 설명")
+    firstimage: str = Field("", description="대표 이미지 URL")
+    image: str = Field("", description="보강된 이미지 URL")
+    reason: str = Field("", description="질문 맥락 기반 추천 이유")
+    similarity: float = Field(0.0, description="벡터 유사도")
+    final_score: float = Field(0.0, description="최종 점수")
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_place_info(cls, v: str | None) -> str:
+        return strip_place_info_marker(v)
 
 
 class MessageUpdate(BaseModel):
@@ -97,4 +139,8 @@ class ChatTurnResponse(BaseModel):
     facility: FacilityCard | None = Field(
         None,
         description="시설정보 의도일 때만 채워지는 단일 시설 카드 페이로드 (그 외 null)",
+    )
+    places: list[PlaceCard] | None = Field(
+        None,
+        description="장소추천 의도일 때만 채워지는 장소 카드 페이로드 (그 외 null)",
     )

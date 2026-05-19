@@ -75,3 +75,8 @@ class AIContainer:
             llm_client      = self._llm,
             cost_tracker    = self._cost_tracker,
         )
+
+    async def load_keyword_scores(self, db) -> None:
+        """Load scorer vectors from the keywords table."""
+        await self._dog_scorer.load_from_db(db)
+        await self._owner_scorer.load_from_db(db)

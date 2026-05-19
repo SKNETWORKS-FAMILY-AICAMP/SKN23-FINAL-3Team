@@ -1,4 +1,5 @@
 import { api } from './apiClient'
+import { validateImageSize } from '../utils/validation'
 
 export interface ImageRecord {
   id: number
@@ -19,8 +20,17 @@ function _mapImage(r: _ImageApiResponse): ImageRecord {
   return { id: r.id, url: r.file_url, file_url: r.file_url, created_at: r.created_at }
 }
 
-/** POST /images — multipart/form-data */
+/** POST /images — multipart/form-data.
+ *
+ * 정책 #72-A: 5MB 사전 검증 — Nginx client_max_body_size(20M)·백엔드 매직바이트보다 먼저 차단
+ * 하여 UX 향상 (큰 파일 업로드 지연·실패 방지). 실패 시 throw 하여 호출처가 catch 후 사용자에게
+ * 에러 메시지 표시.
+ */
 export function uploadImage(file: File): Promise<ImageRecord> {
+  const sizeError = validateImageSize(file)
+  if (sizeError) {
+    return Promise.reject(new Error(sizeError))
+  }
   return api.upload<_ImageApiResponse>('/images', file).then(_mapImage)
 }
 

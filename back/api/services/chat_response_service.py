@@ -18,13 +18,11 @@ import json
 import logging
 
 from dataclasses import dataclass
-from datetime import date
 from typing import Sequence
 
 from fastapi import Request
 from openai import AsyncOpenAI
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
@@ -33,18 +31,14 @@ from models.pet import Pet
 from models.user import User
 from services.intent_service import IntentResult, RAG_STRATEGY_MAP
 from services.place_service import (
+    ParsedQuery,
     SEOUL,
     _parse_query_with_llm,
     search_facility_by_name,
     search_places_from_db,
 )
-from fastapi import Request
+from services.place_image_service import enrich_place_images
 
-# from ai.llm.prompts.diary_prompt import build_diary_prompt, build_final_image_prompt
-
-from ai.prompts.diary_prompt_builder import DiaryPromptBuilder
-_diary_prompt_builder = DiaryPromptBuilder()
-from services.place_service import search_places_from_db
 from services.diary_response_service import (
     detect_diary_sub_intent,
     get_diary_guide_response,
@@ -57,8 +51,8 @@ logger = logging.getLogger(__name__)
 
 _openai_client: AsyncOpenAI | None = None
 _GPT_MODEL = settings.GPT_MODEL
-_IMAGE_MODEL = settings.GPT_IMAGE_MODEL
 _OUT_OF_SERVICE_AREA_MESSAGE = "현재 서비스는 서울 지역만 지원하고 있습니다."
+_PLACE_NOT_FOUND_MESSAGE = "조건에 맞는 장소를 찾지 못했어요."
 
 
 def _get_openai_client() -> AsyncOpenAI:
@@ -78,6 +72,8 @@ class DispatchContext:
     db: AsyncSession | None = None
     room_id: int | None = None
     pet_id: int | None = None
+    user_lat: float | None = None
+    user_lng: float | None = None
 
 
 @dataclass
@@ -87,9 +83,11 @@ class DispatchResult:
 
         - text: 챗봇 응답 본문 (assistant 메시지 content 로 저장됨)
         - facility: 시설정보 의도일 때 단일 시설 카드 페이로드 (그 외 None)
+        - places: 장소추천 의도일 때 장소 카드 페이로드 (그 외 None)
     """
     text: str
     facility: dict | None = None
+    places: list[dict] | None = None
 
 
 _PLACES_SYSTEM_PROMPT = (
@@ -247,11 +245,93 @@ def _format_facility_response(facility: dict, slots: list[str]) -> str:
     lines.append("좌측 지도와 시설 카드에서 위치를 함께 확인해보세요.")
     return "\n".join(lines)
 
-_FALLBACK_SYSTEM_PROMPT = (
-    "너는 반려견 보호자를 돕는 친절한 한국어 챗봇 'withDOG' 이야. "
-    "사용자의 질문에 간결하고 따뜻하게 답변해."
-)
+_FALLBACK_SYSTEM_PROMPT_TEMPLATE = """\
+너는 "withDOG" 라는 반려견 보호자 전용 챗봇이야.
+반려견과 함께하는 일상을 더 즐겁고 편리하게 만들어주는 든든한 파트너 역할을 해.
 
+## 톤·스타일 규칙
+- 존댓말(해요체)을 일관되게 사용해.
+- 이모지는 메시지당 1~2개 이내로 절제해.
+- 답변은 3문장 이내로 간결하게. 필요하면 핵심만 짧게 부연해.
+- 반려견 이름이 주어지면 자연스럽게 이름을 불러줘.
+
+## 금지 사항
+- 의료 진단·처방을 절대 하지 마. 건강 관련 질문에는 수의사 상담을 권유해.
+- 확인되지 않은 정보를 추측해서 말하지 마. 모르면 "정확한 정보를 찾기 어려워요"라고 안내해.
+- 반려견·반려동물과 무관한 주제(정치, 종교, 투자 등)는 부드럽게 거절해.
+
+## 반려견 컨텍스트
+{pet_context}
+
+## 예시
+사용자: 우리 강아지가 자꾸 발을 핥아요
+assistant: 발을 자주 핥는 건 알레르기, 스트레스, 습관 등 여러 원인이 있을 수 있어요. 지속되거나 발이 빨갛게 변한다면 수의사 선생님께 한번 보여주시는 게 좋아요 🐾
+
+사용자: 산책 시간 추천해줘
+assistant: 여름에는 아스팔트가 식는 이른 아침(6~8시)이나 해 진 뒤(19시 이후)가 좋아요. 겨울에는 해가 떠 있는 낮 시간대가 따뜻해서 추천드려요 ☀️
+
+사용자: 주식 추천해줘
+assistant: 저는 반려견 생활 도우미라서 투자 관련 질문에는 답변하기 어려워요. 반려견에 대해 궁금한 점이 있으면 언제든 물어봐주세요!"""
+
+_FALLBACK_NO_PET_CONTEXT = "(등록된 반려견 정보가 없습니다.)"
+
+
+async def _load_fallback_pet_context(ctx: DispatchContext) -> str:
+    """Fallback 응답에 삽입할 반려견/보호자 요약 텍스트를 반환한다.
+
+    DB 조회 실패 시 빈 컨텍스트 문자열을 반환하며 예외를 전파하지 않는다.
+    """
+    if ctx.db is None or (ctx.user_id is None and ctx.pet_id is None):
+        return _FALLBACK_NO_PET_CONTEXT
+
+    try:
+        pet_query = select(Pet).where(Pet.deleted_at.is_(None))
+        if ctx.pet_id is not None:
+            pet_query = pet_query.where(Pet.id == ctx.pet_id).limit(1)
+        elif ctx.user_id is not None:
+            pet_query = (
+                pet_query.where(Pet.user_id == ctx.user_id)
+                .order_by(Pet.id.desc())
+                .limit(1)
+            )
+        else:
+            return _FALLBACK_NO_PET_CONTEXT
+
+        result = await ctx.db.execute(pet_query)
+        pet = result.scalar_one_or_none()
+        if pet is None:
+            return _FALLBACK_NO_PET_CONTEXT
+
+        from datetime import date as _date
+
+        lines: list[str] = []
+        lines.append(f"- 이름: {pet.name or '미등록'}")
+        breed_name = getattr(pet.breed, "name_ko", None) if hasattr(pet, "breed") and pet.breed else None
+        lines.append(f"- 견종: {breed_name or '미등록'}")
+        if isinstance(pet.birth_date, _date):
+            today = _date.today()
+            age_months = (today.year - pet.birth_date.year) * 12 + (today.month - pet.birth_date.month)
+            if age_months >= 12:
+                lines.append(f"- 나이: {age_months // 12}살")
+            else:
+                lines.append(f"- 나이: {age_months}개월")
+        tags = list(pet.selected_tags or [])
+        if tags:
+            lines.append(f"- 성격: {', '.join(tags)}")
+
+        # 보호자 닉네임
+        if ctx.user_id is not None:
+            user_result = await ctx.db.execute(
+                select(User).where(User.id == ctx.user_id, User.deleted_at.is_(None))
+            )
+            user = user_result.scalar_one_or_none()
+            if user and user.nickname:
+                lines.append(f"- 보호자: {user.nickname}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning(f"[ChatResponse] fallback pet context load failed: {e}")
+        return _FALLBACK_NO_PET_CONTEXT
 
 
 _PLACE_REASON_SYSTEM_PROMPT = (
@@ -289,16 +369,14 @@ def _format_places_brief(places: Sequence[dict]) -> str:
 def _format_place_list_response(places: Sequence[dict]) -> str:
     """Render a stable place response without a second LLM pass."""
     if not places:
-        return (
-            "조건에 맞는 장소를 찾지 못했어요. "
-            "원하시는 지역이나 조건을 조금 바꿔서 다시 말씀해 주세요."
-        )
+        return _PLACE_NOT_FOUND_MESSAGE
 
     lines = ["반려견과 함께 가보기 좋은 장소를 정리했어요.", ""]
     for idx, place in enumerate(places, start=1):
         name = place.get("name", "이름 미상")
         address = place.get("address", "")
         reason = (place.get("reason") or "").strip()
+        content_id = (place.get("content_id") or "").strip()
 
         lines.append(f"{idx}. {name}")
         lines.append("")
@@ -307,6 +385,9 @@ def _format_place_list_response(places: Sequence[dict]) -> str:
             lines.append("")
         if reason:
             lines.append(f"- 추천 이유: {reason}")
+            lines.append("")
+        if content_id:
+            lines.append(f"- _id: {content_id}")
             lines.append("")
 
     lines.append("세부 정보는 좌측 지도와 장소 카드에서 함께 확인해보세요.")
@@ -317,17 +398,19 @@ async def _chat_completion(
     system_prompt: str,
     user_prompt: str,
     *,
+    history: list[dict] | None = None,
     model: str | None = None,
     max_tokens: int = 600,
 ) -> str:
     try:
         client = _get_openai_client()
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history[-12:])
+        messages.append({"role": "user", "content": user_prompt})
         resp = await client.chat.completions.create(
             model=model or _GPT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
             temperature=0.7,
             max_tokens=max_tokens,
         )
@@ -408,10 +491,14 @@ async def generate_place_reasons(query: str, places: Sequence[dict]) -> dict[str
         return {}
 
 
-async def _is_out_of_service_area(query: str, request: Request | None = None) -> bool:
+async def _is_out_of_service_area(
+    query: str,
+    request: Request | None = None,
+    parsed: ParsedQuery | None = None,
+) -> bool:
     """서울 외 지역 질문이면 True를 반환한다."""
     try:
-        parsed = await _parse_query_with_llm(query, request=request)
+        parsed = parsed or await _parse_query_with_llm(query, request=request)
         city = (parsed.objective.get("city") or "").strip()
         return bool(city and city != SEOUL)
     except Exception as e:
@@ -507,212 +594,46 @@ def _rerank_places_with_profile(
         logger.warning(f"[ChatResponse] profile rerank failed: {e}")
         return places
 
-
-_DEFAULT_DIARY_PET = {
-    "pet_name": "우리 아이",
-    "breed": "강아지",
-    "breed_en": None,
-    "birth_date": None,
-    "personalities": [],
-    "owner_name": "",
-}
-_DEFAULT_DIARY_TYPE = "daily"
-_DEFAULT_DIARY_EMOTION = "😊"
-
-# 한글 이모티콘 후보 — 메시지에서 감정 이모지를 가볍게 감지
-_EMOTION_CANDIDATES = ["😊", "😌", "🥹", "😴", "😟", "🤍"]
-# diary_type 키워드 힌트
-_DIARY_TYPE_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "memory": ("여행", "처음", "추억", "기념", "특별"),
-    "owner":  ("나랑", "함께", "같이", "우리", "교감", "포근"),
-    "dog":    ("간식", "산책", "공놀이", "뛰어", "짖"),
-    "daily":  ("평범", "일상", "하루", "루틴"),
-}
-
-
-def _infer_emotion(text: str) -> str:
-    for emoji in _EMOTION_CANDIDATES:
-        if emoji in text:
-            return emoji
-    return _DEFAULT_DIARY_EMOTION
-
-
-def _infer_diary_type(text: str) -> str:
-    for dtype, keywords in _DIARY_TYPE_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            return dtype
-    return _DEFAULT_DIARY_TYPE
-
-
-async def _load_pet_context(ctx: DispatchContext) -> dict:
-    """
-        ctx.user_id 로 사용자의 첫 번째 반려견을 조회하여
-        diary_prompt 입력에 필요한 필드 딕셔너리로 변환합니다.
-        조회 실패 시 기본값을 반환합니다.
-    """
-    if ctx.user_id is None or ctx.db is None:
-        return dict(_DEFAULT_DIARY_PET)
-
-    try:
-        result = await ctx.db.execute(
-            select(Pet)
-            .where(Pet.user_id == ctx.user_id)
-            .options(selectinload(Pet.breed))
-            .order_by(Pet.id.asc())
-            .limit(1)
-        )
-        pet = result.scalar_one_or_none()
-    except Exception as e:
-        logger.warning(f"[Diary] 반려견 조회 실패: {e}")
-        return dict(_DEFAULT_DIARY_PET)
-
-    if pet is None:
-        return dict(_DEFAULT_DIARY_PET)
-
-    breed_ko = getattr(pet.breed, "name_ko", None) if pet.breed else None
-    breed_en = getattr(pet.breed, "name_en", None) if pet.breed else None
-    birth_str: str | None = None
-    if isinstance(pet.birth_date, date):
-        birth_str = pet.birth_date.strftime("%Y-%m-%d")
-
-    return {
-        "pet_name": pet.name or _DEFAULT_DIARY_PET["pet_name"],
-        "breed": breed_ko or _DEFAULT_DIARY_PET["breed"],
-        "breed_en": breed_en,
-        "birth_date": birth_str,
-        "personalities": list(pet.selected_tags or []),
-        "owner_name": "",
-    }
-
-
-async def _generate_diary_json(
-    pet_ctx: dict,
+# ── 의도별 핸들러 ────────────────────────────────────────────────────────────
+async def _handle_places(
     query: str,
     ctx: DispatchContext,
-) -> str | None:
-    """
-        이미지 프롬프트 결정 → 이미지 생성(DiaryChain 우선) → S3 업로드 → images 테이블 저장.
-        실패 시 None 반환.
-    """
-    # DiaryChain 경로는 image_prompt_final 포함, 없으면 build_final_image_prompt로 생성
-    image_prompt: str = diary_data.get("image_prompt_final") or _diary_prompt_builder.build_final_image_prompt(
-        image_prompt_base=diary_data.get("image_prompt_base", ""),
-        breed=pet_ctx["breed"],
-        breed_en=pet_ctx.get("breed_en"),
-        birth_date=pet_ctx.get("birth_date"),
-        personalities=pet_ctx.get("personalities", []),
-        all_answers=[diary_data.get("_conversation", "")],
-        emotion=diary_data.get("_emotion", _DEFAULT_DIARY_EMOTION),
-    )
-
-    # 1) 이미지 생성 — DiaryChain 우선, fallback: 직접 OpenAI 호출
-    b64: str | None = None
-    if _ai_container is not None:
-        try:
-            b64 = await _ai_container.diary_chain.generate_image(image_prompt_final=image_prompt)
-        except Exception as e:
-            logger.error(f"[Diary] DiaryChain.generate_image 실패, fallback: {e}")
-
-    if b64 is None:
-        try:
-            client = _get_openai_client()
-            resp = await client.images.generate(
-                model=_IMAGE_MODEL,
-                prompt=image_prompt,
-                size="1024x1024",
-                quality="low",
-                n=1,
-            )
-            b64 = resp.data[0].b64_json
-            if not b64:
-                logger.error("[Diary] 이미지 생성 실패: b64_json 누락")
-                return None
-        except Exception as e:
-            logger.error(f"[Diary] 이미지 생성 호출 실패: {e}")
-            return None
-
-    # 2) S3 업로드 + DB 저장 (ctx.db 있을 때만)
-    try:
-        image_bytes = base64.b64decode(b64)
-        file_url = await _upload_to_s3(image_bytes, "diary.png", "image/png")
-    except Exception as e:
-        logger.error(f"[Diary] S3 업로드 실패: {e}")
-        return None
-
-    if ctx.db is not None:
-        try:
-            image_row = Image(file_url=file_url, file_name="diary.png")
-            ctx.db.add(image_row)
-            await ctx.db.flush()
-        except Exception as e:
-            logger.warning(f"[Diary] images 테이블 저장 실패 (URL 만 반환): {e}")
-
-    return file_url
-
-
-# ── 의도별 핸들러 ────────────────────────────────────────────────────────────
-async def _handle_diary(query: str, ctx: DispatchContext) -> str:
-    """
-        사용자 메시지를 바탕으로 그림일기(텍스트 + 이미지)를 생성합니다.
-
-        흐름:
-            1. ctx.user_id 로 반려동물 컨텍스트 확보 (없으면 기본값)
-            2. build_diary_prompt → GPT (_GPT_MODEL) → 일기 JSON
-            3. build_final_image_prompt → OpenAI Images → base64
-            4. base64 → S3 업로드 → images 테이블 저장
-            5. 일기 텍스트 + 이미지 URL(마크다운)을 assistant 응답으로 반환
-
-        어떤 단계든 실패하면 가능한 만큼만 반환합니다
-        (텍스트 실패 → 안내 문구, 이미지 실패 → 텍스트만 반환).
-    """
-    pet_ctx = await _load_pet_context(ctx)
-    diary_data = await _generate_diary_json(pet_ctx, query, user_id=ctx.user_id)
-
-    if diary_data is None:
-        return (
-            "일기 생성에 실패했어요. 잠시 후 다시 시도하거나 "
-            "/api/diary/generate 엔드포인트에서 직접 작성해주세요."
-        )
-
-    title = diary_data.get("title", "오늘의 일기")
-    content = diary_data.get("content", "")
-    summary = diary_data.get("summary", "")
-
-    # 이미지 생성은 실패해도 텍스트 응답은 유지
-    image_url = await _generate_and_store_image(pet_ctx, diary_data, ctx)
-
-    lines = [f"📖 **{title}**", "", content]
-    if summary:
-        lines.extend(["", f"_요약_: {summary}"])
-    if image_url:
-        lines.extend(["", f"![{title}]({image_url})"])
-    else:
-        lines.extend(["", "(이미지 생성은 실패했어요. 나중에 다시 시도해주세요.)"])
-
-    return "\n".join(lines)
-
-
-async def _handle_places(query: str, ctx: DispatchContext, top_k: int = 5, request: Request = None) -> str:
-    if await _is_out_of_service_area(query, request=request):
-        return _OUT_OF_SERVICE_AREA_MESSAGE
+    top_k: int = 5,
+    request: Request = None,
+) -> tuple[str, list[dict]]:
+    candidate_pool_size = max(top_k, 20)
+    parsed = await _parse_query_with_llm(query, request=request)
+    if await _is_out_of_service_area(query, request=request, parsed=parsed):
+        return _OUT_OF_SERVICE_AREA_MESSAGE, []
 
     profile_ctx = await _load_place_preference_context(ctx)
 
     if settings.USE_DUMMY_PLACES:
-        places = await Place().find_place(top_k=top_k)
+        places = await Place().find_place(top_k=candidate_pool_size)
     elif ctx.db is not None:
-        places = await search_places_from_db(query, ctx.db, n_results=top_k, request=request)
+        places = await search_places_from_db(
+            query,
+            ctx.db,
+            n_results=candidate_pool_size,
+            request=request,
+            user_lat=ctx.user_lat,
+            user_lng=ctx.user_lng,
+            pre_parsed=parsed,
+        )
     else:
         logger.warning("[ChatResponse] db 세션 없음 — 장소 검색 불가")
         places = []
 
-    places = _rerank_places_with_profile(places, profile_ctx, request=request)
+    places = _rerank_places_with_profile(places, profile_ctx, request=request)[:top_k]
 
     if places:
-        return _format_place_list_response(places)
-    places_text = _format_places_brief(places)
-    user_prompt = f"사용자 질문: {query}\n\n[검색된 장소]\n{places_text}"
-    return await _chat_completion(_PLACES_SYSTEM_PROMPT, user_prompt)
+        places = await enrich_place_images(places)
+        reasons = await generate_place_reasons(query, places)
+        for place in places:
+            place["reason"] = reasons.get(place.get("name", ""), "")
+        return _format_place_list_response(places), places
+
+    return _PLACE_NOT_FOUND_MESSAGE, []
 
 
 async def _handle_facility(
@@ -752,8 +673,36 @@ async def _handle_facility(
     return text, facility
 
 
-async def _handle_fallback(query: str) -> str:
-    return await _chat_completion(_FALLBACK_SYSTEM_PROMPT, query)
+async def _load_recent_history(ctx: DispatchContext) -> list[dict] | None:
+    """Fallback 응답에 전달할 최근 대화 히스토리를 로드한다 (최대 12개 = 6턴)."""
+    if ctx.db is None or ctx.room_id is None:
+        return None
+    try:
+        from services.chat_message_service import list_messages
+
+        messages = await list_messages(ctx.room_id, ctx.db, last_n=12)
+        if not messages:
+            return None
+        return [
+            {"role": m.role, "content": m.content}
+            for m in messages
+            if m.role in ("user", "assistant") and m.content
+        ]
+    except Exception as e:
+        logger.warning(f"[ChatResponse] fallback history load failed: {e}")
+        return None
+
+
+async def _handle_fallback(
+    query: str,
+    ctx: DispatchContext | None = None,
+    recent_messages: list[dict] | None = None,
+) -> str:
+    pet_context = _FALLBACK_NO_PET_CONTEXT
+    if ctx is not None:
+        pet_context = await _load_fallback_pet_context(ctx)
+    system_prompt = _FALLBACK_SYSTEM_PROMPT_TEMPLATE.format(pet_context=pet_context)
+    return await _chat_completion(system_prompt, query, history=recent_messages)
 
 
 async def dispatch(
@@ -791,8 +740,8 @@ async def dispatch(
         return DispatchResult(text=await handle_diary_response(query, ctx))
 
     if intent == "장소추천":
-        text = await _handle_places(query, ctx, top_k=top_k, request=request)
-        return DispatchResult(text=text)
+        text, places = await _handle_places(query, ctx, top_k=top_k, request=request)
+        return DispatchResult(text=text, places=places)
 
     if intent == "시설정보":
         text, facility = await _handle_facility(query, ctx, request=request)
@@ -800,7 +749,9 @@ async def dispatch(
 
     if intent == "기타" or intent not in RAG_STRATEGY_MAP:
         logger.info("[Dispatch] 기타 분기 처리")
-        return DispatchResult(text=await _handle_fallback(query))
+        history = await _load_recent_history(ctx)
+        return DispatchResult(text=await _handle_fallback(query, ctx=ctx, recent_messages=history))
 
     logger.warning(f"[ChatResponse] 알 수 없는 의도: {intent} → fallback 처리")
-    return DispatchResult(text=await _handle_fallback(query))
+    history = await _load_recent_history(ctx)
+    return DispatchResult(text=await _handle_fallback(query, ctx=ctx, recent_messages=history))

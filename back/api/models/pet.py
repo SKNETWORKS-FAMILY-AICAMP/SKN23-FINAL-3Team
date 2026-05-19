@@ -13,13 +13,16 @@ pets 테이블 ORM 모델.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from datetime import datetime
 from core.utils import kst_now
 from core.database import Base
 from core.type.gender import PetGenderEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import (BigInteger, Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, JSON, String, func)
+
+if TYPE_CHECKING:
+    from models.image import Image
 
 
 class Pet(Base):
@@ -60,14 +63,22 @@ class Pet(Base):
     is_neutered: Mapped[bool | None] = mapped_column(Boolean, nullable=True, comment="중성화 여부 (NULL=미입력)")
 
     # FK → keywords
-    type_id: Mapped[int] = mapped_column(
+    type_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("keywords.id", onupdate="CASCADE", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         comment="대표 성격 키워드 ID",
     )
 
     selected_tags: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, comment="선택한 성격 태그 목록")
+
+    # FK → images (반려견 이미지)
+    image_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("images.id", onupdate="CASCADE", ondelete="RESTRICT"),
+        nullable=True,
+        comment="프로필 이미지 ID (images.id FK)",
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False,
@@ -82,10 +93,27 @@ class Pet(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None, comment="삭제 일시")
 
     # ── Relationships ──────────────────────────────────────────────────────
-    user: Mapped[User] = relationship("User", back_populates="pets")
-    breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="select")
-    keyword: Mapped[Keyword] = relationship("Keyword", foreign_keys=[type_id], lazy="select")
+    # users.primary_pet_id ↔ pets.user_id 양방향 FK 라 foreign_keys 명시 필수.
+    user: Mapped[User] = relationship(
+        "User",
+        back_populates="pets",
+        foreign_keys=[user_id],
+    )
+    breed: Mapped[Breed] = relationship("Breed", foreign_keys=[breed_id], lazy="selectin")
+    # selectin: PetResponse.type_name property 가 동기 access 안전하도록 prefetch.
+    type: Mapped[Keyword | None] = relationship("Keyword", foreign_keys=[type_id], lazy="selectin")
+    image: Mapped[Image | None] = relationship("Image", foreign_keys=[image_id], lazy="selectin")
+    profile = relationship("PetProfile", back_populates="pet", uselist=False, lazy="selectin")
     diaries: Mapped[list[Diary]] = relationship("Diary", back_populates="pet", cascade="all, delete-orphan")
+
+    @property
+    def type_name(self) -> str | None:
+        """PetResponse 의 from_attributes 매핑용 — keywords.name 동적 추출.
+
+        Pet.type relationship 이 lazy=selectin 으로 prefetch 되어 동기 access 안전.
+        type_id 가 NULL 이면 None 반환 — 마이페이지에서 "성향 미설정" 표시 분기.
+        """
+        return self.type.name if self.type else None
 
     def __repr__(self) -> str:
         return f"<Pet id={self.id} name={self.name!r} user_id={self.user_id}>"

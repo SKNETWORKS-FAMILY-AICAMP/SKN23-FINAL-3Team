@@ -36,6 +36,7 @@ _PARSE_SYSTEM = """\
 
 [필드 설명]
 - city: 광역시/도 전체 명칭 (예: "서울특별시", "경기도", "부산광역시") — 언급 없으면 null
+  ※ "서울 근처", "서울 주변" 처럼 서울 인근을 뜻하는 표현은 city를 null로 두고 landmark에 넣으세요.
 - district: 반드시 행정구역 '구/군' 단위 명칭으로 반환하세요 (예: "강남구", "마포구").
   동네명·상권명은 해당 구 이름으로 변환해야 합니다:
     잠실 → 송파구, 홍대/홍익대 → 마포구, 이태원 → 용산구,
@@ -48,24 +49,28 @@ _PARSE_SYSTEM = """\
   구 이름이 확실하지 않으면 null을 반환하세요.
   ※ landmark 필드에 들어갈 구체적 장소(경복궁, 한강공원 등)는 district가 아니라 landmark에 넣으세요.
 - sub_category: 아래 목록 중 하나만 정확히 반환하세요. 없으면 null
-    카페         → 반려견 카페, 애견카페, 커피숍
-    식당         → 음식점, 맛집, 레스토랑, 식당
-    펜션         → 펜션, 숙박, 게스트하우스, 글램핑
+    카페         → 반려견 카페, 애견카페, 애완카페, 커피숍, 카페, 브런치카페
+    식당         → 음식점, 맛집, 레스토랑, 식당, 맛집
+    숙박         → 숙박, 숙소, 반려견 동반 숙소
+    펜션         → 펜션, 게스트하우스, 글램핑, 1박2일 숙소
     호텔         → 호텔
-    공원         → 공원, 산책로, 한강공원
-    반려견놀이터 → 놀이터, 애견 운동장
+    공원         → 공원, 산책로, 한강공원, 산책 가능한 곳
+    반려견놀이터 → 놀이터, 애견 운동장, 뛰어놀 수 있는 곳
     관광지       → 관광지, 명소, 전망대
     동물병원     → 동물병원, 수의사, 동물 응급
     동물약국     → 동물약국, 반려동물 약국
-    반려동물용품 → 펫샵, 애견용품점, 반려동물 용품
+    반려동물용품 → 펫샵, 팻샵, 펫 샵, 애견용품점, 반려동물 용품, 용품 가게
     미용         → 애견미용, 그루밍, 펫미용
-    위탁관리     → 펫시터, 펫호텔, 위탁, 데이케어
+    위탁관리     → 펫시터, 펫호텔, 강아지호텔, 애견호텔, 위탁, 데이케어
+    문화시설     → 문화시설, 문예회관
     박물관       → 박물관, 미술관, 전시관
 - is_indoor: 실내 공간 요청이면 true, 실외 요청이면 false, 언급 없으면 null
 - is_outdoor: 실외 공간 요청이면 true, 실내 요청이면 false, 언급 없으면 null
 - has_parking: 주차 필요하면 "Y", 불필요하면 "N", 언급 없으면 null
+  ※ "차 끌고", "드라이브", "차로 가는", "주차장 있는" 표현도 has_parking: "Y"로 처리하세요.
 - pet_zone_type: "전구역"/"실내구역"/"실외구역" 중 하나, 언급 없으면 null
 - pet_size_limit: "소형"/"중형"/"대형" 중 하나, 반려견 크기를 말할 때만 사용. 장소 규모(예: "대형 카페", "넓은 카페")는 subjective로 보내고 pet_size_limit에는 넣지 말 것
+  ※ "대형견", "대형 강아지", "중형견", "소형견" 표현도 각각 "대형"/"중형"/"소형"으로 처리하세요.
 - entrance_fee_preference: 입장료/이용료 조건. "입장료 없이", "무료 입장"이면 "free_only", 아니면 null
 - extra_fee_preference: 반려견 동반 추가요금 조건. "추가 비용 없이", "추가요금 없는", "강아지 추가요금 없음"이면 "no_extra_fee", 아니면 null
 - time_condition: 시간/요일 조건. 아래 값 중 하나, 없으면 null
@@ -75,17 +80,28 @@ _PARSE_SYSTEM = """\
     "저녁"     → 저녁에, 저녁 이후
     "밤"       → 밤 늦게, 늦은 시간, 야간 (22시 이후까지 영업)
     "주말"     → 주말에, 이번 주말, 토요일, 일요일
-    "공휴일"   → 공휴일, 연휴, 법정공휴일에도 영업
+    "공휴일"   → 공휴일, 연휴, 법정공휴일에도 영업, 이번 연휴
     "연중무휴" → 연중무휴, 365일 영업, 쉬는 날 없는
     "24시간"   → 24시간, 하루종일 오픈, 밤새 영업, 새벽까지
-- landmark: "근처", "주변", "앞", "옆" 표현과 함께 언급된 장소명 또는 지역명. 없으면 null
+  ※ "지금 영업중", "오늘 영업하는" 등 현재 시점 영업 여부 표현은 time_condition을 null로 두고 subjective에 "현재 영업 중"을 포함하세요.
+- use_current_location: 사용자가 **현재 자신의 위치** 기준으로 검색을 원하면 true, 아니면 false.
+  다음과 같이 판단하세요:
+    true  → "내 주변", "내 근처", "내근처", "내주변", "여기", "지금 있는 곳", "현재 위치",
+             "이 근방", "이 동네", "나 지금 여기", "근처에", 오타·변형 포함 모든 '사용자 현재 위치' 표현
+    false → 특정 장소/지역명이 기준인 경우 ("경복궁 근처", "강남역 주변", "홍대 앞")
+  ※ use_current_location=true이면 landmark는 반드시 null로 설정하세요.
+- landmark: "근처", "주변", "앞", "옆" 표현과 함께 언급된 **구체적 장소명 또는 지역명**. 없으면 null.
+  use_current_location=true이면 항상 null.
   POI 뿐만 아니라 동네명도 포함됩니다:
-    "경복궁 근처"  → landmark: "경복궁",  district: null
-    "용산 근처"    → landmark: "용산",    district: null
-    "강남역 주변"  → landmark: "강남역",  district: null
-    "한강공원 근처" → landmark: "한강공원", district: null
+    "경복궁 근처"  → use_current_location: false, landmark: "경복궁",  district: null
+    "용산 근처"    → use_current_location: false, landmark: "용산",    district: null
+    "강남역 주변"  → use_current_location: false, landmark: "강남역",  district: null
+    "한강공원 근처" → use_current_location: false, landmark: "한강공원", district: null
+    "내 주변"      → use_current_location: true,  landmark: null
+    "여기 근처"    → use_current_location: true,  landmark: null
   ※ "근처/주변/앞/옆" 없이 단순 지역 언급이면 district로 처리 ("용산구에서" → district: "용산구")
 - subjective: 위 조건에 해당하지 않는 분위기·특성 (예: "조용한", "넓은 야외", "아늑한", "뷰 좋은"). 없으면 빈 문자열
+  ※ "목줄 없이", "목줄 안해도 되는" → subjective에 "목줄 없이 이용 가능한"으로 포함하세요.
 
 [출력 형식]
 {
@@ -101,9 +117,35 @@ _PARSE_SYSTEM = """\
   "extra_fee_preference": null,
   "waste_bag_preference": null,
   "time_condition": null,
+  "use_current_location": false,
   "landmark": null,
   "subjective": ""
 }
+
+[few-shot 예시]
+Q: 강남역 근처 주차 가능한 팻샵
+A: {"city": null, "district": null, "sub_category": "반려동물용품", "is_indoor": null, "is_outdoor": null, "has_parking": "Y", "pet_zone_type": null, "pet_size_limit": null, "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": null, "use_current_location": false, "landmark": "강남역", "subjective": ""}
+
+Q: 홍대 대형견 입장 가능한 식당 있나요
+A: {"city": null, "district": "마포구", "sub_category": "식당", "is_indoor": null, "is_outdoor": null, "has_parking": null, "pet_zone_type": null, "pet_size_limit": "대형", "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": null, "use_current_location": false, "landmark": null, "subjective": ""}
+
+Q: 차 끌고 강아지랑 갈 수 있는 곳 있어?
+A: {"city": null, "district": null, "sub_category": null, "is_indoor": null, "is_outdoor": null, "has_parking": "Y", "pet_zone_type": null, "pet_size_limit": null, "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": null, "use_current_location": false, "landmark": null, "subjective": ""}
+
+Q: 실내이고 목줄 안해도 되는 공간 있어?
+A: {"city": null, "district": null, "sub_category": null, "is_indoor": true, "is_outdoor": null, "has_parking": null, "pet_zone_type": null, "pet_size_limit": null, "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": null, "use_current_location": false, "landmark": null, "subjective": "목줄 없이 이용 가능한"}
+
+Q: 연중무휴 경복궁 근처 강아지 동반 카페
+A: {"city": null, "district": null, "sub_category": "카페", "is_indoor": null, "is_outdoor": null, "has_parking": null, "pet_zone_type": null, "pet_size_limit": null, "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": "연중무휴", "use_current_location": false, "landmark": "경복궁", "subjective": ""}
+
+Q: 이번 연휴에 강아지랑 한강 가려고 하는데 주변에 같이 갈 수 있는 카페나 식당 알려줘
+A: {"city": null, "district": null, "sub_category": "카페", "is_indoor": null, "is_outdoor": null, "has_parking": null, "pet_zone_type": null, "pet_size_limit": null, "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": "공휴일", "use_current_location": false, "landmark": "한강", "subjective": ""}
+
+Q: 중형견 방문 가능한 애견 운동장 알려줘
+A: {"city": null, "district": null, "sub_category": "반려견놀이터", "is_indoor": null, "is_outdoor": null, "has_parking": null, "pet_zone_type": null, "pet_size_limit": "중형", "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": null, "use_current_location": false, "landmark": null, "subjective": ""}
+
+Q: 주말에 강아지랑 명동 가려고 하는데 같이 갈 수 있는 식당 알려줘
+A: {"city": null, "district": "중구", "sub_category": "식당", "is_indoor": null, "is_outdoor": null, "has_parking": null, "pet_zone_type": null, "pet_size_limit": null, "entrance_fee_preference": null, "extra_fee_preference": null, "waste_bag_preference": null, "time_condition": "주말", "use_current_location": false, "landmark": null, "subjective": ""}
 
 For waste-bag requests:
 - "배변봉투 안 챙기고", "배변봉투 없이", "배변봉투 제공", "배변봉투 비치" -> set waste_bag_preference to "provided_or_not_required"
