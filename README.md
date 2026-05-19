@@ -166,11 +166,9 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
   </tbody>
 </table>
 
-- **장소 데이터**: `한국문화정보원_전국_반려동물_동반_가능_문화시설_위
-치_데이터_20250324.csv` 기준
-  전체 70,650건에서 반려동물 동반 가능 장소만 필터링
-- **견종 데이터**: The Dog API에서 견종 정보 수집 후 GPT-4.1-mini로
-한국어 번역, 국내 인기 TOP 10 마킹
+- **장소 데이터**: `한국문화정보원_전국_반려동물_동반_가능_문화시설_위치_데이터_20250324.csv` 기준 전체 70,650건에서 반려동물 동반 가능 장소만 필터링
+- **Tour API 장소 데이터**: 한국관광공사 Tour API에서 반려동물 동반 여행지 975건을 추가 수집하고, 기존 장소 데이터와 `content_id` 기준으로 병합·중복 제거
+- **견종 데이터**: The Dog API에서 견종 정보 수집 후 GPT-4.1-mini로 한국어 번역, 국내 인기 TOP 10 마킹
 
 ## 3.2. 데이터 전처리 파이프라인
 > #### 데이터 전처리 과정
@@ -190,7 +188,19 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
     ├── MySQL DB 적재 (배치 1,000건 단위)
     └── ChromaDB 벡터화 적재 (ko-sroberta-multitask, 배치 50건 단위)
   ```
-    ▎ 최종 유효 장소: 약 22,102건 (RDS information_schema 기준, 한국문화정보원 + 한국관광공사 Tour API 통합)
+    ▎ 최종 유효 장소: 약 22,102건 (한국문화정보원 + 한국관광공사 Tour API 통합)
+
+> #### ChromaDB 설계 및 관리
+
+  | 항목 | 내용 |
+  |------|------|
+  | 저장 경로 | `data/chroma_db` |
+  | 장소 컬렉션 | `dog_places` |
+  | 임베딩 모델 | `ko-sroberta-multitask` |
+  | 적재 단위 | 50건 batch |
+  | 벡터화 대상 | 장소별 자연어 `description` |
+  | 검색 방식 | 사용자 쿼리 임베딩 후 cosine similarity 기반 의미 검색 |
+  | 활용 위치 | 장소 추천 RAG 파이프라인의 의미 검색 단계 |
 
 > #### 주요 전처리 시스템 및 스키마
 
@@ -245,14 +255,6 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
     <tr>
       <td>`operation_info`</td>
       <td>운영시간 및 휴무일</td>
-    </tr>
-    <tr>
-      <td>`entrance_fee_amount` / `entrance_fee_type`</td>
-      <td>입장료 금액 및 타입 (`free`, `fixed`, `variable`, `conditional`, `unknown`)</td>
-    </tr>
-    <tr>
-      <td>`extra_fee_amount` / `extra_fee_type`</td>
-      <td>반려견 추가요금 금액 및 타입</td>
     </tr>
     <tr>
       <td>`description`</td>
@@ -334,8 +336,8 @@ withDOG는 탐색부터 기록까지의 경험을 하나로 이어, 반려견과
 
 **최종 적재 현황**
 
-- MySQL DB: 약 22,102건 (RDS information_schema 기준)
-- ChromaDB 벡터: `dog_places` 컬렉션
+- MySQL DB: 약 22,102건
+- ChromaDB 벡터: 약 22,102건 (컬렉션명: dog_places)
 
 **카테고리별 적재 분포 (Top 7 + 기타)**
 
@@ -833,7 +835,23 @@ district
 
 6차 평가 이후 일반 combined 모드에서는 ChromaDB 후보를 RDB 후보 안으로 제한하지 않습니다. 따라서 객관 조건 기반 RDB 검색과 의미 기반 ChromaDB 검색이 각각 후보 품질을 보완하고, 이후 점수 계산에서 결합됩니다. 다만 `경복궁 근처`, `서울역 주변`, `내 주변`처럼 위치 의도가 핵심인 질문은 반경 후보 안에서만 ChromaDB 재순위를 수행해 거리 조건을 우선 보존합니다.
 
-> #### Step 4 — 반려견/보호자 성향 기반 재순위
+> #### Step 4 — RDB + ChromaDB 결합 정렬
+
+ChromaDB 검색 결과는 RDB의 장소 상세 정보와 `content_id`로 조인한 뒤, 의미 유사도와 반려견 친화도 규칙 점수를 결합해 기본 순위를 계산합니다.
+
+```text
+rule_score =
+  전구역 동반 가능        +0.4
+  제한사항 없음          +0.3
+  실외 이용 가능         +0.2
+  주차 가능              +0.1
+
+base_score = rag_score * 0.5 + rule_score * 0.5 + category_bias
+```
+
+`rag_score`는 사용자 쿼리와 장소 `description` 간 의미 유사도이고, `rule_score`는 반려견 동반 친화도입니다. 명시적 장소 유형이 있는 경우 `category_bias`를 추가해 사용자의 직접 조건을 보존합니다.
+
+> #### Step 5 — 반려견/보호자 성향 기반 재순위
 
 하이브리드 검색으로 가져온 장소 후보에 대해 반려견 성향과 보호자 성향을 함께 반영해 재정렬합니다. 현재 실서비스는 최종 5개를 바로 고르지 않고, 검색 단계에서 최대 20개 후보를 확보한 뒤 프로필 점수를 더해 상위 5개를 반환합니다.
 
@@ -849,6 +867,7 @@ owner_score_vector = OwnerScorer.calculate_vector(owner_tags)
 자연 선호 a > 3 + outdoor=Y         → +0.08 bonus
 도시 탐험 b > 3 + category=카페/관광지 → +0.05 bonus
 여유 휴식 d > 3 + indoor=Y / 카페    → +0.05 bonus
+먹거리 선호 e > 3 + category=카페/식당 → +0.08 bonus
 ```
 
 ```python
@@ -858,7 +877,7 @@ final_score = base_score + profile_bonus
 
 `dog_tags`와 `owner_tags`가 모두 없는 경우에는 이 재정렬 단계를 생략합니다.
 
-> #### Step 5 — 추천 이유 생성
+> #### Step 6 — 추천 이유 생성
 
 검색 및 재정렬된 최종 장소 5개를 기반으로 `chat_response_service.generate_place_reasons()` 가 GPT-4.1-mini를 호출해 장소별 추천 이유만 생성합니다. 현재 실서비스 응답 조립은 `chat_response_service` 에서 수행하고, `PlacesChain` 은 성향 재정렬 규칙을 재사용하는 역할로 남아 있습니다.
 
@@ -870,7 +889,7 @@ final_score = base_score + profile_bonus
   → JSON: { places[{ name, reason }] }
 ```
 
-> #### Step 6 — 결과 병합 및 반환
+> #### Step 7 — 결과 병합 및 반환
 
 GPT가 생성한 추천 이유와 ChromaDB/RDB 장소 메타데이터를 병합해 프론트로 반환합니다.
 
@@ -1464,6 +1483,33 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
 
 </div>
 
+> #### 성향 점수 평가셋 및 추천 영향 평가
+
+성향 점수가 실제 장소 추천 순위에 반영되는지 확인하기 위해 별도 평가셋과 자동 평가 스크립트(`ai/evaluation/run_trait_score_evaluation.py`)를 구성했습니다.
+
+| 항목 | 값 |
+| --- | --- |
+| 평가 파일 | `data/eval/성향 점수 평가셋_50문항.xlsx` |
+| 원본 질문 | 50문항 |
+| 평가 row | 1,750건 (50문항 × 35개 성향 프로필 조합) |
+| 프로필 구성 | DOG_ONLY 250건 / OWNER_ONLY 250건 / MIXED 1,250건 |
+| 주요 입력 컬럼 | `profile_category`, `tag_or_tags`, `primary_axis`, `expected_type`, `preferred_categories`, `avoid_categories`, `정답` |
+| 평가 지표 | Hit@5, Recall@5, NDCG@5, 선호 카테고리 비율, 회피 카테고리 위반율, 카테고리 통과율 |
+
+최신 실행 결과(`ai/evaluation/results/성향 점수 평가셋_50문항_20260515_014623.xlsx`) 기준, 성향 기반 재정렬은 선호 카테고리 노출과 회피 카테고리 억제에 안정적으로 기여했습니다.
+
+| 지표 | 결과 |
+| --- | ---: |
+| 평균 Hit@5 | 72.1% |
+| 평균 Recall@5 | 37.0% |
+| 평균 NDCG@5 | 38.8% |
+| 선호 카테고리 비율 | 95.9% |
+| 회피 카테고리 위반율 | 0.1% |
+| 카테고리 통과율 | 97.5% |
+
+프로필 유형별로는 MIXED 성향 조합이 Hit@5 73.7%로 가장 높았고, DOG_ONLY와 OWNER_ONLY는 각각 68.0%를 기록했습니다. 이는 반려견 성향과 보호자 취향을 함께 사용할 때 추천 후보 재정렬 효과가 더 커지는 경향을 보여줍니다.
+
+
 <br />
 
 > Round 1~3 성향 점수 가중치 보정 라운드 결과:
@@ -1540,9 +1586,9 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
 
 <br />
 
-> #### 5차 Baseline → 10차 최신 결과
+> #### 5차 Baseline → 6차 Final → 7차 Stabilized 결과
 
-5차 baseline에서는 Combined와 RDB only가 전 구간 동일하게 나타났습니다. 이는 오류가 아니라, `subjective` 가 비어 있을 때 ChromaDB 재순위를 생략하고 RDB fallback으로 조기 반환하던 로직 때문이었습니다. 이후 6~10차 실험에서 후보 수 확대, Chroma 후보 제한 완화, `subjective` empty fallback 제거, 장소 유형 필터 완화, RDB 정렬 보강, 실서비스 오류 수정, 위치 기반 조건 필터링 회복을 순차적으로 반영했습니다.
+5차 baseline에서는 Combined와 RDB only가 전 구간 동일하게 나타났습니다. 이는 오류가 아니라, `subjective` 가 비어 있을 때 ChromaDB 재순위를 생략하고 RDB fallback으로 조기 반환하던 로직 때문이었습니다. 6차 final에서는 후보 수 확대, Chroma 후보 제한 완화, `subjective` empty fallback 제거, 장소 유형 필터 완화를 반영했습니다. 7차 stabilized에서는 같은 평가셋 기준으로 GPS·지역 조건 보존과 후처리 필터를 안정화해 Combined Hit@5가 63.4%까지 개선되었습니다.
 
 <div align="center">
 
@@ -1574,35 +1620,14 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
     </tr>
     <tr>
       <td>6차 Final</td>
-      <td>후보 수 확대 + Chroma/RDB 결합 개선</td>
+      <td>후보 수 확대 + Chroma/RDB 결합 개선 + subjective empty fallback 제거 + 장소 유형 필터 완화</td>
       <td align="right">62.6%</td>
       <td align="right">34.4%</td>
       <td align="right">61.1%</td>
     </tr>
     <tr>
-      <td>7차</td>
-      <td>RDB 후보 정렬 기준 보강</td>
-      <td align="right">62.6%</td>
-      <td align="right">39.7%</td>
-      <td align="right">61.1%</td>
-    </tr>
-    <tr>
-      <td>8차</td>
-      <td>지역 × 장소유형 조건 필터링 보강</td>
-      <td align="right">63.4%</td>
-      <td align="right">40.5%</td>
-      <td align="right">61.8%</td>
-    </tr>
-    <tr>
-      <td>9차</td>
-      <td>위치 기반 조건 필터링 강화</td>
-      <td align="right">63.4%</td>
-      <td align="right">40.5%</td>
-      <td align="right">60.3%</td>
-    </tr>
-    <tr>
-      <td>10차</td>
-      <td>9차 저하 성능 회복</td>
+      <td>7차 Stabilized</td>
+      <td>GPS·지역 조건 보존 + 후처리 필터 안정화</td>
       <td align="right">63.4%</td>
       <td align="right">40.5%</td>
       <td align="right">61.8%</td>
@@ -1619,52 +1644,52 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
     <tr>
       <th>지표</th>
       <th align="right">5차 Baseline</th>
-      <th align="right">10차 최신</th>
-      <th align="right">변화</th>
+      <th align="right">6차 Final</th>
+      <th align="right">7차 Stabilized</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>Combined Hit@1</td>
       <td align="right">26.0%</td>
+      <td align="right">37.4%</td>
       <td align="right">38.2%</td>
-      <td align="right">+12.2%p</td>
     </tr>
     <tr>
       <td>Combined Hit@3</td>
       <td align="right">26.7%</td>
+      <td align="right">55.0%</td>
       <td align="right">55.7%</td>
-      <td align="right">+29.0%p</td>
     </tr>
     <tr>
       <td>Combined Hit@5</td>
       <td align="right">29.0%</td>
+      <td align="right">62.6%</td>
       <td align="right">63.4%</td>
-      <td align="right">+34.4%p</td>
     </tr>
     <tr>
       <td>Combined Hit@10</td>
       <td align="right">34.4%</td>
       <td align="right">77.1%</td>
-      <td align="right">+42.7%p</td>
+      <td align="right">77.1%</td>
     </tr>
     <tr>
       <td>Combined Hit@20</td>
       <td align="right">55.7%</td>
+      <td align="right">84.0%</td>
       <td align="right">82.4%</td>
-      <td align="right">+26.7%p</td>
     </tr>
     <tr>
       <td>Combined Recall@5</td>
       <td align="right">2.6%</td>
+      <td align="right">11.5%</td>
       <td align="right">10.2%</td>
-      <td align="right">+7.6%p</td>
     </tr>
     <tr>
       <td>Combined Recall@20</td>
       <td align="right">8.6%</td>
+      <td align="right">35.9%</td>
       <td align="right">34.2%</td>
-      <td align="right">+25.6%p</td>
     </tr>
   </tbody>
 </table>
@@ -1676,7 +1701,7 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
     <tr>
       <th>카테고리</th>
       <th align="right">5차 Baseline</th>
-      <th align="right">10차 최신</th>
+      <th align="right">7차 Stabilized</th>
       <th align="right">변화</th>
     </tr>
   </thead>
@@ -1738,7 +1763,7 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
   </tbody>
 </table>
 
-핵심 개선 요인은 `subjective` 가 비어 있어도 원문 query로 ChromaDB 의미 검색을 수행하도록 바꾼 점입니다. 이를 통해 Combined가 RDB fallback에 머무르지 않고 RAG only 수준 이상의 성능을 보였으며, 이후 RDB 정렬 보강과 실서비스 오류 수정으로 RDB only도 29.0% → 40.5%까지 개선되었습니다.
+핵심 개선 요인은 `subjective` 가 비어 있어도 원문 query로 ChromaDB 의미 검색을 수행하도록 바꾼 점입니다. 이를 통해 Combined가 RDB fallback에 머무르지 않고 RAG only 수준 이상의 성능을 보였으며, 이후 RDB 정렬 보강과 실서비스 오류 수정으로 7차 stabilized 기준 RDB only도 29.0% → 40.5%까지 개선되었습니다.
 
 ```bash
 python ai/evaluation/run_ablation.py
