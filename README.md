@@ -17,8 +17,8 @@
     </tr>
     <tr>
       <td align="center">
-        <a href="https://github.com/OOOONBBOWQ">
-          <img src="https://img.shields.io/badge/OOOONBBOWQ-181717?style=flat-square&logo=github&logoColor=white"/>
+        <a href="https://github.com/oooonbbo-wq">
+          <img src="https://img.shields.io/badge/OOOONBBO WQ-181717?style=flat-square&logo=github&logoColor=white"/>
         </a>
       </td>
       <td align="center">
@@ -106,6 +106,45 @@
   <br />
 
 </div>
+
+---
+
+<div align="center">
+
+  ## 목차
+
+</div>
+
+<table align="center">
+  <tr>
+    <td valign="top" width="50%">
+
+  **서비스 소개**
+  - [1. 프로젝트 개요](#1-프로젝트-개요)
+  - [2. 프로젝트 배경 및 목적](#2-프로젝트-배경-및-목적)
+  - [3. 수집 데이터 및 전처리](#3-수집-데이터-및-전처리)
+  - [4. 서비스 기능 및 모델/파이프라인 설계](#4-서비스-기능-및-모델파이프라인-설계)
+  - [5. 화면흐름도](#5-화면흐름도)
+  - [6. 시연 화면](#6-시연-화면)
+  - [7. 빠른 시작](#7-빠른-시작)
+
+  </td>
+  <td valign="top" width="50%">
+
+  **검증 · 운영 · 마무리**
+  - [8. QA 검증 및 평가](#8-qa-검증-및-평가)
+  - [9. 서비스 아키텍처](#9-서비스-아키텍처)
+  - [10. 데이터베이스 설계](#10-데이터베이스-설계)
+  - [11. 디렉토리 구조](#11-디렉토리-구조)
+  - [12. 비즈니스 전략](#12-비즈니스-전략)
+  - [13. 기술 스택](#13-기술-스택)
+  - [14. 팀원 회고](#14-팀원-회고)
+
+  </td>
+  </tr>
+</table>
+
+---
 
 # 1. 프로젝트 개요
 
@@ -1412,6 +1451,72 @@ flowchart TD
 
 `english_prompt` 가 존재하면 견종명 기반의 일반 묘사(`one adorable poodle`) 대신 실제 분석된 외형(`cream-colored curly medium-length fur, round dark brown eyes, floppy ears, V-shaped white patch on chest`) 이 프롬프트에 들어가므로, 같은 반려견의 일기 이미지가 매번 일관된 외형으로 생성됩니다.
 
+<br />
+
+## 4.7. 안전·위기 발화 처리
+
+서비스 입력 단계에서 발생할 수 있는 부적절·위해 발화에 대한 차단 정책을 정의합니다.
+폼 입력은 욕설 필터로 차단하고, 챗봇 채팅 메시지는 의도분류·GPT API 가 흡수합니다. 자살·자해 등 위기 발화 별도 분기는 발표 후 보강 영역으로 분리합니다.
+
+> #### 처리 영역별 정책
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th>처리 영역</th>
+      <th>감지 방식</th>
+      <th>응답</th>
+      <th>적용 위치</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>폼 입력 욕설<br/>(닉네임 · 반려견명 · 채팅방명 · 다이어리 제목·6W·본문)</td>
+      <td>1차 사전 부분 매칭 (한·영 30+ 단어)<br/>2차 ML 분류 (<code>smilegate-ai/kor_unsmile</code>, KoELECTRA 9 혐오 라벨, threshold 0.5)</td>
+      <td>HTTP 400 + <code>"부적절한 단어가 포함되어 있습니다"</code></td>
+      <td><code>back/api/utils/profanity_filter.py</code></td>
+    </tr>
+    <tr>
+      <td>챗봇 채팅 메시지</td>
+      <td>(별도 필터 미적용) 의도분류·GPT API 가 흡수</td>
+      <td>의도 라우팅 또는 GPT 자체 안전 가드</td>
+      <td>(없음 — ChatGPT·구글 챗봇 동일 패턴)</td>
+    </tr>
+    <tr>
+      <td>위기 발화<br/>(자살 · 자해 등)</td>
+      <td>(별도 분기 미구현) "기타" 의도로 분류 시 일반 GPT 응답 흐름</td>
+      <td>발표 후 보강 영역 (외부 도움 안내 + 도메인 전용 가드 도입 계획)</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+> #### 욕설 필터 처리 흐름
+
+```text
+사용자 입력 (폼)
+    ↓
+1차: 일상 비속어 사전 (부분 문자열 매칭)
+    ├─ 매칭 → HTTP 400 + "부적절한 단어가 포함되어 있습니다"
+    └─ 미매칭 ↓
+2차: kor_unsmile ML 분류 (9 혐오/욕설 라벨)
+    ├─ score ≥ 0.5 → HTTP 400 차단
+    ├─ 모두 < 0.5 → 통과
+    └─ 모델 호출 실패 → 통과 (fail-open: 검열 누락 < 정상 입력 차단)
+```
+
+> #### 의도분류 라우터와의 관계
+
+욕설 필터는 [§4.1 챗봇 의도분류 모델](#41-챗봇-의도분류-모델) 과 **독립 컴포넌트**입니다. 의도분류는 챗봇 채팅 메시지를 4 분기(다이어리 작성 · 장소추천 · 시설정보 · 기타)로 라우팅하고, 욕설 필터는 폼 입력 5곳(닉네임 · 반려견명 · 채팅방명 · 다이어리 제목·6W·본문)의 `service` 레이어에서만 호출됩니다. 두 컴포넌트는 동일 KoELECTRA `transformers` 스택을 재사용하지만 호출 경로는 완전히 분리됩니다.
+
+> #### 한계 및 발표 후 보강 영역
+
+- **위기 발화(자살·자해 등) 별도 분기 미구현** — 현재는 "기타" 의도로 분류되어 일반 GPT 응답 흐름을 따릅니다. 외부 도움 안내(자살예방상담전화 1393 등) 자동 노출은 발표 후 별도 라운드로 분리합니다.
+- **챗봇 메시지 욕설 필터 미적용** — 의도분류·GPT API 가 흡수하는 정책으로, ChatGPT·구글 챗봇 동일 패턴입니다. 도메인 전용 가드 추가 여부는 발표 후 검토합니다.
+- **ML 모델 정확도 한계** — `kor_unsmile` 은 혐오·차별 9 라벨 위주라 일상 비속어를 false negative 로 놓칠 수 있어 1차 사전 매칭으로 보완합니다. 사전은 부분 문자열 매칭이라 일부 false positive (예: "바보스럽다") 가능성이 있으나, "차단 우선" 정책으로 유지합니다.
+
+<br />
+
 ---
 
 <div align="center">
@@ -1702,7 +1807,88 @@ Navbar
 
 <div align="center">
 
-  # 6. 빠른 시작
+# 6. 시연 화면
+
+</div>
+
+### 웹 (Web)
+
+<p align="center">
+  <img src="assets/시연/웹최종시연gif/시연1_장소추천.gif" alt="웹 시연 - 장소추천" width="100%">
+  <br>
+  <img src="assets/시연/웹최종시연gif/시연2_그림일기.gif" alt="웹 시연 - 그림일기" width="49%">
+  <img src="assets/시연/웹최종시연gif/시연3_앨범 즐겨찾기와 캘린더 연동 및 일기 수정.gif" alt="웹 시연 - 앨범 즐겨찾기·캘린더 연동·일기 수정" width="49%">
+  <br>
+  <img src="assets/시연/웹최종시연gif/시연4_장소즐겨찾기와 그림일기 흐름.gif" alt="웹 시연 - 장소 즐겨찾기·그림일기 흐름" width="49%">
+  <img src="assets/시연/웹최종시연gif/시연5_대표반려견 변경.gif" alt="웹 시연 - 대표반려견 변경" width="49%">
+  <br>
+  <img src="assets/시연/웹최종시연gif/시연6_자유채팅_장소추천.gif" alt="웹 시연 - 자유채팅 장소추천" width="49%">
+  <img src="assets/시연/웹최종시연gif/시연7_자유채팅_그림일기.gif" alt="웹 시연 - 자유채팅 그림일기" width="49%">
+</p>
+
+<details>
+<summary>스크린샷 더 보기 (클릭하여 펼치기)</summary>
+
+<p align="center">
+  <img src="assets/시연/웹시연화면png/홈화면_비로그인.png" alt="홈화면 - 비로그인" width="800"><br>
+  <img src="assets/시연/웹시연화면png/소셜로그인.png" alt="소셜 로그인" width="800"><br>
+  <img src="assets/시연/웹시연화면png/개인정보동의.png" alt="개인정보 동의" width="800"><br>
+  <img src="assets/시연/웹시연화면png/회원가입1.png" alt="회원가입 1" width="800"><br>
+  <img src="assets/시연/웹시연화면png/회원가입2.png" alt="회원가입 2" width="800"><br>
+  <img src="assets/시연/웹시연화면png/온보딩1.png" alt="온보딩 1" width="800"><br>
+  <img src="assets/시연/웹시연화면png/온보딩2.png" alt="온보딩 2" width="800"><br>
+  <img src="assets/시연/웹시연화면png/홈화면_로그인완료.png" alt="홈화면 - 로그인 완료" width="800"><br>
+  <img src="assets/시연/웹시연화면png/자유채팅_근처장소추천.png" alt="자유채팅 - 근처 장소추천" width="800"><br>
+  <img src="assets/시연/웹시연화면png/사진변환1.png" alt="사진 변환 1" width="800"><br>
+  <img src="assets/시연/웹시연화면png/사진변환2.png" alt="사진 변환 2" width="800"><br>
+  <img src="assets/시연/웹시연화면png/유료구독패스.png" alt="유료 구독 패스" width="800"><br>
+  <img src="assets/시연/웹시연화면png/회원탈퇴.png" alt="회원 탈퇴" width="800">
+</p>
+
+</details>
+
+---
+
+### 모바일 앱 (Android)
+
+<!-- TODO: 앱 시연 GIF 추가 -->
+<p align="center">
+  <em>(시연 GIF 업데이트 예정)</em>
+</p>
+
+<details>
+<summary>스크린샷 더 보기 (클릭하여 펼치기)</summary>
+
+<p align="center">
+  <img src="assets/시연/모바일시연png/모바일_다이어리탭1.png" alt="모바일 - 다이어리 탭 1" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_다이어리탭2.png" alt="모바일 - 다이어리 탭 2" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_다이어리탭3.png" alt="모바일 - 다이어리 탭 3" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_다이어리탭_감정분석1.png" alt="모바일 - 다이어리 탭 감정분석 1" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_다이어리탭_감정분석2.png" alt="모바일 - 다이어리 탭 감정분석 2" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_다이어리탭_감정분석3.png" alt="모바일 - 다이어리 탭 감정분석 3" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_로그인홈1.png" alt="모바일 - 로그인 홈 1" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_로그인홈2.png" alt="모바일 - 로그인 홈 2" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_마이탭1.png" alt="모바일 - 마이 탭 1" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_마이탭2.png" alt="모바일 - 마이 탭 2" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_비로그인 _챗봇.png" alt="모바일 - 비로그인 챗봇" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_비로그인_홈.png" alt="모바일 - 비로그인 홈" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_상단구독패스안내.png" alt="모바일 - 상단 구독 패스 안내" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_소셜로그인.png" alt="모바일 - 소셜 로그인" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_온보딩.png" alt="모바일 - 온보딩" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_지도탭1.png" alt="모바일 - 지도 탭 1" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_지도탭2.png" alt="모바일 - 지도 탭 2" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_지도탭3.png" alt="모바일 - 지도 탭 3" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_챗봇그림일기.png" alt="모바일 - 챗봇 그림일기" width="300"><br>
+  <img src="assets/시연/모바일시연png/모바일_챗봇탭.png" alt="모바일 - 챗봇 탭" width="300">
+</p>
+
+</details>
+
+---
+
+<div align="center">
+
+  # 7. 빠른 시작
 
 </div>
 
@@ -1713,7 +1899,7 @@ git clone https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN23-FINAL-3Team.git
 cd SKN23-FINAL-3Team
 ```
 
-`.env` 파일을 저장소 root 에 배치합니다. 키 목록 권위는 §10.2 환경 설정 참조 (`.gitignore` 처리, 팀 내부 디스코드로 공유).
+`.env` 파일을 저장소 root 에 배치합니다. 키 목록 권위는 §11.2 환경 설정 참조 (`.gitignore` 처리, 팀 내부 디스코드로 공유).
 
 > #### 백엔드 + 프론트엔드 (Docker Compose, 권장)
 
@@ -1762,11 +1948,11 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
 
 <div align="center">
 
-  # 7. QA 검증 및 평가
+  # 8. QA 검증 및 평가
 
 </div>
 
-## 7.1. 성향분석
+## 8.1. 성향분석
 
 `DogScorer` / `OwnerScorer` 의 5축 점수 정의가 임의적이지 않음을 검증하기 위해, 온보딩 태그 이름과 설명 문장을 임베딩한 뒤 KMeans 군집화를 수행했습니다.
 
@@ -1827,7 +2013,7 @@ flutter run        # 연결된 Android 디바이스 또는 에뮬레이터
 
 핵심 인사이트: 추천 품질 상승 + 카테고리 정합성 동시 개선. 평가 메트릭 기반 반복 라운드로 가중치 보정 효과 검증.
 
-## 7.2. AI 장소 추천
+## 8.2. AI 장소 추천
 
 장소추천 검색 품질을 정량 측정하기 위해 자동화 평가 시스템 (`ai/evaluation/`) 을 구축하고, `run_ablation.py` 로 Combined / RDB only / RAG only 성능을 비교했습니다.
 
@@ -2153,7 +2339,7 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 
 <br />
 
-## 7.3. AI 그림일기
+## 8.3. AI 그림일기
 
 생성 이미지의 품질을 자동으로 측정하고, 저품질 결과를 사전 필터링하기 위한 CV + LLM 하이브리드 평가 시스템입니다.
 139장의 사람 평가 정답(Ground Truth)을 기준으로 7차에 걸쳐 개선하였습니다.
@@ -2650,7 +2836,7 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 
 <div align="center">
 
-  # 8. 서비스 아키텍처
+  # 9. 서비스 아키텍처
 
   ![시스템아키텍처](./assets/시스템아키텍처.png)
 
@@ -2719,7 +2905,7 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 
 <div align="center">
 
-  # 9. 데이터베이스 설계
+  # 10. 데이터베이스 설계
 
 </div>
 
@@ -2727,6 +2913,7 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 - DDL 원본: `back/db/withDOG.sql`, `back/db/migrations/`, `back/db/migrate_add_pet_profiles.sql`.
 - ORM 매핑: `back/api/models/`.
 - 런타임 생성 테이블: `api_costs` (`ai/infrastructure/cost_tracker.py`).
+- **DB 전체 백업 (덤프)**: [Google Drive — withDOG DB dump](https://drive.google.com/file/d/1RmsB7ApvHeN_tYvwXt2znfC3_tJltZkZ/view?usp=sharing) — RDS 운영 데이터 포함 SQL 덤프. 로컬 재현 시 다운로드 후 `mysql -u <user> -p <db> < withDOG_dump.sql` 로 복원.
 
 > #### ERD 다이어그램
 
@@ -2872,7 +3059,7 @@ api_costs                 독립 비용 추적 테이블
 
 <div align="center">
 
-  #  10. 디렉토리 구조
+  #  11. 디렉토리 구조
 
 </div>
 
@@ -2931,7 +3118,7 @@ SKN23-FINAL-3Team/
 
 <br />
 
-## 10.1. 주요 API 엔드포인트
+## 11.1. 주요 API 엔드포인트
 
 <details>
 <summary><b>주요 API 엔드포인트 펼쳐 보기</b></summary>
@@ -3189,7 +3376,7 @@ SKN23-FINAL-3Team/
 
 <br />
 
-## 10.2. 환경 설정
+## 11.2. 환경 설정
 
 > ### 환경변수 (.env)
 
@@ -3282,7 +3469,7 @@ SKN23-FINAL-3Team/
 
 <div align="center">
 
-  #  11. 비즈니스 전략
+  #  12. 비즈니스 전략
 
 </div>
 
@@ -3584,7 +3771,7 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
 
 <div align="center">
 
-  #  12. 기술 스택
+  #  13. 기술 스택
 
 </div>
 
@@ -3814,6 +4001,51 @@ withDog의 **장소 추천 + 방문 기록 연동** 기능은 오프라인 비�
     <tr>
       <td>소셜 로그인</td>
       <td><img src="https://img.shields.io/badge/Kakao_OAuth-FFCD00?style=flat-square&logo=kakao&logoColor=black" alt="Kakao OAuth" /> <img src="https://img.shields.io/badge/Google_OAuth-4285F4?style=flat-square&logo=google&logoColor=white" alt="Google OAuth" /> <img src="https://img.shields.io/badge/Naver_OAuth-03C75A?style=flat-square&logo=naver&logoColor=white" alt="Naver OAuth" /></td>
+    </tr>
+  </tbody>
+</table>
+
+<br />
+
+---
+
+<div align="center">
+
+  # 14. 팀원 회고
+
+</div>
+
+<br />
+
+<table width="100%">
+  <thead>
+    <tr>
+      <th width="15%">이름</th>
+      <th>회고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center"><b>정유선</b></td>
+      <td>
+프로젝트 초반에는 주제 선정과 핵심 기능 재정의에 시간이 소요되면서 실제 개발 기간이 줄어들었고, 후반 일정에 부담이 있었다. PM으로서 일정, 산출물, 팀 커뮤니케이션을 조율하며 의사결정의 무게와 책임 범위를 직접 체감했다. 특히 마감 직전 전체 산출물의 정합성을 검증하면서, PM의 시야는 일정 관리뿐 아니라 서비스 흐름과 완성도까지 닿아 있어야 한다는 점을 배웠다.
+<br /><br />
+기술적으로는 풀스택 구현부터 의도 분류 모델 적용까지 경험했지만, AI 기술을 더 깊이 있게 다루지 못한 점은 아쉬움으로 남았다. 일정상 LangGraph 도입, 로컬 LLM 전환, 평가셋 확장은 보류했지만, 다음 프로젝트에서는 이 부분을 직접 설계하고 고도화해보고자 한다.
+<br /><br />
+초반 인원 이탈이라는 변수가 있었지만, 끝까지 함께해준 두 팀원 덕분에 프로젝트를 무사히 마무리할 수 있었다. 함께 책임을 나눠준 두 분께 진심으로 감사드린다.
+      </td>
+    </tr>
+    <tr>
+      <td align="center"><b>이승연</b></td>
+      <td>
+기획·화면 설계부터 웹 프론트, 모바일 앱 전면 재작성, AI 그림일기 플로우와 Qwen2.5-VL 연동까지 한 서비스를 직접 만들고 고쳐보며, 모든 단계의 결정이 결국 하나의 사용자 경험으로 수렴한다는 것을 배웠습니다. 낯선 영역에 부딪혀 결과물을 만들어내는 용기, 실서비스를 위한 코드 한 줄에 담긴 수많은 디테일과 책임의 무게, 그리고 기획자의 시선으로 사용자 편의를 끝까지 지켜내고 실현해내는 시야까지 함께 얻은 프로젝트였습니다. 끝으로, 38일 동안 동고동락하며 함께 달려와 준 팀원들에게 깊은 감사를 전합니다.
+      </td>
+    </tr>
+    <tr>
+      <td align="center"><b>송민채</b></td>
+      <td>
+AI(LLM, RAG) 및 Vector DB 기반 장소 추천 기능 개발을 맡으며 AI를 더 깊이 공부하고 직접 구현해 볼 수 있었습니다. 평가셋을 직접 구축하고 실험하면서 AI 모델 검증 과정을 체계적으로 배웠고, 성능 개선은 단순히 점수를 높이는 것이 아니라 데이터, 평가셋, 로직, 실제 응답을 함께 확인하며 반복적으로 조정해야 한다는 점을 알게 되었습니다. 또한 RAG와 Vector DB를 적용하면서 사용자의 질문과 관련 있는 데이터를 벡터 형태로 저장·검색하고, 검색된 문서를 바탕으로 답변을 생성하는 흐름을 경험했습니다. 이를 통해 어떤 데이터를 어떻게 임베딩하고 검색하느냐에 따라 답변 품질이 달라진다는 점도 이해할 수 있었습니다. 적은 인원이 함께한 프로젝트였지만, 서로 소통하며 각자의 역할을 넘어 협력한 덕분에 프로젝트를 잘 마무리할 수 있었습니다. 함께한 팀원들을 통해서 많은 것을 배울 수 있었습니다. 팀원들에게 감사한 마음이 큽니다.
+      </td>
     </tr>
   </tbody>
 </table>
