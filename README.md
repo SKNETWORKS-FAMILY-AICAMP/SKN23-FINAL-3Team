@@ -2913,6 +2913,7 @@ CLI 옵션은 `--limit N` (빠른 확인), `--category "..."` (카테고리 필�
 - DDL 원본: `back/db/withDOG.sql`, `back/db/migrations/`, `back/db/migrate_add_pet_profiles.sql`.
 - ORM 매핑: `back/api/models/`.
 - 런타임 생성 테이블: `api_costs` (`ai/infrastructure/cost_tracker.py`).
+- **DB 전체 백업 (덤프)**: [Google Drive — withDOG DB dump](https://drive.google.com/file/d/1RmsB7ApvHeN_tYvwXt2znfC3_tJltZkZ/view?usp=sharing) — RDS 운영 데이터 포함 SQL 덤프. 로컬 재현 시 다운로드 후 `mysql -u <user> -p <db> < withDOG_dump.sql` 로 복원.
 
 > #### ERD 다이어그램
 
